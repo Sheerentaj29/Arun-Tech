@@ -63,15 +63,21 @@ interface ClientItem {
 
 const STATUS_COLOR: Record<string, string> = {
   Draft: "border-zinc-400 text-zinc-600",
-  Submitted: "border-blue-500 text-blue-700",
+  "Submitted for Review": "border-blue-500 text-blue-700",
+  "Returned for Revision": "border-red-500 text-red-700",
   Approved: "border-emerald-500 text-emerald-700",
+  "Changes Pending Review": "border-amber-500 text-amber-700",
+  // Legacy statuses (shouldn't appear after migration but kept for safety)
+  Submitted: "border-blue-500 text-blue-700",
   Rejected: "border-red-500 text-red-700",
-  Superseded: "border-amber-500 text-amber-700",
+  Superseded: "border-zinc-400 text-zinc-500",
 };
 
 export function PipelineReportsListView() {
   const { user, openPipelineReport, openNewPipelineReport, refreshKey } = useAppStore();
-  const canCreate = user?.role === "ADMIN" || user?.role === "INSPECTOR";
+  // Any authenticated user (admin or employee) can create reports — they
+  // become the inspector of record.
+  const canCreate = !!user;
 
   const [items, setItems] = useState<PipelineReportListItem[]>([]);
   const [clients, setClients] = useState<ClientItem[]>([]);
@@ -160,9 +166,10 @@ export function PipelineReportsListView() {
                 <SelectContent>
                   <SelectItem value="ALL">All statuses</SelectItem>
                   <SelectItem value="Draft">Draft</SelectItem>
-                  <SelectItem value="Submitted">Submitted</SelectItem>
+                  <SelectItem value="Submitted for Review">Submitted for Review</SelectItem>
+                  <SelectItem value="Returned for Revision">Returned for Revision</SelectItem>
                   <SelectItem value="Approved">Approved</SelectItem>
-                  <SelectItem value="Rejected">Rejected</SelectItem>
+                  <SelectItem value="Changes Pending Review">Changes Pending Review</SelectItem>
                 </SelectContent>
               </Select>
             </div>

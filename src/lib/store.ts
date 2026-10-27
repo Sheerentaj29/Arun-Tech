@@ -5,47 +5,59 @@
 import { create } from "zustand";
 
 export type ViewKey =
-  | "dashboard"
+  // Role-specific dashboards (only these two are shown per spec)
+  | "admin-dashboard"
+  | "employee-dashboard"
+  // Equipment master
   | "equipment"
   | "equipment-detail"
   | "equipment-form"
+  // Existing inspection + audit + admin views
   | "inspections"
   | "clients"
   | "import"
   | "audit-logs"
+  // Pipeline thickness reports
   | "pipeline-reports"
   | "pipeline-report-form"
   | "pipeline-report-detail"
-  | "pipe-standards";
+  | "pipe-standards"
+  // Admin: employee management
+  | "employees"
+  // Alias for backwards compat with code that uses "dashboard"
+  | "dashboard";
+
+interface AppUser {
+  id: string;
+  email: string;
+  name: string;
+  role: "ADMIN" | "EMPLOYEE" | "INSPECTOR" | "APPROVER";
+  dashboardRole: "ADMIN" | "EMPLOYEE";
+}
 
 interface AppState {
   view: ViewKey;
-  // For equipment-detail view: the equipment ID to show
   selectedEquipmentId: string | null;
-  // For equipment-form view: null = create mode; ID = edit mode
   editingEquipmentId: string | null;
-  // For inspection entry, pre-selected client (filter)
   inspectionClientId: string | null;
-  // For pipeline-report-detail: the report ID to show
   selectedPipelineReportId: string | null;
-  // For pipeline-report-form: null = create mode; ID = edit mode
   editingPipelineReportId: string | null;
-  // Bump this counter to force re-fetches after mutations
   refreshKey: number;
-  // Session
-  user: { id: string; email: string; name: string; role: "ADMIN" | "INSPECTOR" | "APPROVER" } | null;
+  user: AppUser | null;
   setView: (v: ViewKey) => void;
+  /** Navigate to the role-appropriate dashboard. */
+  goToMyDashboard: () => void;
   openEquipment: (id: string) => void;
   openNewEquipment: () => void;
   openEditEquipment: (id: string) => void;
   openPipelineReport: (id: string) => void;
   openNewPipelineReport: () => void;
   openEditPipelineReport: (id: string) => void;
-  setUser: (u: AppState["user"]) => void;
+  setUser: (u: AppUser | null) => void;
   refresh: () => void;
 }
 
-export const useAppStore = create<AppState>((set) => ({
+export const useAppStore = create<AppState>((set, get) => ({
   view: "dashboard",
   selectedEquipmentId: null,
   editingEquipmentId: null,
@@ -55,17 +67,29 @@ export const useAppStore = create<AppState>((set) => ({
   refreshKey: 0,
   user: null,
   setView: (v) => set({ view: v }),
+  goToMyDashboard: () => {
+    const u = get().user;
+    if (!u) {
+      set({ view: "dashboard" });
+      return;
+    }
+    set({ view: u.dashboardRole === "ADMIN" ? "admin-dashboard" : "employee-dashboard" });
+  },
   openEquipment: (id) => set({ view: "equipment-detail", selectedEquipmentId: id }),
-  openNewEquipment: () =>
-    set({ view: "equipment-form", editingEquipmentId: null }),
-  openEditEquipment: (id) =>
-    set({ view: "equipment-form", editingEquipmentId: id }),
-  openPipelineReport: (id) =>
-    set({ view: "pipeline-report-detail", selectedPipelineReportId: id }),
-  openNewPipelineReport: () =>
-    set({ view: "pipeline-report-form", editingPipelineReportId: null }),
-  openEditPipelineReport: (id) =>
-    set({ view: "pipeline-report-form", editingPipelineReportId: id }),
-  setUser: (u) => set({ user: u }),
+  openNewEquipment: () => set({ view: "equipment-form", editingEquipmentId: null }),
+  openEditEquipment: (id) => set({ view: "equipment-form", editingEquipmentId: id }),
+  openPipelineReport: (id) => set({ view: "pipeline-report-detail", selectedPipelineReportId: id }),
+  openNewPipelineReport: () => set({ view: "pipeline-report-form", editingPipelineReportId: null }),
+  openEditPipelineReport: (id) => set({ view: "pipeline-report-form", editingPipelineReportId: id }),
+  setUser: (u) =>
+    set((s) => ({
+      user: u,
+      // On login, route to the appropriate dashboard
+      view: u
+        ? u.dashboardRole === "ADMIN"
+          ? "admin-dashboard"
+          : "employee-dashboard"
+        : s.view,
+    })),
   refresh: () => set((s) => ({ refreshKey: s.refreshKey + 1 })),
 }));

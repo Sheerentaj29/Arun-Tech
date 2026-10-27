@@ -19,7 +19,7 @@ model User {
   email        String   @unique
   name         String
   passwordHash String
-  role         String   @default("INSPECTOR") // ADMIN | INSPECTOR | APPROVER
+  role         String   @default("EMPLOYEE") // ADMIN | EMPLOYEE | INSPECTOR | APPROVER (INSPECTOR/APPROVER treated as Employee for routing)
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -29,7 +29,10 @@ model User {
   auditLogs           AuditLog[]
   pipelineInspections PipelineInspection[]  @relation("PipelineInspectionInspector")
   approvedReports     PipelineInspection[]  @relation("PipelineInspectionApprover")
+  returnedReports     PipelineInspection[]  @relation("PipelineInspectionReturnedBy")
   pipeStandardEdits   PipeStandard[]        @relation("PipeStandardVerifiedBy")
+  revisedReports      ReportRevision[]      @relation("ReportRevisionRevisedBy")
+  approvedRevisions   ReportRevision[]      @relation("ReportRevisionApprovedBy")
 }
 
 // =====================================================
@@ -245,25 +248,42 @@ model PipelineInspection {
   standardEdition          String? // e.g. "2018"
 
   inspectionDate           DateTime @default(now())
-  status                   String   @default("Draft") // Draft | Submitted | Approved | Rejected | Superseded
+  // Approval workflow statuses:
+  //   Draft                  — employee is still editing the report
+  //   Submitted for Review    — employee has submitted; waiting for admin
+  //   Returned for Revision   — admin returned with comments; employee must fix and resubmit
+  //   Approved                — admin approved; PDF is the current approved version
+  //   Changes Pending Review  — employee edited an Approved report; new revision pending admin review
+  status                   String   @default("Draft")
   revisionNumber           Int      @default(1)
 
   inspectorId              String
   inspectorName            String   // snapshot at approval time
   findingsSummary          String?  // overall findings section
   comments                 String?  // general comments
+  // Photos stored as JSON array: [{path, caption, uploadedAt}]
+  photos                   String?
 
   // Override tracking (admin-approved nominal thickness override)
   overrideReason           String?
   overrideAppliedById      String?
   overrideAppliedAt        DateTime?
 
-  // Approval tracking
+  // Approval tracking (when admin approves)
   approvedById             String?
   approvedAt               DateTime?
   approvalNotes            String?
 
-  // PDF artifact (generated PDF path)
+  // Return-for-revision tracking (when admin returns the report)
+  returnedById             String?
+  returnedAt               DateTime?
+  reviewComments           String?  // mandatory when admin returns for revision
+
+  // Pointer to the currently-approved revision (when status=Approved or
+  // Changes Pending Review). Null when the report has never been approved.
+  currentApprovedRevisionId String?
+
+  // PDF artifact (generated PDF path) — always reflects the latest revision
   pdfPath                  String?
   signedPdfPath            String?
 
@@ -275,6 +295,7 @@ model PipelineInspection {
   plant       Plant       @relation(fields: [plantId], references: [id], onDelete: Cascade)
   inspector   User        @relation("PipelineInspectionInspector", fields: [inspectorId], references: [id])
   approver    User?       @relation("PipelineInspectionApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  returnedBy  User?       @relation("PipelineInspectionReturnedBy", fields: [returnedById], references: [id], onDelete: SetNull)
   measurements ThicknessMeasurement[]
   revisions   ReportRevision[]
 
@@ -282,6 +303,7 @@ model PipelineInspection {
   @@index([clientId])
   @@index([plantId])
   @@index([inspectorId])
+  @@index([status])
 }
 
 // =====================================================
@@ -352,14 +374,27 @@ model ReportRevision {
   pipelineInspectionId String
   revisionNumber    Int
   revisionDate      DateTime @default(now())
+  // Each revision tracks its own status in the approval workflow:
+  //   Draft | Submitted for Review | Returned for Revision | Approved | Changes Pending Review | Superseded
+  // A revision is "Superseded" once a later revision is approved.
+  status            String   @default("Draft")
   revisedById       String?
-  revisedByName    String?
+  revisedByName     String?
+  // Snapshot of the report header at this revision (for display + audit)
   changeDescription String?
   pdfPath           String?
-  snapshotData      String?  // JSON snapshot of the report at this revision
+  snapshotData      String?  // JSON snapshot of the full report at this revision
+  // Review fields (when admin reviews this specific revision)
+  reviewComments    String?
+  approvedById      String?
+  approvedAt       DateTime?
+  approvedByName   String?
   createdAt         DateTime @default(now())
 
   pipelineInspection PipelineInspection @relation(fields: [pipelineInspectionId], references: [id], onDelete: Cascade)
+  revisedBy          User?             @relation("ReportRevisionRevisedBy", fields: [revisedById], references: [id], onDelete: SetNull)
+  approvedBy         User?             @relation("ReportRevisionApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
 
   @@index([pipelineInspectionId])
+  @@index([status])
 }

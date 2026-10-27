@@ -19,13 +19,29 @@ import { db } from "@/lib/db";
 import type { User } from "@prisma/client";
 import type { NextRequest } from "next/server";
 
-export type UserRole = "ADMIN" | "INSPECTOR" | "APPROVER";
+export type UserRole = "ADMIN" | "EMPLOYEE" | "INSPECTOR" | "APPROVER";
 
 export interface SessionUser {
   id: string;
   email: string;
   name: string;
   role: UserRole;
+  /** Effective dashboard role — collapses INSPECTOR/APPROVER/EMPLOYEE into "EMPLOYEE". */
+  dashboardRole: "ADMIN" | "EMPLOYEE";
+}
+
+/**
+ * Map raw DB role string to the dashboard-routing role:
+ *   ADMIN       → "ADMIN"   (admin dashboard, can approve, can manage employees)
+ *   EMPLOYEE    → "EMPLOYEE" (employee dashboard, can create/edit own reports)
+ *   INSPECTOR   → "EMPLOYEE" (legacy — treated as employee)
+ *   APPROVER    → "ADMIN"   (legacy — treated as admin, retains approval powers)
+ *
+ * New logins should use ADMIN or EMPLOYEE roles directly.
+ */
+export function getDashboardRole(role: string): "ADMIN" | "EMPLOYEE" {
+  if (role === "ADMIN" || role === "APPROVER") return "ADMIN";
+  return "EMPLOYEE";
 }
 
 // Cookie name bumped to v2 so it never collides with stale cookies from
@@ -50,11 +66,13 @@ async function lookupUser(userId: string): Promise<SessionUser | null> {
       select: { id: true, email: true, name: true, role: true, active: true },
     });
     if (!user || !user.active) return null;
+    const role = user.role as UserRole;
     return {
       id: user.id,
       email: user.email,
       name: user.name,
-      role: user.role as UserRole,
+      role,
+      dashboardRole: getDashboardRole(role),
     };
   } catch {
     return null;
@@ -109,10 +127,33 @@ export async function requireSession(req?: NextRequest): Promise<SessionUser> {
 
 export async function requireAdmin(req?: NextRequest): Promise<SessionUser> {
   const s = await requireSession(req);
-  if (s.role !== "ADMIN") {
+  if (s.dashboardRole !== "ADMIN") {
     throw new Error("Forbidden — administrator role required");
   }
   return s;
+}
+
+/**
+ * Require an authenticated user who is NOT an admin — i.e. an employee
+ * (or legacy INSPECTOR/APPROVER-treated-as-employee). Used by routes that
+ * an admin shouldn't be doing on their own behalf (e.g. creating inspection
+ * reports — admins can manage employees but shouldn't be the inspector of
+ * record).
+ *
+ * In practice, admins CAN still call these routes (they may need to file
+ * reports too). The check is mostly to gate the role-specific UI affordances.
+ */
+export async function requireEmployeeOrAdmin(req?: NextRequest): Promise<SessionUser> {
+  const s = await requireSession(req);
+  return s;
+}
+
+/**
+ * Helper: does this session user own this resource? Used by report-edit
+ * routes to enforce "employees can only edit their own reports".
+ */
+export function isOwner(session: SessionUser, ownerId: string): boolean {
+  return session.id === ownerId;
 }
 
 type CookieStore = Awaited<ReturnType<typeof cookies>>;

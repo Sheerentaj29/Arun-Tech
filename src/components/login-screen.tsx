@@ -61,10 +61,13 @@ export function LoginScreen({ sessionExpired = false, onDismissExpired }: LoginS
     }
   }
 
-  function fill(role: "ADMIN" | "INSPECTOR" | "APPROVER") {
+  function fill(role: "ADMIN" | "EMPLOYEE" | "APPROVER" | "INSPECTOR") {
     if (role === "ADMIN") {
       setEmail("admin@inspections.demo");
       setPassword("admin123");
+    } else if (role === "EMPLOYEE") {
+      setEmail("employee@inspections.demo");
+      setPassword("employee123");
     } else if (role === "INSPECTOR") {
       setEmail("inspector@inspections.demo");
       setPassword("inspector123");
@@ -166,17 +169,24 @@ export function LoginScreen({ sessionExpired = false, onDismissExpired }: LoginS
               </button>
               <button
                 type="button"
+                onClick={() => fill("EMPLOYEE")}
+                className="block w-full text-left hover:text-amber-700"
+              >
+                <span className="font-mono">employee@inspections.demo</span> / employee123 (Employee)
+              </button>
+              <button
+                type="button"
                 onClick={() => fill("INSPECTOR")}
                 className="block w-full text-left hover:text-amber-700"
               >
-                <span className="font-mono">inspector@inspections.demo</span> / inspector123 (Inspector)
+                <span className="font-mono">inspector@inspections.demo</span> / inspector123 (Inspector → treated as Employee)
               </button>
               <button
                 type="button"
                 onClick={() => fill("APPROVER")}
                 className="block w-full text-left hover:text-amber-700"
               >
-                <span className="font-mono">approver@inspections.demo</span> / approver123 (Report Approver)
+                <span className="font-mono">approver@inspections.demo</span> / approver123 (Approver → treated as Admin)
               </button>
             </div>
           </CardContent>

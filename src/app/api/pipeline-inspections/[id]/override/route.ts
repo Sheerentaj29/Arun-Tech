@@ -13,7 +13,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (session.role !== "ADMIN") {
+  if (session.dashboardRole !== "ADMIN") {
     return NextResponse.json(
       { error: "Forbidden — administrator role required to apply nominal thickness override" },
       { status: 403 },

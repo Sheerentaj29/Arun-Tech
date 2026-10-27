@@ -43,17 +43,31 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string;
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (session.role !== "INSPECTOR" && session.role !== "ADMIN") {
-    return NextResponse.json({ error: "Forbidden — inspector role required" }, { status: 403 });
-  }
   const { id, mid } = await ctx.params;
   const report = await db.pipelineInspection.findUnique({ where: { id } });
   if (!report) return NextResponse.json({ error: "Report not found" }, { status: 404 });
-  if (report.status === "Approved" && session.role !== "ADMIN") {
-    return NextResponse.json(
-      { error: "Approved reports can only be edited by an administrator via the revision flow" },
-      { status: 403 },
-    );
+
+  // PERMISSION: employees can only edit measurements on their own reports
+  // in an editable state. Admins can edit any report.
+  const isAdmin = session.dashboardRole === "ADMIN";
+  if (!isAdmin) {
+    if (report.inspectorId !== session.id) {
+      return NextResponse.json(
+        { error: "Forbidden — you can only edit measurements on your own reports" },
+        { status: 403 },
+      );
+    }
+    const editableStatuses = ["Draft", "Returned for Revision", "Changes Pending Review"];
+    if (!editableStatuses.includes(report.status)) {
+      return NextResponse.json(
+        {
+          error:
+            `Cannot edit measurements on a report in "${report.status}" state. ` +
+            "Only Draft, Returned for Revision, or Changes Pending Review reports can be edited.",
+        },
+        { status: 403 },
+      );
+    }
   }
 
   const existing = await db.thicknessMeasurement.findUnique({ where: { id: mid } });
@@ -191,22 +205,36 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string;
   return NextResponse.json(updated);
 }
 
-export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string; mid: string }> }) {
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string; mid: string }> }) {
   const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (session.role !== "INSPECTOR" && session.role !== "ADMIN") {
-    return NextResponse.json({ error: "Forbidden — inspector role required" }, { status: 403 });
-  }
   const { id, mid } = await ctx.params;
   const report = await db.pipelineInspection.findUnique({ where: { id } });
   if (!report) return NextResponse.json({ error: "Report not found" }, { status: 404 });
-  if (report.status === "Approved" && session.role !== "ADMIN") {
-    return NextResponse.json(
-      { error: "Approved reports can only be edited by an administrator via the revision flow" },
-      { status: 403 },
-    );
+
+  // PERMISSION: same as PUT — employees can only delete measurements on
+  // their own reports in an editable state.
+  const isAdmin = session.dashboardRole === "ADMIN";
+  if (!isAdmin) {
+    if (report.inspectorId !== session.id) {
+      return NextResponse.json(
+        { error: "Forbidden — you can only edit measurements on your own reports" },
+        { status: 403 },
+      );
+    }
+    const editableStatuses = ["Draft", "Returned for Revision", "Changes Pending Review"];
+    if (!editableStatuses.includes(report.status)) {
+      return NextResponse.json(
+        {
+          error:
+            `Cannot delete measurements on a report in "${report.status}" state. ` +
+            "Only Draft, Returned for Revision, or Changes Pending Review reports can be edited.",
+        },
+        { status: 403 },
+      );
+    }
   }
   const existing = await db.thicknessMeasurement.findUnique({ where: { id: mid } });
   if (!existing || existing.pipelineInspectionId !== id) {

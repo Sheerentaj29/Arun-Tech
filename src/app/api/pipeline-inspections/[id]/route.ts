@@ -1,5 +1,5 @@
-// GET    /api/pipeline-inspections/[id] - get full inspection with measurements
-// PUT    /api/pipeline-inspections/[id] - update header fields
+// GET    /api/pipeline-inspections/[id] - get full inspection with measurements + revisions
+// PUT    /api/pipeline-inspections/[id] - update header fields (role-gated)
 // DELETE /api/pipeline-inspections/[id] - delete entire report (admin only)
 
 import { NextRequest, NextResponse } from "next/server";
@@ -7,7 +7,7 @@ import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { recordAudit } from "@/lib/audit";
 
-export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -20,6 +20,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
       plant: { select: { id: true, name: true, location: true, address: true } },
       inspector: { select: { id: true, name: true, email: true } },
       approver: { select: { id: true, name: true, email: true } },
+      returnedBy: { select: { id: true, name: true, email: true } },
       measurements: {
         orderBy: { sortOrder: "asc" },
         include: {
@@ -27,10 +28,26 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
           standard: { select: { id: true, standard: true, edition: true, nominalSizeInch: true, schedule: true, wallThicknessMm: true, isVerified: true } },
         },
       },
-      revisions: { orderBy: { revisionNumber: "desc" } },
+      revisions: {
+        orderBy: { revisionNumber: "desc" },
+        include: {
+          revisedBy: { select: { id: true, name: true } },
+          approvedBy: { select: { id: true, name: true } },
+        },
+      },
     },
   });
   if (!report) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // PERMISSION: employees can only view their own reports. Admins see all.
+  const isAdmin = session.dashboardRole === "ADMIN";
+  if (!isAdmin && report.inspectorId !== session.id) {
+    return NextResponse.json(
+      { error: "Forbidden — you can only view your own reports" },
+      { status: 403 },
+    );
+  }
+
   return NextResponse.json(report);
 }
 
@@ -39,16 +56,35 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  // Inspector + admin can edit Draft reports. Once Approved, only admin via revision flow.
   const { id } = await ctx.params;
-  const existing = await db.pipelineInspection.findUnique({ where: { id } });
+  const existing = await db.pipelineInspection.findUnique({
+    where: { id },
+    include: { measurements: true, revisions: true, inspector: true, approver: true },
+  });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  if (existing.status === "Approved" && session.role !== "ADMIN") {
-    return NextResponse.json(
-      { error: "Approved reports can only be edited by an administrator via the revision flow" },
-      { status: 403 },
-    );
+  const isAdmin = session.dashboardRole === "ADMIN";
+  // PERMISSION: employees can only edit their OWN reports in Draft or
+  // Returned for Revision state. Admins can edit any report.
+  if (!isAdmin) {
+    if (existing.inspectorId !== session.id) {
+      return NextResponse.json(
+        { error: "Forbidden — you can only edit your own reports" },
+        { status: 403 },
+      );
+    }
+    const editableStatuses = ["Draft", "Returned for Revision"];
+    if (!editableStatuses.includes(existing.status)) {
+      return NextResponse.json(
+        {
+          error:
+            "This report is in an approval workflow state and can't be edited directly. " +
+            "If it has been Approved, create a new revision instead. " +
+            "If it has been Submitted for Review, wait for the admin to approve or return it.",
+        },
+        { status: 403 },
+      );
+    }
   }
 
   const body = await req.json().catch(() => null);
@@ -96,29 +132,50 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       inspectionDate: body.inspectionDate ? new Date(body.inspectionDate) : existing.inspectionDate,
       findingsSummary: body.findingsSummary ?? existing.findingsSummary,
       comments: body.comments ?? existing.comments,
+      photos: body.photos ?? existing.photos,
     },
   });
 
   await recordAudit({
     userId: session.id, userName: session.name,
     action: "UPDATE", entity: "PipelineInspection", entityId: updated.id,
-    details: `Updated pipeline report header ${updated.reportNumber}`,
+    details: `Updated pipeline report header ${updated.reportNumber} (status: ${existing.status})`,
   });
 
   return NextResponse.json(updated);
 }
 
-export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (session.role !== "ADMIN") {
-    return NextResponse.json({ error: "Forbidden — administrator role required" }, { status: 403 });
-  }
   const { id } = await ctx.params;
   const existing = await db.pipelineInspection.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // PERMISSION: only the owner can delete their own Draft reports. Admins
+  // can delete any report. Submitted/Approved reports are protected from
+  // deletion — they must be archived through the workflow instead.
+  const isAdmin = session.dashboardRole === "ADMIN";
+  if (!isAdmin) {
+    if (existing.inspectorId !== session.id) {
+      return NextResponse.json(
+        { error: "Forbidden — you can only delete your own reports" },
+        { status: 403 },
+      );
+    }
+    if (existing.status !== "Draft" && existing.status !== "Returned for Revision") {
+      return NextResponse.json(
+        {
+          error:
+            "Can only delete reports in Draft or Returned for Revision state. " +
+            "Submitted or Approved reports must be archived through the workflow.",
+        },
+        { status: 403 },
+      );
+    }
+  }
 
   await db.pipelineInspection.delete({ where: { id } });
   await recordAudit({

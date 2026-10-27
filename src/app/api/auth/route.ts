@@ -6,9 +6,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createHash } from "crypto";
 import { db } from "@/lib/db";
-import { setSessionCookie, clearSessionCookie, getSession } from "@/lib/auth";
+import { setSessionCookie, clearSessionCookie, getSession, getDashboardRole, type UserRole } from "@/lib/auth";
 import { recordAudit } from "@/lib/audit";
-import type { UserRole } from "@/lib/auth";
 
 function hashPassword(pw: string) {
   return createHash("sha256").update(pw).digest("hex");
@@ -47,6 +46,7 @@ export async function POST(req: NextRequest) {
     email: user.email,
     name: user.name,
     role: user.role as UserRole,
+    dashboardRole: getDashboardRole(user.role),
   });
 }
 

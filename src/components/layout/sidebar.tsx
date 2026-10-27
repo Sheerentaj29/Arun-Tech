@@ -12,39 +12,60 @@ import {
   HardHat,
   Gauge,
   Ruler,
+  Users,
 } from "lucide-react";
 import { useAppStore, type ViewKey } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
-const NAV: Array<{ key: ViewKey; label: string; icon: React.ElementType; adminOnly?: boolean; roles?: string[] }> = [
-  { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { key: "equipment", label: "Equipment Master", icon: Database },
-  { key: "pipeline-reports", label: "Pipeline Reports", icon: Gauge, roles: ["ADMIN", "INSPECTOR", "APPROVER"] },
-  { key: "inspections", label: "Inspections", icon: FileText },
-  { key: "clients", label: "Clients & Plants", icon: Building2, adminOnly: true },
-  { key: "pipe-standards", label: "Pipe Standards", icon: Ruler, adminOnly: true },
-  { key: "import", label: "CSV Import / Export", icon: Upload, adminOnly: true },
-  { key: "audit-logs", label: "Audit Log", icon: ScrollText, adminOnly: true },
+// All sidebar items. Each item declares which dashboard roles can see it.
+// ADMIN sees everything; EMPLOYEE sees only their own dashboard, equipment,
+// pipeline reports, and inspections.
+const NAV: Array<{
+  key: ViewKey;
+  label: string;
+  icon: React.ElementType;
+  roles: Array<"ADMIN" | "EMPLOYEE">;
+}> = [
+  // Admin's own dashboard
+  { key: "admin-dashboard", label: "Admin Dashboard", icon: ShieldCheck, roles: ["ADMIN"] },
+  // Employee's own dashboard
+  { key: "employee-dashboard", label: "My Dashboard", icon: HardHat, roles: ["EMPLOYEE"] },
+  // Shared equipment master
+  { key: "equipment", label: "Equipment Master", icon: Database, roles: ["ADMIN", "EMPLOYEE"] },
+  // Pipeline thickness reports — admin sees all, employee sees their own
+  { key: "pipeline-reports", label: "Pipeline Reports", icon: Gauge, roles: ["ADMIN", "EMPLOYEE"] },
+  // Inspections (equipment-master inspection history — preserved)
+  { key: "inspections", label: "Inspections", icon: FileText, roles: ["ADMIN", "EMPLOYEE"] },
+  // Admin-only views
+  { key: "employees", label: "Employees", icon: Users, roles: ["ADMIN"] },
+  { key: "clients", label: "Clients & Plants", icon: Building2, roles: ["ADMIN"] },
+  { key: "pipe-standards", label: "Pipe Standards", icon: Ruler, roles: ["ADMIN"] },
+  { key: "import", label: "CSV Import / Export", icon: Upload, roles: ["ADMIN"] },
+  { key: "audit-logs", label: "Audit Log", icon: ScrollText, roles: ["ADMIN"] },
 ];
 
 export function AppSidebar() {
-  const { view, setView, user, setUser } = useAppStore();
+  const { view, setView, user, setUser, goToMyDashboard } = useAppStore();
   if (!user) return null;
-  const visibleNav = NAV.filter((n) => {
-    if (n.adminOnly) return user.role === "ADMIN";
-    if (n.roles && !n.roles.includes(user.role)) return false;
-    return true;
-  });
+  const visibleNav = NAV.filter((n) => n.roles.includes(user.dashboardRole));
 
   return (
     <aside className="flex h-screen w-64 shrink-0 flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
       {/* Brand */}
       <div className="flex items-center gap-3 px-5 py-5 border-b border-sidebar-border">
-        <div className="flex h-10 w-10 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
-          <HardHat className="h-6 w-6" />
-        </div>
+        <button
+          onClick={goToMyDashboard}
+          className="flex h-10 w-10 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground hover:opacity-90 transition-opacity"
+          title="Back to dashboard"
+        >
+          {user.dashboardRole === "ADMIN" ? (
+            <ShieldCheck className="h-6 w-6" />
+          ) : (
+            <HardHat className="h-6 w-6" />
+          )}
+        </button>
         <div className="flex flex-col">
           <span className="text-sm font-bold tracking-tight leading-tight">
             Inspection Report
@@ -96,7 +117,7 @@ export function AppSidebar() {
                 variant="outline"
                 className="h-5 px-1.5 text-[10px] uppercase border-sidebar-primary/50 text-sidebar-primary"
               >
-                {user.role === "ADMIN" ? "Administrator" : user.role === "APPROVER" ? "Approver" : "Inspector"}
+                {user.dashboardRole === "ADMIN" ? "Administrator" : "Employee"}
               </Badge>
             </div>
           </div>
@@ -106,7 +127,15 @@ export function AppSidebar() {
           size="sm"
           className="mt-3 w-full justify-start text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
           onClick={async () => {
-            await fetch("/api/auth", { method: "DELETE", credentials: "include" });
+            // Clear the localStorage token (client-side) + DELETE cookie (server-side)
+            try {
+              if (typeof window !== "undefined") {
+                window.localStorage.removeItem("ira_session_token");
+              }
+            } catch { /* ignore */ }
+            try {
+              await fetch("/api/auth", { method: "DELETE", credentials: "include" });
+            } catch { /* ignore */ }
             setUser(null);
             setView("dashboard");
           }}
@@ -122,3 +151,7 @@ export function AppSidebar() {
     </aside>
   );
 }
+
+// Keep LayoutDashboard import warm for potential future use
+const _ = LayoutDashboard;
+export { _ };

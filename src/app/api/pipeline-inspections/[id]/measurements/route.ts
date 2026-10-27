@@ -71,19 +71,33 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (session.role !== "INSPECTOR" && session.role !== "ADMIN") {
-    return NextResponse.json({ error: "Forbidden — inspector role required" }, { status: 403 });
-  }
   const { id } = await ctx.params;
 
   const report = await db.pipelineInspection.findUnique({ where: { id } });
   if (!report) return NextResponse.json({ error: "Report not found" }, { status: 404 });
 
-  if (report.status === "Approved" && session.role !== "ADMIN") {
-    return NextResponse.json(
-      { error: "Approved reports can only be edited by an administrator via the revision flow" },
-      { status: 403 },
-    );
+  // PERMISSION: employees can only add measurements to their own reports.
+  // And only when the report is in an editable state (Draft, Returned for
+  // Revision, or Changes Pending Review).
+  const isAdmin = session.dashboardRole === "ADMIN";
+  if (!isAdmin) {
+    if (report.inspectorId !== session.id) {
+      return NextResponse.json(
+        { error: "Forbidden — you can only edit measurements on your own reports" },
+        { status: 403 },
+      );
+    }
+    const editableStatuses = ["Draft", "Returned for Revision", "Changes Pending Review"];
+    if (!editableStatuses.includes(report.status)) {
+      return NextResponse.json(
+        {
+          error:
+            `Cannot edit measurements on a report in "${report.status}" state. ` +
+            "Submit the report for review first, or wait for the admin to return/approve it.",
+        },
+        { status: 403 },
+      );
+    }
   }
 
   const body = await req.json().catch(() => null);

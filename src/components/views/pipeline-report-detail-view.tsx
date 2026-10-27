@@ -11,14 +11,31 @@ import {
   AlertTriangle,
   Calendar,
   User as UserIcon,
+  Send,
+  CheckCircle2,
+  RotateCcw,
+  GitBranch,
 } from "lucide-react";
 import {
   Card,
   CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useAppStore } from "@/lib/store";
 import { apiFetch } from "@/lib/api-client";
 import { toast } from "sonner";
@@ -36,17 +53,22 @@ interface FullReport {
   applicableStandard: string | null;
   standardEdition: string | null;
   inspectionDate: string;
-  status: "Draft" | "Submitted" | "Approved" | "Rejected" | "Superseded";
+  status: string;
   revisionNumber: number;
   inspectorId: string;
   inspectorName: string;
   findingsSummary: string | null;
   comments: string | null;
+  photos: string | null;
   overrideReason: string | null;
   overrideAppliedAt: string | null;
   approvedById: string | null;
   approvedAt: string | null;
   approvalNotes: string | null;
+  returnedById: string | null;
+  returnedAt: string | null;
+  reviewComments: string | null;
+  currentApprovedRevisionId: string | null;
   isDemo: boolean;
   createdAt: string;
   updatedAt: string;
@@ -54,6 +76,7 @@ interface FullReport {
   plant: { id: string; name: string; location: string | null; address: string | null };
   inspector: { id: string; name: string; email: string };
   approver: { id: string; name: string; email: string } | null;
+  returnedBy: { id: string; name: string; email: string } | null;
   measurements: Array<{
     id: string;
     pointNo: string;
@@ -75,8 +98,17 @@ interface FullReport {
     } | null;
   }>;
   revisions: Array<{
-    id: string; revisionNumber: number; revisionDate: string;
-    revisedByName: string | null; changeDescription: string | null;
+    id: string;
+    revisionNumber: number;
+    revisionDate: string;
+    status: string;
+    revisedByName: string | null;
+    changeDescription: string | null;
+    reviewComments: string | null;
+    approvedByName: string | null;
+    approvedAt: string | null;
+    revisedBy?: { id: string; name: string } | null;
+    approvedBy?: { id: string; name: string } | null;
   }>;
 }
 
@@ -85,6 +117,23 @@ function fmtMeasurement(v: number | null, status: string): string {
   if (status === "NotMeasured" || v === null || v === undefined) return "—";
   return v.toFixed(2);
 }
+
+const STATUS_COLOR: Record<string, string> = {
+  Draft: "border-zinc-400 text-zinc-600",
+  "Submitted for Review": "border-blue-500 text-blue-700",
+  "Returned for Revision": "border-red-500 text-red-700",
+  Approved: "border-emerald-500 text-emerald-700",
+  "Changes Pending Review": "border-amber-500 text-amber-700",
+};
+
+const REVISION_STATUS_COLOR: Record<string, string> = {
+  Draft: "border-zinc-400 text-zinc-600",
+  "Submitted for Review": "border-blue-500 text-blue-700",
+  "Returned for Revision": "border-red-500 text-red-700",
+  Approved: "border-emerald-500 text-emerald-700",
+  "Changes Pending Review": "border-amber-500 text-amber-700",
+  Superseded: "border-zinc-400 text-zinc-500",
+};
 
 export function PipelineReportDetailView() {
   const {
@@ -95,14 +144,13 @@ export function PipelineReportDetailView() {
     refresh,
     refreshKey,
   } = useAppStore();
-  const canEdit = user?.role === "ADMIN" || user?.role === "INSPECTOR";
-  const canApprove = user?.role === "ADMIN" || user?.role === "APPROVER";
-
   const [report, setReport] = useState<FullReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [approving, setApproving] = useState(false);
-  const [approvalNotes, setApprovalNotes] = useState("");
+  const [acting, setActing] = useState(false);
+  // Dialog state for workflow actions (submit / approve / return / revise)
+  const [dialogMode, setDialogMode] = useState<null | "submit" | "approve" | "return" | "revise">(null);
+  const [dialogText, setDialogText] = useState("");
 
   const load = useCallback(() => {
     if (!selectedPipelineReportId) return;
@@ -115,29 +163,77 @@ export function PipelineReportDetailView() {
 
   useEffect(() => { load(); }, [load, refreshKey]);
 
-  function downloadPdf() {
-    if (!report) return;
-    window.open(`/api/pipeline-inspections/${report.id}/pdf`, "_blank");
+  // Role-based permissions (derived from session user + current report state)
+  const isAdmin = user?.dashboardRole === "ADMIN";
+  const isOwner = !!(user && report && report.inspectorId === user.id);
+  const status = report?.status;
+  // Employee can edit header/measurements only on their own Draft / Returned reports
+  const canEditDraft =
+    !!user && !!report && (
+      isAdmin ||
+      (isOwner && (status === "Draft" || status === "Returned for Revision"))
+    );
+  // Employee can submit (only their own Draft / Returned reports)
+  const canSubmit =
+    !!user && !!report && !isAdmin && isOwner &&
+    (status === "Draft" || status === "Returned for Revision");
+  // Employee can revise their own Approved report (creates new revision)
+  const canRevise =
+    !!user && !!report && !isAdmin && isOwner && status === "Approved";
+  // Admin can approve or return when status is Submitted for Review or Changes Pending Review
+  const canApproveOrReturn =
+    !!user && !!report && isAdmin &&
+    (status === "Submitted for Review" || status === "Changes Pending Review");
+
+  function openDialog(mode: "submit" | "approve" | "return" | "revise") {
+    setDialogMode(mode);
+    setDialogText("");
   }
 
-  async function approve() {
-    if (!report) return;
-    setApproving(true);
+  async function executeWorkflow() {
+    if (!report || !dialogMode) return;
+    setActing(true);
     try {
-      await apiFetch(`/api/pipeline-inspections/${report.id}/approve`, {
+      const body = dialogText.trim()
+        ? (dialogMode === "submit"
+            ? { submissionNotes: dialogText }
+            : dialogMode === "approve"
+              ? { approvalNotes: dialogText }
+              : dialogMode === "return"
+                ? { reviewComments: dialogText }
+                : { changeDescription: dialogText })
+        : {};
+      const endpoint =
+        dialogMode === "submit" ? "submit" :
+        dialogMode === "approve" ? "approve" :
+        dialogMode === "return" ? "return" :
+        "revise";
+      await apiFetch(`/api/pipeline-inspections/${report.id}/${endpoint}`, {
         method: "POST",
-        body: JSON.stringify({ approvalNotes }),
+        body: JSON.stringify(body),
       });
-      toast.success("Report approved");
-      setApprovalNotes("");
+      const labels: Record<string, string> = {
+        submit: "Submitted for review",
+        approve: "Approved",
+        return: "Returned for revision",
+        revise: "Revision started",
+      };
+      toast.success(labels[dialogMode]);
+      setDialogMode(null);
+      setDialogText("");
       refresh();
       load();
     } catch (e) {
       const err = e as { message?: string };
-      toast.error(err.message ?? "Approval failed");
+      toast.error(err.message ?? "Action failed");
     } finally {
-      setApproving(false);
+      setActing(false);
     }
+  }
+
+  function downloadPdf() {
+    if (!report) return;
+    window.open(`/api/pipeline-inspections/${report.id}/pdf`, "_blank");
   }
 
   if (loading) {
@@ -155,13 +251,36 @@ export function PipelineReportDetailView() {
       </Alert>
     );
   }
-  if (!report) {
-    return <p className="p-8 text-muted-foreground">No report selected.</p>;
-  }
+  if (!report) return <p className="p-8 text-muted-foreground">No report selected.</p>;
 
   const allVerified = report.measurements.every(
     (m) => m.standard?.isVerified || m.standard === null,
   );
+
+  const dialogTitle: Record<string, string> = {
+    submit: "Submit Report for Review",
+    approve: "Approve Report",
+    return: "Return Report for Revision",
+    revise: "Start New Revision",
+  };
+  const dialogDesc: Record<string, string> = {
+    submit: "Submit this report to the administrator for approval. You won't be able to edit it until it's approved or returned.",
+    approve: "Approve this report. The current state will be saved as an approved revision; previous approved revisions will be marked as Superseded but remain available.",
+    return: "Return this report to the employee for correction. Mandatory review comments (at least 10 chars) will be visible to them.",
+    revise: "Start a new revision of this approved report. The previously-approved version stays available; this new revision will need admin approval before becoming the current approved version.",
+  };
+  const dialogLabel: Record<string, string> = {
+    submit: "Submission notes (optional)",
+    approve: "Approval notes (optional)",
+    return: "Review comments (REQUIRED, >= 10 chars)",
+    revise: "What are you changing? (REQUIRED, >= 5 chars)",
+  };
+  const dialogActionLabel: Record<string, string> = {
+    submit: "Submit for Review",
+    approve: "Approve",
+    return: "Return for Revision",
+    revise: "Start Revision",
+  };
 
   return (
     <div className="space-y-4">
@@ -174,12 +293,62 @@ export function PipelineReportDetailView() {
           <Button variant="outline" size="sm" onClick={downloadPdf}>
             <Download className="mr-2 h-4 w-4" /> Download PDF
           </Button>
-          {canEdit && report.status !== "Approved" && (
+          {canEditDraft && (
             <Button size="sm" onClick={() => openEditPipelineReport(report.id)}>
               <Pencil className="mr-2 h-4 w-4" /> Edit
             </Button>
           )}
+          {canSubmit && (
+            <Button size="sm" onClick={() => openDialog("submit")}>
+              <Send className="mr-2 h-4 w-4" /> Submit for Review
+            </Button>
+          )}
+          {canRevise && (
+            <Button size="sm" variant="default" onClick={() => openDialog("revise")}>
+              <GitBranch className="mr-2 h-4 w-4" /> Start New Revision
+            </Button>
+          )}
+          {canApproveOrReturn && (
+            <>
+              <Button size="sm" variant="default" onClick={() => openDialog("approve")}>
+                <CheckCircle2 className="mr-2 h-4 w-4" /> Approve
+              </Button>
+              <Button size="sm" variant="outline" className="text-red-700 border-red-300" onClick={() => openDialog("return")}>
+                <RotateCcw className="mr-2 h-4 w-4" /> Return for Revision
+              </Button>
+            </>
+          )}
         </div>
+      </div>
+
+      {/* Status banner */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Badge variant="outline" className={STATUS_COLOR[report.status] ?? ""}>
+          {report.status}
+        </Badge>
+        {report.revisionNumber > 1 && (
+          <Badge variant="outline" className="text-xs">
+            Rev {report.revisionNumber}
+          </Badge>
+        )}
+        {report.isDemo && (
+          <Badge variant="outline" className="border-zinc-400 text-zinc-500">DEMO</Badge>
+        )}
+        {status === "Returned for Revision" && report.reviewComments && (
+          <Alert className="flex-1 border-red-300 bg-red-50">
+            <RotateCcw className="h-4 w-4 text-red-700" />
+            <AlertTitle className="text-red-900">Admin returned this report for revision</AlertTitle>
+            <AlertDescription className="text-red-900">
+              <em>"{report.reviewComments}"</em>
+              {report.returnedBy && (
+                <div className="mt-1 text-xs">
+                  — {report.returnedBy.name}
+                  {report.returnedAt ? ` on ${new Date(report.returnedAt).toLocaleString()}` : ""}
+                </div>
+              )}
+            </AlertDescription>
+          </Alert>
+        )}
       </div>
 
       {/* Verification banner */}
@@ -207,6 +376,7 @@ export function PipelineReportDetailView() {
             Report No: <span className="font-mono">{report.reportNumber}</span>
             {"    |    "}Rev: {report.revisionNumber}
             {"    |    "}Date: {new Date(report.inspectionDate).toISOString().slice(0, 10)}
+            {"    |    "}Status: {report.status}
           </p>
         </div>
 
@@ -232,7 +402,7 @@ export function PipelineReportDetailView() {
             ["Isometric Drawing No.", report.isometricDrawingNumber ?? "—"],
             ["Material of Construction (MOC)", report.materialOfConstruction ?? "—"],
             ["Applicable Standard", `${report.applicableStandard ?? "—"} ${report.standardEdition ?? ""}`.trim()],
-            ["Status", report.status],
+            ["Inspector", report.inspectorName],
           ].map(([label, value], idx) => (
             <div key={idx} className={`flex border-b border-r border-zinc-300 ${idx % 2 === 1 ? "border-r-0" : ""} ${idx >= 8 ? "border-b-0" : ""}`}>
               <div className="w-1/2 bg-zinc-100 px-2 py-1 font-semibold border-r border-zinc-300">{label}</div>
@@ -294,9 +464,7 @@ export function PipelineReportDetailView() {
                   <td className="border border-zinc-400 px-2 py-1 text-center tabular-nums">
                     {m.nominalThicknessMm !== null ? m.nominalThicknessMm.toFixed(2) : "—"}
                     {m.standard && !m.standard.isVerified && (
-                      <span className="ml-1 text-[9px] text-amber-700" title="Reference data not yet verified">
-                        (unv)
-                      </span>
+                      <span className="ml-1 text-[9px] text-amber-700" title="Reference data not yet verified">(unv)</span>
                     )}
                   </td>
                   <td className="border border-zinc-400 px-2 py-1 text-center">
@@ -360,56 +528,81 @@ export function PipelineReportDetailView() {
         </div>
       </div>
 
-      {/* ---------- APPROVAL BLOCK (only for non-approved reports) ---------- */}
-      {report.status !== "Approved" && canApprove && (
-        <Card>
-          <CardContent className="p-4 space-y-3">
-            <h3 className="text-sm font-bold">Approve this report</h3>
-            <p className="text-xs text-muted-foreground">
-              Approval generates a revision snapshot and locks the report from
-              further inspector edits. To modify an approved report, an
-              administrator must use the revision flow.
-            </p>
-            <textarea
-              className="w-full rounded-md border border-zinc-300 p-2 text-sm"
-              rows={2}
-              placeholder="Approval notes (optional)"
-              value={approvalNotes}
-              onChange={(e) => setApprovalNotes(e.target.value)}
+      {/* ---------- WORKFLOW DIALOG ---------- */}
+      <Dialog open={dialogMode !== null} onOpenChange={(o) => { if (!o) setDialogMode(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{dialogMode && dialogTitle[dialogMode]}</DialogTitle>
+            <DialogDescription>{dialogMode && dialogDesc[dialogMode]}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label>{dialogMode && dialogLabel[dialogMode]}</Label>
+            <Textarea
+              rows={4}
+              value={dialogText}
+              onChange={(e) => setDialogText(e.target.value)}
+              placeholder={
+                dialogMode === "return"
+                  ? "Please describe what needs to be corrected..."
+                  : dialogMode === "revise"
+                    ? "Briefly describe what's being changed in this revision..."
+                    : "Optional notes..."
+              }
             />
-            <div className="flex justify-end gap-2">
-              <Button onClick={approve} disabled={approving}>
-                {approving ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Approving...
-                  </>
-                ) : (
-                  <>
-                    <ShieldCheck className="mr-2 h-4 w-4" /> Approve Report
-                  </>
-                )}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDialogMode(null)}>Cancel</Button>
+            <Button onClick={executeWorkflow} disabled={acting}>
+              {acting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {dialogMode && dialogActionLabel[dialogMode]}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ---------- REVISION HISTORY ---------- */}
       {report.revisions.length > 0 && (
         <Card>
-          <CardContent className="p-4">
-            <h3 className="mb-2 text-sm font-bold">Revision History</h3>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <GitBranch className="h-4 w-4" /> Revision History ({report.revisions.length})
+            </CardTitle>
+            <CardDescription>
+              Each approved version is preserved as a separate revision. The currently-approved revision is highlighted.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
             <div className="divide-y">
               {report.revisions.map((r) => (
-                <div key={r.id} className="py-2 text-xs">
-                  <div className="flex items-center gap-2">
+                <div key={r.id} className={`py-3 text-xs ${r.id === report.currentApprovedRevisionId ? "bg-emerald-50/50 -mx-3 px-3 rounded" : ""}`}>
+                  <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="outline" className="font-mono">Rev {r.revisionNumber}</Badge>
-                    <span className="text-muted-foreground">{new Date(r.revisionDate).toLocaleString()}</span>
-                    <span className="text-muted-foreground">·</span>
-                    <span>{r.revisedByName ?? "—"}</span>
+                    <Badge variant="outline" className={REVISION_STATUS_COLOR[r.status] ?? ""}>
+                      {r.status}
+                    </Badge>
+                    {r.id === report.currentApprovedRevisionId && (
+                      <Badge variant="outline" className="border-emerald-500 text-emerald-700">
+                        Current Approved
+                      </Badge>
+                    )}
+                    <span className="text-muted-foreground">
+                      {new Date(r.revisionDate).toLocaleString()}
+                    </span>
+                    {r.revisedByName && (
+                      <span className="text-muted-foreground">· by {r.revisedByName}</span>
+                    )}
                   </div>
                   {r.changeDescription && (
                     <p className="mt-1">{r.changeDescription}</p>
+                  )}
+                  {r.reviewComments && (
+                    <p className="mt-1 text-red-700 italic">Admin comments: "{r.reviewComments}"</p>
+                  )}
+                  {r.approvedByName && (
+                    <p className="mt-1 text-emerald-700 text-[11px]">
+                      Approved by {r.approvedByName}
+                      {r.approvedAt ? ` on ${new Date(r.approvedAt).toLocaleString()}` : ""}
+                    </p>
                   )}
                 </div>
               ))}
@@ -422,16 +615,13 @@ export function PipelineReportDetailView() {
         <CardContent className="flex items-start gap-3 p-4">
           <AlertTriangle className="h-5 w-5 shrink-0 text-muted-foreground" />
           <div className="text-xs text-muted-foreground">
-            <strong className="text-foreground">Reference standard verification:</strong> All nominal wall
-            thickness values are sourced from publicly published ASME B36.10M /
-            B36.19M reference tables. The applicable standard and edition shown
-            in the header are configurable. An authorized administrator must
-            verify each standard row against the licensed / official ASME
-            edition before using the report for production inspection
-            decisions. The Observed Minimum column shows the smallest valid
-            measured value at each point — it is a measurement, not a
-            pass / fail decision; the engineering acceptance criteria must be
-            applied separately by the responsible engineer.
+            <strong className="text-foreground">Workflow summary:</strong>{" "}
+            Status <code className="rounded bg-muted px-1">{report.status}</code> ·{" "}
+            {status === "Draft" && "Employee is editing. Can submit for review when ready."}
+            {status === "Submitted for Review" && "Awaiting admin approval. Employee can't edit until admin acts."}
+            {status === "Returned for Revision" && "Admin returned with comments. Employee should fix and resubmit."}
+            {status === "Approved" && "Report is approved. Employee can start a new revision; admin can still edit directly."}
+            {status === "Changes Pending Review" && "Employee is editing a new revision of an approved report. Will need admin approval."}
           </div>
         </CardContent>
       </Card>

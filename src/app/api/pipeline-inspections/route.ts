@@ -1,11 +1,16 @@
 // GET  /api/pipeline-inspections - list with filters/pagination
 // POST /api/pipeline-inspections - create new pipeline inspection report
 //
+// Role-based filtering:
+//   - ADMIN sees ALL reports
+//   - EMPLOYEE (or legacy INSPECTOR/APPROVER) sees ONLY their own reports
+//
 // Query params:
 //   q          - search across reportNumber, pipelineDescription, pipelineIdentificationNumber, isometricDrawingNumber
 //   clientId   - filter by client
 //   plantId    - filter by plant
-//   status     - filter by status (Draft, Submitted, Approved, Rejected)
+//   status     - filter by status (Draft, Submitted for Review, Returned for Revision, Approved, Changes Pending Review)
+//   mine       - "true" forces filtering to current user's reports even for admins
 //   page       - default 1
 //   pageSize   - default 10
 
@@ -24,10 +29,19 @@ export async function GET(req: NextRequest) {
   const clientId = url.searchParams.get("clientId") ?? undefined;
   const plantId = url.searchParams.get("plantId") ?? undefined;
   const status = url.searchParams.get("status") ?? undefined;
+  const mine = url.searchParams.get("mine") === "true";
   const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1", 10) || 1);
   const pageSize = Math.min(100, Math.max(1, parseInt(url.searchParams.get("pageSize") ?? "10", 10) || 10));
 
   const where: Record<string, unknown> = {};
+
+  // ROLE-BASED FILTERING: employees see only their own reports.
+  // Admins see all reports unless they explicitly pass ?mine=true.
+  const isAdmin = session.dashboardRole === "ADMIN";
+  if (!isAdmin || mine) {
+    where.inspectorId = session.id;
+  }
+
   if (q) {
     where.OR = [
       { reportNumber: { contains: q } },
@@ -52,6 +66,7 @@ export async function GET(req: NextRequest) {
         plant: { select: { id: true, name: true, location: true } },
         inspector: { select: { id: true, name: true } },
         approver: { select: { id: true, name: true } },
+        returnedBy: { select: { id: true, name: true } },
         _count: { select: { measurements: true, revisions: true } },
       },
     }),
@@ -69,11 +84,9 @@ export async function POST(req: NextRequest) {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  // INSPECTOR + ADMIN can create new reports
-  if (session.role !== "INSPECTOR" && session.role !== "ADMIN") {
-    return NextResponse.json({ error: "Forbidden — inspector role required" }, { status: 403 });
-  }
-
+  // Both ADMIN and EMPLOYEE can create reports — admins can file reports
+  // just like employees can. The session.inspectorId is set to the current
+  // user so the ownership check works correctly downstream.
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Invalid body" }, { status: 400 });
 
@@ -126,6 +139,7 @@ export async function POST(req: NextRequest) {
       inspectorName: session.name,
       findingsSummary: body.findingsSummary ?? null,
       comments: body.comments ?? null,
+      photos: body.photos ?? null,
       isDemo: false,
     },
     include: {
@@ -137,7 +151,7 @@ export async function POST(req: NextRequest) {
   await recordAudit({
     userId: session.id, userName: session.name,
     action: "CREATE", entity: "PipelineInspection", entityId: created.id,
-    details: `Created pipeline report ${created.reportNumber}`,
+    details: `Created pipeline report ${created.reportNumber} (Draft)`,
   });
 
   return NextResponse.json(created, { status: 201 });

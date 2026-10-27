@@ -141,7 +141,9 @@ const STATUS_OPTIONS: Array<{ value: "Measured" | "NotMeasured" | "NotApplicable
 export function PipelineReportFormView() {
   const { user, editingPipelineReportId, setView, openPipelineReport, refresh } = useAppStore();
   const isEdit = !!editingPipelineReportId;
-  const canEdit = user?.role === "ADMIN" || user?.role === "INSPECTOR";
+  // Any authenticated user can create reports — they become the inspector.
+  // The detail-page permission check enforces role-based editing on existing reports.
+  const canEdit = !!user;
 
   const [header, setHeader] = useState<ReportHeader>(EMPTY_HEADER);
   const [rows, setRows] = useState<MeasurementRow[]>([]);
@@ -151,7 +153,7 @@ export function PipelineReportFormView() {
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [reportStatus, setReportStatus] = useState<"Draft" | "Submitted" | "Approved" | "Rejected">("Draft");
+  const [reportStatus, setReportStatus] = useState<string>("Draft");
 
   // ---------- INITIAL LOADS ----------
   useEffect(() => {
@@ -499,18 +501,26 @@ export function PipelineReportFormView() {
     );
   }
 
-  if (!canEdit && isEdit && reportStatus === "Approved") {
-    return (
-      <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
-        <AlertTitle>Report approved</AlertTitle>
-        <AlertDescription>
-          This report has been approved and can only be edited by an
-          administrator via the revision flow. Use the back button to return
-          to the list.
-        </AlertDescription>
-      </Alert>
-    );
+  // Block editing if the report is in a state that doesn't allow edits.
+  // Employees can only edit Draft / Returned for Revision / Changes Pending Review
+  // (the latter happens after they click "Start New Revision" on an Approved report).
+  // Admins can edit anything.
+  if (isEdit && reportStatus) {
+    const isAdmin = user?.dashboardRole === "ADMIN";
+    const editableStatuses = ["Draft", "Returned for Revision", "Changes Pending Review"];
+    if (!isAdmin && !editableStatuses.includes(reportStatus)) {
+      return (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Report is in "{reportStatus}" state</AlertTitle>
+          <AlertDescription>
+            This report is currently in the approval workflow and can't be edited directly.
+            {reportStatus === "Submitted for Review" && " Wait for the admin to approve or return it."}
+            {reportStatus === "Approved" && " Use the \"Start New Revision\" button on the detail page to create a new revision that needs admin approval."}
+          </AlertDescription>
+        </Alert>
+      );
+    }
   }
 
   return (
