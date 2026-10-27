@@ -189,6 +189,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string;
       observedMinimumMm,
       observedMinimumOverride,
       findingsComments: body.findingsComments?.trim() ?? existing.findingsComments,
+      customColumnValues: body.customColumnValues ?? existing.customColumnValues ?? "{}",
     },
     include: {
       componentType: { select: { id: true, code: true, label: true } },

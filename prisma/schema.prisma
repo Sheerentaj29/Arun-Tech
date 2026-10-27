@@ -261,7 +261,14 @@ model PipelineInspection {
   inspectorName            String   // snapshot at approval time
   findingsSummary          String?  // overall findings section
   comments                 String?  // general comments
-  // Photos stored as JSON array: [{path, caption, uploadedAt}]
+  // Large multiline inspection description for Step 3 of the form
+  inspectionDescription     String?
+  // Custom column definitions stored as JSON: [{id, name, unit}]
+  // These are user-added columns beyond the 11 default system columns.
+  customColumns            String?
+  // Photos stored as JSON array (legacy): [{path, caption, uploadedAt}]
+  // Also tracked individually via the ReportPhoto model below for
+  // proper relational storage and retrieval.
   photos                   String?
 
   // Override tracking (admin-approved nominal thickness override)
@@ -298,6 +305,7 @@ model PipelineInspection {
   returnedBy  User?       @relation("PipelineInspectionReturnedBy", fields: [returnedById], references: [id], onDelete: SetNull)
   measurements ThicknessMeasurement[]
   revisions   ReportRevision[]
+  reportPhotos ReportPhoto[]
 
   @@unique([clientId, reportNumber])
   @@index([clientId])
@@ -351,6 +359,9 @@ model ThicknessMeasurement {
 
   // Column 11: findings / comments
   findingsComments      String?
+  // Custom column values stored as JSON: {"col_id_1": "5.2", "col_id_2": "N/A"}
+  // Each key corresponds to a custom column defined on the parent PipelineInspection.
+  customColumnValues    String?
 
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
@@ -397,4 +408,30 @@ model ReportRevision {
 
   @@index([pipelineInspectionId])
   @@index([status])
+}
+
+// =====================================================
+// REPORT PHOTOS (persistent file storage)
+// =====================================================
+// Each photo is stored as a file on disk (storage/photos/) and tracked
+// in this table with its filename, caption, and upload metadata.
+// Photos are included in the generated PDF and preserved with approved
+// report revisions.
+
+model ReportPhoto {
+  id                   String   @id @default(cuid())
+  pipelineInspectionId String
+  fileName             String   // original file name from upload
+  filePath             String   // absolute path on disk (storage/photos/...)
+  fileSize             Int      // bytes
+  mimeType             String   // image/jpeg, image/png, etc.
+  caption              String?  // optional: "Overall pipeline view", "Corrosion observed", etc.
+  sortOrder            Int      @default(0)
+  uploadedById         String?
+  uploadedByName       String?
+  createdAt            DateTime @default(now())
+
+  pipelineInspection PipelineInspection @relation(fields: [pipelineInspectionId], references: [id], onDelete: Cascade)
+
+  @@index([pipelineInspectionId])
 }

@@ -139,6 +139,8 @@ export async function POST(req: NextRequest) {
       inspectorName: session.name,
       findingsSummary: body.findingsSummary ?? null,
       comments: body.comments ?? null,
+      inspectionDescription: body.inspectionDescription ?? null,
+      customColumns: body.customColumns ?? "[]",
       photos: body.photos ?? null,
       isDemo: false,
     },

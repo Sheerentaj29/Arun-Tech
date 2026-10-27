@@ -239,6 +239,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       westStatus,
       observedMinimumMm,
       findingsComments: body.findingsComments?.trim() || null,
+      customColumnValues: body.customColumnValues ?? "{}",
     },
     include: {
       componentType: { select: { id: true, code: true, label: true } },

@@ -35,6 +35,9 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
           approvedBy: { select: { id: true, name: true } },
         },
       },
+      reportPhotos: {
+        orderBy: { sortOrder: "asc" },
+      },
     },
   });
   if (!report) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -132,6 +135,8 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       inspectionDate: body.inspectionDate ? new Date(body.inspectionDate) : existing.inspectionDate,
       findingsSummary: body.findingsSummary ?? existing.findingsSummary,
       comments: body.comments ?? existing.comments,
+      inspectionDescription: body.inspectionDescription ?? existing.inspectionDescription,
+      customColumns: body.customColumns ?? existing.customColumns,
       photos: body.photos ?? existing.photos,
     },
   });
