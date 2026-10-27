@@ -231,9 +231,10 @@ export function PipelineReportDetailView() {
     }
   }
 
-  function downloadPdf() {
+  function downloadPdf(orientation?: "landscape" | "portrait") {
     if (!report) return;
-    window.open(`/api/pipeline-inspections/${report.id}/pdf`, "_blank");
+    const orient = orientation ?? "landscape";
+    window.open(`/api/pipeline-inspections/${report.id}/pdf?orientation=${orient}`, "_blank");
   }
 
   if (loading) {
@@ -290,8 +291,11 @@ export function PipelineReportDetailView() {
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to list
         </Button>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={downloadPdf}>
-            <Download className="mr-2 h-4 w-4" /> Download PDF
+          <Button variant="outline" size="sm" onClick={() => downloadPdf("landscape")}>
+            <Download className="mr-2 h-4 w-4" /> PDF (Landscape)
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => downloadPdf("portrait")}>
+            <Download className="mr-2 h-4 w-4" /> PDF (Portrait)
           </Button>
           {canEditDraft && (
             <Button size="sm" onClick={() => openEditPipelineReport(report.id)}>

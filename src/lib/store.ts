@@ -53,6 +53,7 @@ interface AppState {
   openPipelineReport: (id: string) => void;
   openNewPipelineReport: () => void;
   openEditPipelineReport: (id: string) => void;
+  setEditingPipelineReportId: (id: string) => void;
   setUser: (u: AppUser | null) => void;
   refresh: () => void;
 }
@@ -81,6 +82,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   openPipelineReport: (id) => set({ view: "pipeline-report-detail", selectedPipelineReportId: id }),
   openNewPipelineReport: () => set({ view: "pipeline-report-form", editingPipelineReportId: null }),
   openEditPipelineReport: (id) => set({ view: "pipeline-report-form", editingPipelineReportId: id }),
+  setEditingPipelineReportId: (id) => set({ editingPipelineReportId: id }),
   setUser: (u) =>
     set((s) => ({
       user: u,

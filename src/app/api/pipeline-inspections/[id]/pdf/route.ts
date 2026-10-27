@@ -1,12 +1,13 @@
-// GET  /api/pipeline-inspections/[id]/pdf - download the CURRENT approved PDF.
-//   If the report is Approved, serve the persisted PDF file from disk
-//   (the exact bytes that were approved — never re-generated).
-//   If the report is in Draft/Submitted/Returned state, generate a
-//   preview PDF on-the-fly (this is a working draft, not the approved version).
+// GET  /api/pipeline-inspections/[id]/pdf?orientation=landscape|portrait
 //
-// GET  /api/pipeline-inspections/[id]/revisions/[rid]/pdf - download a
-//   SPECIFIC historical revision's PDF. Only serves approved/superseded
-//   revisions' persisted PDFs — never re-generates them.
+// Download the PDF for a pipeline inspection report.
+// - If the report is Approved AND a persisted PDF exists on disk, serve that
+//   file directly (the exact bytes the admin approved — never re-generated).
+// - If the report is in Draft/Submitted/Returned state, generate a preview PDF
+//   on-the-fly with the requested orientation.
+//
+// Query params:
+//   orientation: "landscape" (default) | "portrait"
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
@@ -27,14 +28,15 @@ class BufferWritable extends Writable {
   }
 }
 
-async function generatePdfBuffer(report: any): Promise<Buffer> {
+async function generatePdfBuffer(report: any, orientation: "landscape" | "portrait" = "landscape"): Promise<Buffer> {
   const writable = new BufferWritable();
   await new Promise<void>((resolve, reject) => {
     writable.on("finish", () => resolve());
     writable.on("error", reject);
     void generatePipelineReportPdf(
-      { report, measurements: report.measurements as never },
+      { report, measurements: report.measurements as never, photos: report.reportPhotos ?? [] },
       writable,
+      orientation,
     );
   });
   return writable.toBuffer();
@@ -46,6 +48,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { id } = await ctx.params;
+
+  // Parse orientation from query string
+  const url = new URL(req.url);
+  const orientation = (url.searchParams.get("orientation") as "landscape" | "portrait") || "landscape";
+
   const report = await db.pipelineInspection.findUnique({
     where: { id },
     include: {
@@ -59,6 +66,9 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
           componentType: { select: { id: true, code: true, label: true } },
           standard: { select: { id: true, standard: true, edition: true, nominalSizeInch: true, schedule: true, wallThicknessMm: true, isVerified: true } },
         },
+      },
+      reportPhotos: {
+        orderBy: { sortOrder: "asc" },
       },
     },
   });
@@ -76,29 +86,36 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   let buf: Buffer;
   let sourceLabel: string;
 
-  if (report.status === "Approved" && report.pdfPath && existsSync(report.pdfPath)) {
-    // ── APPROVED REPORT: serve the persisted PDF from disk ──
-    // This is the exact PDF the admin approved — never re-generated.
-    // Even if the report is later revised, this file doesn't change.
+  if (
+    report.status === "Approved" &&
+    report.pdfPath &&
+    existsSync(report.pdfPath) &&
+    orientation === "landscape" // Only serve persisted PDF for default (landscape)
+  ) {
+    // ── APPROVED REPORT (landscape): serve the persisted PDF from disk ──
     buf = readFileSync(report.pdfPath);
     sourceLabel = `persisted (${report.pdfPath})`;
   } else {
-    // ── DRAFT/SUBMITTED/RETURNED: generate a preview PDF on-the-fly ──
-    // This is a working draft — the content may change before approval.
-    buf = await generatePdfBuffer(report);
-    sourceLabel = `generated on-the-fly (${buf.length} bytes)`;
+    // ── DRAFT/SUBMITTED/RETURNED OR PORTRAIT: generate a preview PDF on-the-fly ──
+    // This includes ALL saved data: measurements, custom columns, photos, etc.
+    buf = await generatePdfBuffer(report, orientation);
+    sourceLabel = `generated ${orientation} (${buf.length} bytes)`;
   }
 
   await recordAudit({
     userId: session.id, userName: session.name,
     action: "EXPORT", entity: "PipelineInspection", entityId: report.id,
-    details: `Downloaded PDF for ${report.reportNumber} (${sourceLabel})`,
+    details: `Downloaded PDF (${orientation}) for ${report.reportNumber} (${sourceLabel})`,
   });
+
+  const filename = orientation === "portrait"
+    ? `${report.reportNumber}_portrait.pdf`
+    : `${report.reportNumber}.pdf`;
 
   return new NextResponse(buf, {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="${report.reportNumber}.pdf"`,
+      "Content-Disposition": `inline; filename="${filename}"`,
       "Content-Length": String(buf.length),
       "Cache-Control": "private, no-cache, no-store, must-revalidate",
     },

@@ -173,7 +173,7 @@ const STATUS_OPTIONS: Array<{ value: "Measured" | "NotMeasured" | "NotApplicable
 ];
 
 export function PipelineReportFormView() {
-  const { user, editingPipelineReportId, setView, openPipelineReport, refresh } = useAppStore();
+  const { user, editingPipelineReportId, setEditingPipelineReportId, setView, openPipelineReport, refresh } = useAppStore();
   const isEdit = !!editingPipelineReportId;
   // Any authenticated user can create reports — they become the inspector.
   // The detail-page permission check enforces role-based editing on existing reports.
@@ -488,9 +488,9 @@ export function PipelineReportFormView() {
         );
         toast.success(`Created ${created.reportNumber}`);
         refresh();
-        openPipelineReport(created.id);
-        // After navigation, switch to edit mode by directly going to form
-        // (we re-use the editingPipelineReportId state via openPipelineReport path)
+        // Set the editing ID WITHOUT navigating away — keeps the user
+        // on the form so they can continue with Step 2 (measurements).
+        setEditingPipelineReportId(created.id);
       }
     } catch (e) {
       const err = e as { message?: string };
@@ -590,23 +590,24 @@ export function PipelineReportFormView() {
     return true;
   }
 
-  function proceedToNext() {
+  async function proceedToNext() {
     if (step === 1) {
       if (!validateStep1()) {
         toast.error("Please fill in all required fields before proceeding.");
         return;
       }
-      // Save header before proceeding
-      if (isEdit) saveHeader();
+      // ALWAYS save the header — for new reports, this creates the
+      // report and sets editingPipelineReportId. For existing reports,
+      // it updates the header. Must await so the ID is available
+      // before the user reaches Step 2 (measurement rows need it).
+      await saveHeader();
       setStep(2);
     } else if (step === 2) {
       validateStep2();
-      // Save custom columns to header
       setHeader((h) => ({ ...h, customColumns: JSON.stringify(customColumns) }));
-      if (isEdit) saveHeader();
+      await saveHeader();
       setStep(3);
     }
-    // Scroll to top of the form
     if (typeof window !== "undefined") {
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
@@ -1060,7 +1061,7 @@ export function PipelineReportFormView() {
               </CardDescription>
             </div>
             <div className="flex gap-2">
-              <Button onClick={addRow} disabled={!isEdit} size="sm">
+              <Button onClick={addRow} size="sm">
                 <Plus className="mr-1 h-4 w-4" /> Add Row
               </Button>
               <Button onClick={deleteSelectedRows} size="sm" variant="outline" className="text-red-600"
@@ -1074,11 +1075,6 @@ export function PipelineReportFormView() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          {!isEdit && (
-            <div className="p-3 text-xs text-amber-800 bg-amber-50 border-b border-amber-200">
-              Save the report header first to enable adding measurement rows.
-            </div>
-          )}
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="bg-emerald-800 text-white">
@@ -1427,9 +1423,8 @@ export function PipelineReportFormView() {
                         if (e.target.files) handlePhotoUpload(e.target.files);
                         e.target.value = "";
                       }}
-                      disabled={!isEdit}
                     />
-                    <Button size="sm" disabled={!isEdit} asChild>
+                    <Button size="sm" asChild>
                       <span>
                         <Camera className="mr-2 h-4 w-4" /> Upload Photos
                       </span>
@@ -1438,14 +1433,8 @@ export function PipelineReportFormView() {
                 </div>
               </div>
 
-              {!isEdit && (
-                <p className="text-xs text-amber-800 bg-amber-50 p-2 rounded">
-                  Save the report header first (Step 1) before uploading photos.
-                </p>
-              )}
-
               {/* Drag-and-drop zone */}
-              {isEdit && (
+              {(
                 <div
                   className="border-2 border-dashed border-zinc-300 rounded-md p-6 text-center cursor-pointer hover:border-amber-400 transition-colors"
                   onDragOver={(e) => { e.preventDefault(); }}
