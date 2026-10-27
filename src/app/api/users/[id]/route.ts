@@ -5,11 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { recordAudit } from "@/lib/audit";
-import { createHash } from "crypto";
-
-function hashPassword(pw: string): string {
-  return createHash("sha256").update(pw).digest("hex");
-}
+import { hashPassword } from "@/lib/password";
 
 export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const session = await getSession(req);
@@ -41,7 +37,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
 
   // Password: only update if a new one is provided
   const passwordHash = body.password && String(body.password).length >= 6
-    ? hashPassword(String(body.password))
+    ? await hashPassword(String(body.password))
     : existing.passwordHash;
 
   // Don't allow the last admin to be demoted/deactivated (lockout protection)

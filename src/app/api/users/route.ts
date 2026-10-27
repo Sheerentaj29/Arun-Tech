@@ -5,11 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { recordAudit } from "@/lib/audit";
-import { createHash } from "crypto";
-
-function hashPassword(pw: string): string {
-  return createHash("sha256").update(pw).digest("hex");
-}
+import { hashPassword } from "@/lib/password";
 
 export async function GET(req: NextRequest) {
   const session = await getSession(req);
@@ -72,7 +68,7 @@ export async function POST(req: NextRequest) {
     data: {
       email: String(body.email).toLowerCase(),
       name: String(body.name),
-      passwordHash: hashPassword(String(body.password)),
+      passwordHash: await hashPassword(String(body.password)),
       role,
       active: body.active !== false,
     },
