@@ -35,7 +35,15 @@ class BufferWritable extends Writable {
   }
 }
 
-async function generateAndPersistPdf(report: any): Promise<{ path: string; size: number; buffer: Buffer }> {
+async function generateAndPersistPdf(
+  report: any,
+  linkedDrawings: Array<{
+    id: string; title: string; drawingNumber: string; drawingType: string;
+    revisionNumber: string; fileName: string; filePath: string;
+    fileExtension: string; mimeType: string;
+    clientName?: string | null; plantName?: string | null;
+  }>,
+): Promise<{ path: string; size: number; buffer: Buffer }> {
   // Ensure storage directory exists
   mkdirSync(PDF_STORAGE_DIR, { recursive: true });
 
@@ -44,7 +52,10 @@ async function generateAndPersistPdf(report: any): Promise<{ path: string; size:
   await new Promise<void>((resolve, reject) => {
     writable.on("finish", () => resolve());
     writable.on("error", reject);
-    void generatePipelineReportPdf({ report, measurements: report.measurements as never }, writable);
+    void generatePipelineReportPdf(
+      { report, measurements: report.measurements as never, linkedDrawings },
+      writable,
+    );
   });
   const buffer = writable.toBuffer();
 
@@ -82,6 +93,20 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       approver: true,
       client: { select: { id: true, name: true } },
       plant: { select: { id: true, name: true, location: true, address: true } },
+      // Include photos + linked drawings so the approved PDF actually
+      // contains them
+      reportPhotos: { orderBy: { sortOrder: "asc" } },
+      drawingLinks: {
+        include: {
+          drawing: {
+            include: {
+              client: { select: { id: true, name: true } },
+              plant: { select: { id: true, name: true } },
+              revisions: { orderBy: { createdAt: "desc" } },
+            },
+          },
+        },
+      },
     },
   });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -117,7 +142,36 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     approvedAt: new Date(),
     approver: { id: session.id, name: session.name, email: session.email } as any,
   };
-  const pdfResult = await generateAndPersistPdf(reportForPdf);
+  // Resolve the linked drawings into a flat array (same shape as the PDF
+  // route uses) so the approved PDF contains the drawings too.
+  const linkedDrawingsForPdf: Array<{
+    id: string; title: string; drawingNumber: string; drawingType: string;
+    revisionNumber: string; fileName: string; filePath: string;
+    fileExtension: string; mimeType: string;
+    clientName?: string | null; plantName?: string | null;
+  }> = [];
+  for (const link of existing.drawingLinks) {
+    const drawing = link.drawing;
+    const activeRev = link.drawingRevisionId
+      ? drawing.revisions.find((r) => r.id === link.drawingRevisionId)
+      : drawing.revisions.find((r) => r.isActive) ?? drawing.revisions[0];
+    if (activeRev) {
+      linkedDrawingsForPdf.push({
+        id: drawing.id,
+        title: drawing.title,
+        drawingNumber: drawing.drawingNumber,
+        drawingType: drawing.drawingType,
+        revisionNumber: activeRev.revisionNumber,
+        fileName: activeRev.fileName,
+        filePath: activeRev.filePath,
+        fileExtension: activeRev.fileExtension,
+        mimeType: activeRev.mimeType,
+        clientName: drawing.client?.name,
+        plantName: drawing.plant?.name,
+      });
+    }
+  }
+  const pdfResult = await generateAndPersistPdf(reportForPdf, linkedDrawingsForPdf);
   console.log(`[approve] PDF persisted: ${pdfResult.path} (${pdfResult.size} bytes)`);
 
   // Build the snapshot JSON (deterministic — computed before the transaction)

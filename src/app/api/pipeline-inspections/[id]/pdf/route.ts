@@ -9,14 +9,16 @@
 // The generated PDF includes:
 //   Page 1: Report header details
 //   Pages 2-N: Engineering drawings (one per page, if attached)
+//              — image formats are embedded directly
+//              — PDF drawings are rasterized page-by-page via pdftoppm
 //   Next page: Measurement table
-//   Following pages: Findings, photos, sign-off
+//   Following pages: Inspection description, findings, photos, sign-off
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { recordAudit } from "@/lib/audit";
-import { generatePipelineReportPdf } from "@/lib/pdf/pipeline-report";
+import { generatePipelineReportPdf, type LinkedDrawing } from "@/lib/pdf/pipeline-report";
 import { Writable } from "stream";
 import { readFileSync, existsSync } from "fs";
 
@@ -31,13 +33,22 @@ class BufferWritable extends Writable {
   }
 }
 
-async function generatePdfBuffer(report: any, orientation: "landscape" | "portrait" = "landscape"): Promise<Buffer> {
+async function generatePdfBuffer(
+  report: any,
+  linkedDrawings: LinkedDrawing[],
+  orientation: "landscape" | "portrait" = "landscape",
+): Promise<Buffer> {
   const writable = new BufferWritable();
   await new Promise<void>((resolve, reject) => {
     writable.on("finish", () => resolve());
     writable.on("error", reject);
     void generatePipelineReportPdf(
-      { report, measurements: report.measurements as never, photos: report.reportPhotos ?? [] },
+      {
+        report,
+        measurements: report.measurements as never,
+        photos: report.reportPhotos ?? [],
+        linkedDrawings,
+      },
       writable,
       orientation,
     );
@@ -67,13 +78,19 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
         orderBy: { sortOrder: "asc" },
         include: {
           componentType: { select: { id: true, code: true, label: true } },
-          standard: { select: { id: true, standard: true, edition: true, nominalSizeInch: true, schedule: true, wallThicknessMm: true, isVerified: true } },
+          standard: {
+            select: {
+              id: true, standard: true, edition: true, nominalSizeInch: true,
+              schedule: true, wallThicknessMm: true, isVerified: true,
+            },
+          },
         },
       },
-      reportPhotos: {
-        orderBy: { sortOrder: "asc" },
-      },
-      // Load linked engineering drawings with their active revision's file
+      reportPhotos: { orderBy: { sortOrder: "asc" } },
+      // Linked engineering drawings with their revisions — we resolve the
+      // correct revision (the one referenced by the link, else the active
+      // revision, else the latest) into a flat LinkedDrawing[] for the
+      // PDF generator.
       drawingLinks: {
         include: {
           drawing: {
@@ -81,10 +98,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
               client: { select: { id: true, name: true } },
               plant: { select: { id: true, name: true } },
               equipment: { select: { id: true, name: true } },
-              revisions: {
-                orderBy: { createdAt: "desc" },
-                // Get the active revision (or the one specified in the link)
-              },
+              revisions: { orderBy: { createdAt: "desc" } },
             },
           },
         },
@@ -103,12 +117,10 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     );
   }
 
-  // Build the drawings array for the PDF generator
-  // Each linked drawing gets its active revision's file path
-  const linkedDrawings: any[] = [];
+  // Resolve linked drawings into a flat array
+  const linkedDrawings: LinkedDrawing[] = [];
   for (const link of report.drawingLinks) {
     const drawing = link.drawing;
-    // Find the active revision (or the specific linked revision)
     const activeRev = link.drawingRevisionId
       ? drawing.revisions.find((r) => r.id === link.drawingRevisionId)
       : drawing.revisions.find((r) => r.isActive) ?? drawing.revisions[0];
@@ -130,12 +142,6 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     }
   }
 
-  // Attach the drawings to the report object for the PDF generator
-  const reportForPdf = {
-    ...report,
-    linkedDrawings,
-  };
-
   let buf: Buffer;
   let sourceLabel: string;
 
@@ -145,18 +151,24 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     existsSync(report.pdfPath) &&
     orientation === "landscape"
   ) {
-    // ── APPROVED REPORT (landscape): serve the persisted PDF from disk ──
+    // Approved report (landscape): serve the persisted PDF from disk.
+    // This is the EXACT bytes that were approved — frozen at approval time.
     buf = readFileSync(report.pdfPath);
     sourceLabel = `persisted (${report.pdfPath})`;
   } else {
-    // ── Generate a fresh PDF with the requested orientation ──
+    // Generate a fresh PDF with the requested orientation
     try {
-      buf = await generatePdfBuffer(reportForPdf, orientation);
-      sourceLabel = `generated ${orientation} (${buf.length} bytes, ${linkedDrawings.length} drawings)`;
+      buf = await generatePdfBuffer(report, linkedDrawings, orientation);
+      sourceLabel =
+        `generated ${orientation} (${buf.length} bytes, ${linkedDrawings.length} drawings)`;
     } catch (err) {
       console.error("[PDF] Generation failed:", err);
       return NextResponse.json(
-        { error: `PDF generation failed: ${(err as Error).message}. Check server logs for details.` },
+        {
+          error:
+            `PDF generation failed: ${(err as Error).message}. ` +
+            `Check server logs for details.`,
+        },
         { status: 500 },
       );
     }
@@ -168,11 +180,13 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     details: `Downloaded PDF (${orientation}) for ${report.reportNumber} (${sourceLabel})`,
   });
 
-  // Use "attachment" disposition to force download (not inline display)
   const safeReportNumber = report.reportNumber.replace(/[^a-zA-Z0-9-]/g, "_");
   const filename = `Inspection_Report_${safeReportNumber}_${orientation}.pdf`;
 
-  return new NextResponse(buf, {
+  // Note: Buffer is a valid BodyInit at runtime in the Node.js runtime,
+  // but the DOM lib type doesn't include Buffer in BodyInit. Cast to
+  // BodyInit to satisfy TypeScript without changing runtime behavior.
+  return new NextResponse(buf as unknown as BodyInit, {
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": `attachment; filename="${filename}"`,

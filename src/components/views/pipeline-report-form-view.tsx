@@ -16,6 +16,9 @@ import {
   Camera,
   Columns3,
   X,
+  PenTool,
+  FileText,
+  Image as ImageIcon,
 } from "lucide-react";
 import {
   Card,
@@ -144,6 +147,27 @@ interface PhotoItem {
   _isNew?: boolean;
 }
 
+// Drawing attachment (PNG/JPG/JPEG/WEBP/PDF) — attached at Step 1,
+// embedded as full-page images in the final PDF before the measurement
+// table. Each image becomes one PDF page; each PDF drawing is
+// rasterized page-by-page (one output page per source page).
+interface DrawingAttachment {
+  id?: string;             // drawingId once persisted
+  linkId?: string;         // DrawingInspectionLink id
+  title: string;           // drawing title
+  drawingNumber: string;   // drawing number
+  drawingType: string;
+  fileName: string;
+  fileExtension: string;
+  mimeType: string;
+  fileSize?: number;
+  // For image attachments, a previewable URL on the same origin
+  previewUrl?: string;
+  // Upload state: "uploading" | "uploaded" | "error"
+  uploadStatus: "uploading" | "uploaded" | "error";
+  errorMessage?: string;
+}
+
 // System columns that cannot be deleted
 const SYSTEM_COLUMN_KEYS = [
   "diaInch", "schedule", "nominal", "component", "pointNo",
@@ -197,6 +221,8 @@ export function PipelineReportFormView() {
   const [selectedRowIdxs, setSelectedRowIdxs] = useState<Set<number>>(new Set());
   // Photos for Step 3
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
+  // Drawing attachments for Step 1 (embedded as full pages in PDF)
+  const [drawings, setDrawings] = useState<DrawingAttachment[]>([]);
   // Validation errors per step
   const [stepErrors, setStepErrors] = useState<Record<string, string>>({});
 
@@ -258,6 +284,34 @@ export function PipelineReportFormView() {
           customColumns: r.customColumns ?? "[]",
         });
         setReportStatus(r.status);
+        // Load drawing attachments from the linked drawings on the report
+        if (r.drawingLinks && Array.isArray(r.drawingLinks)) {
+          setDrawings(r.drawingLinks.map((l: any) => {
+            const drawing = l.drawing ?? {};
+            const rev = drawing.revisions?.[0] ?? {};
+            const isImage = [".png", ".jpg", ".jpeg", ".webp"].includes((rev.fileExtension || "").toLowerCase());
+            return {
+              id: drawing.id,
+              linkId: l.id,
+              title: drawing.title ?? rev.fileName ?? "Drawing",
+              drawingNumber: drawing.drawingNumber ?? "",
+              drawingType: drawing.drawingType ?? "Other",
+              fileName: rev.fileName ?? "",
+              fileExtension: rev.fileExtension ?? "",
+              mimeType: rev.mimeType ?? "",
+              fileSize: rev.fileSize,
+              // For image attachments, build a same-origin preview URL via
+              // the drawings preview endpoint. PDFs are not previewable
+              // inline; the UI shows a file icon instead.
+              previewUrl: isImage && drawing.id
+                ? `/api/drawings/${drawing.id}/preview`
+                : undefined,
+              uploadStatus: "uploaded" as const,
+            };
+          }));
+        } else {
+          setDrawings([]);
+        }
         // Parse custom columns from the report's JSON field
         try {
           const cc = JSON.parse(r.customColumns ?? "[]");
@@ -785,6 +839,112 @@ export function PipelineReportFormView() {
     }
   }
 
+  // ─── DRAWING ATTACHMENT UPLOAD ───
+  // Accepts PNG / JPG / JPEG / WEBP / PDF. Multiple files may be selected
+  // at once. Each file is uploaded to /api/pipeline-inspections/[id]/drawings
+  // (multipart), which creates an EngineeringDrawing + DrawingRevision +
+  // DrawingInspectionLink in one atomic operation. The attachment is then
+  // embedded as a full-page image in the final PDF.
+  async function handleDrawingUpload(files: FileList | File[]) {
+    if (!editingPipelineReportId) {
+      toast.error("Save the report header first before attaching drawings.");
+      return;
+    }
+    const allowed = [".png", ".jpg", ".jpeg", ".webp", ".pdf"];
+    const fileArray = Array.from(files);
+    for (const file of fileArray) {
+      const ext = "." + (file.name.split(".").pop() ?? "").toLowerCase();
+      if (!allowed.includes(ext)) {
+        toast.error(`"${file.name}" is not a supported drawing format. Use PNG, JPG, JPEG, WEBP, or PDF.`);
+        continue;
+      }
+      if (file.size > 50 * 1024 * 1024) {
+        toast.error(`"${file.name}" is too large (max 50 MB).`);
+        continue;
+      }
+      // Insert a placeholder row immediately so the user sees the upload
+      // progress, then replace it once the server responds.
+      const isImage = ext !== ".pdf";
+      setDrawings((ds) => [
+        ...ds,
+        {
+          title: file.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim() || "Drawing",
+          drawingNumber: "",
+          drawingType: "Other",
+          fileName: file.name,
+          fileExtension: ext,
+          mimeType: file.type,
+          fileSize: file.size,
+          previewUrl: isImage ? URL.createObjectURL(file) : undefined,
+          uploadStatus: "uploading",
+        },
+      ]);
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        const token = typeof window !== "undefined" ? window.localStorage.getItem("ira_session_token") : null;
+        const res = await fetch(
+          `/api/pipeline-inspections/${editingPipelineReportId}/drawings`,
+          {
+            method: "POST",
+            body: fd,
+            credentials: "include",
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          },
+        );
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body?.error ?? `Upload failed (HTTP ${res.status})`);
+        }
+        const created = await res.json();
+        // Replace the placeholder row with the persisted drawing record
+        setDrawings((ds) => ds.map((d) => d.uploadStatus === "uploading" && d.fileName === file.name
+          ? {
+              ...d,
+              id: created.id,
+              linkId: created.linkId,
+              drawingNumber: created.drawingNumber,
+              title: created.title,
+              uploadStatus: "uploaded" as const,
+              errorMessage: undefined,
+            }
+          : d));
+        toast.success(`Attached "${file.name}"`);
+      } catch (e) {
+        const err = e as Error;
+        setDrawings((ds) => ds.map((d) => d.uploadStatus === "uploading" && d.fileName === file.name
+          ? { ...d, uploadStatus: "error" as const, errorMessage: err.message }
+          : d));
+        toast.error(`Failed to attach "${file.name}": ${err.message}`);
+      }
+    }
+  }
+
+  async function removeDrawing(idx: number) {
+    const drawing = drawings[idx];
+    if (!drawing) return;
+    if (!drawing.id) {
+      // Placeholder row (upload failed or never started) — just drop it
+      setDrawings((ds) => ds.filter((_, i) => i !== idx));
+      return;
+    }
+    if (!editingPipelineReportId) return;
+    try {
+      await apiFetch(
+        `/api/pipeline-inspections/${editingPipelineReportId}/drawings`,
+        {
+          method: "DELETE",
+          body: JSON.stringify({ drawingId: drawing.id }),
+        },
+      );
+      setDrawings((ds) => ds.filter((_, i) => i !== idx));
+      toast.success(`Removed "${drawing.fileName}"`);
+    } catch (e) {
+      const err = e as { message?: string };
+      toast.error(err.message ?? "Remove failed");
+    }
+  }
+
   // ─── SAVE DRAFT (saves header + custom columns without navigating) ───
   async function saveDraft() {
     setHeader((h) => ({ ...h, customColumns: JSON.stringify(customColumns) }));
@@ -1028,6 +1188,180 @@ export function PipelineReportFormView() {
               placeholder="General comments"
             />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* ─── Drawing Attachments (optional, embedded as full-page images
+           in the final PDF, BEFORE the measurement table) ─── */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <PenTool className="h-4 w-4" />
+                Drawing Attachments
+              </CardTitle>
+              <CardDescription>
+                Optional. Each drawing appears as one or more full pages in
+                the final PDF, before the measurement table. PNG/JPG/JPEG/WEBP
+                become one page each; a PDF drawing is rasterized page-by-page
+                (one PDF page per output page). Max 50 MB per file.
+              </CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <label className="cursor-pointer">
+                <input
+                  type="file"
+                  accept=".png,.jpg,.jpeg,.webp,.pdf,image/png,image/jpeg,image/webp,application/pdf"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files) handleDrawingUpload(e.target.files);
+                    e.target.value = "";
+                  }}
+                />
+                <Button size="sm" asChild disabled={!editingPipelineReportId}>
+                  <span>
+                    <Plus className="mr-1 h-4 w-4" /> Add Drawing
+                  </span>
+                </Button>
+              </label>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {!editingPipelineReportId && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+              Save the report header first (or click <strong>Proceed to Next</strong>) to enable drawing uploads.
+            </p>
+          )}
+          {editingPipelineReportId && drawings.length === 0 && (
+            <div
+              className="border-2 border-dashed border-zinc-300 rounded-md p-6 text-center cursor-pointer hover:border-amber-400 transition-colors"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (e.dataTransfer.files) handleDrawingUpload(e.dataTransfer.files);
+              }}
+              onClick={() => {
+                const input = document.createElement("input");
+                input.type = "file";
+                input.accept = ".png,.jpg,.jpeg,.webp,.pdf,image/png,image/jpeg,image/webp,application/pdf";
+                input.multiple = true;
+                input.onchange = (e) => {
+                  const t = e.target as HTMLInputElement;
+                  if (t.files) handleDrawingUpload(t.files);
+                };
+                input.click();
+              }}
+            >
+              <PenTool className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
+              <p className="text-sm text-muted-foreground">
+                Drag and drop drawing files here, or click to select
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                PNG · JPG · JPEG · WEBP · PDF — up to 50 MB each
+              </p>
+            </div>
+          )}
+          {drawings.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {drawings.map((drawing, idx) => {
+                const ext = (drawing.fileExtension || "").toLowerCase();
+                const isImage = [".png", ".jpg", ".jpeg", ".webp"].includes(ext);
+                const isPdf = ext === ".pdf";
+                return (
+                  <div
+                    key={idx}
+                    className={`border rounded-md overflow-hidden relative ${
+                      drawing.uploadStatus === "error"
+                        ? "border-red-300 bg-red-50"
+                        : drawing.uploadStatus === "uploading"
+                          ? "border-amber-300 bg-amber-50"
+                          : "border-zinc-200"
+                    }`}
+                  >
+                    <div className="relative aspect-square bg-zinc-100 flex items-center justify-center">
+                      {isImage && drawing.previewUrl ? (
+                        <img
+                          src={drawing.previewUrl}
+                          alt={drawing.title}
+                          className="w-full h-full object-contain"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = "none";
+                          }}
+                        />
+                      ) : isPdf ? (
+                        <div className="flex flex-col items-center text-muted-foreground">
+                          <FileText className="h-12 w-12" />
+                          <span className="text-xs mt-1">PDF Document</span>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center text-muted-foreground">
+                          <ImageIcon className="h-12 w-12" />
+                          <span className="text-xs mt-1">{ext.toUpperCase().replace(".", "")}</span>
+                        </div>
+                      )}
+                      {drawing.uploadStatus === "uploading" && (
+                        <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
+                          <Loader2 className="h-6 w-6 animate-spin text-amber-600" />
+                        </div>
+                      )}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); removeDrawing(idx); }}
+                        className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 hover:bg-red-700 z-10"
+                        title="Remove drawing"
+                        disabled={drawing.uploadStatus === "uploading"}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                    <div className="p-2">
+                      <div className="text-xs font-semibold truncate" title={drawing.title}>
+                        {drawing.title}
+                      </div>
+                      <div className="mt-1 text-[10px] text-muted-foreground truncate">
+                        {drawing.fileName}
+                      </div>
+                      <div className="mt-1 flex items-center justify-between text-[10px]">
+                        <span className="uppercase text-muted-foreground">{ext.replace(".", "")}</span>
+                        {drawing.fileSize ? (
+                          <span className="text-muted-foreground">{Math.round(drawing.fileSize / 1024)} KB</span>
+                        ) : null}
+                      </div>
+                      {drawing.uploadStatus === "error" && (
+                        <div className="mt-1 text-[10px] text-red-700" title={drawing.errorMessage}>
+                          Upload failed
+                        </div>
+                      )}
+                      {drawing.uploadStatus === "uploaded" && drawing.drawingNumber && (
+                        <div className="mt-1 text-[10px] text-emerald-700 font-mono truncate">
+                          {drawing.drawingNumber}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {/* Add more tile */}
+              <label className="cursor-pointer">
+                <input
+                  type="file"
+                  accept=".png,.jpg,.jpeg,.webp,.pdf,image/png,image/jpeg,image/webp,application/pdf"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files) handleDrawingUpload(e.target.files);
+                    e.target.value = "";
+                  }}
+                />
+                <div className="border-2 border-dashed border-zinc-300 rounded-md aspect-square flex flex-col items-center justify-center text-muted-foreground hover:border-amber-400 hover:text-amber-700 transition-colors">
+                  <Plus className="h-6 w-6" />
+                  <span className="text-xs mt-1">Add more</span>
+                </div>
+              </label>
+            </div>
+          )}
         </CardContent>
       </Card>
 

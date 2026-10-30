@@ -1,0 +1,663 @@
+     1→"use client";
+     2→
+     3→import { useEffect, useState, useCallback } from "react";
+     4→import {
+     5→  ArrowLeft,
+     6→  Download,
+     7→  Loader2,
+     8→  Pencil,
+     9→  ShieldCheck,
+    10→  ShieldAlert,
+    11→  AlertTriangle,
+    12→  Calendar,
+    13→  User as UserIcon,
+    14→  Send,
+    15→  CheckCircle2,
+    16→  RotateCcw,
+    17→  GitBranch,
+    18→} from "lucide-react";
+    19→import {
+    20→  Card,
+    21→  CardContent,
+    22→  CardHeader,
+    23→  CardTitle,
+    24→  CardDescription,
+    25→} from "@/components/ui/card";
+    26→import { Button } from "@/components/ui/button";
+    27→import { Badge } from "@/components/ui/badge";
+    28→import { Textarea } from "@/components/ui/textarea";
+    29→import { Label } from "@/components/ui/label";
+    30→import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+    31→import {
+    32→  Dialog,
+    33→  DialogContent,
+    34→  DialogDescription,
+    35→  DialogFooter,
+    36→  DialogHeader,
+    37→  DialogTitle,
+    38→} from "@/components/ui/dialog";
+    39→import { useAppStore } from "@/lib/store";
+    40→import { apiFetch } from "@/lib/api-client";
+    41→import { toast } from "sonner";
+    42→
+    43→interface FullReport {
+    44→  id: string;
+    45→  reportNumber: string;
+    46→  clientId: string;
+    47→  plantId: string;
+    48→  inspectionArea: string | null;
+    49→  pipelineDescription: string | null;
+    50→  pipelineIdentificationNumber: string | null;
+    51→  isometricDrawingNumber: string | null;
+    52→  materialOfConstruction: string | null;
+    53→  applicableStandard: string | null;
+    54→  standardEdition: string | null;
+    55→  inspectionDate: string;
+    56→  status: string;
+    57→  revisionNumber: number;
+    58→  inspectorId: string;
+    59→  inspectorName: string;
+    60→  findingsSummary: string | null;
+    61→  comments: string | null;
+    62→  photos: string | null;
+    63→  overrideReason: string | null;
+    64→  overrideAppliedAt: string | null;
+    65→  approvedById: string | null;
+    66→  approvedAt: string | null;
+    67→  approvalNotes: string | null;
+    68→  returnedById: string | null;
+    69→  returnedAt: string | null;
+    70→  reviewComments: string | null;
+    71→  currentApprovedRevisionId: string | null;
+    72→  isDemo: boolean;
+    73→  createdAt: string;
+    74→  updatedAt: string;
+    75→  client: { id: string; name: string };
+    76→  plant: { id: string; name: string; location: string | null; address: string | null };
+    77→  inspector: { id: string; name: string; email: string };
+    78→  approver: { id: string; name: string; email: string } | null;
+    79→  returnedBy: { id: string; name: string; email: string } | null;
+    80→  measurements: Array<{
+    81→    id: string;
+    82→    pointNo: string;
+    83→    sortOrder: number;
+    84→    pipeSizeInch: string;
+    85→    pipeSchedule: string;
+    86→    nominalThicknessMm: number | null;
+    87→    componentTypeCode: string;
+    88→    componentType?: { code: string; label: string } | null;
+    89→    northMm: number | null; northStatus: string;
+    90→    eastMm: number | null; eastStatus: string;
+    91→    southMm: number | null; southStatus: string;
+    92→    westMm: number | null; westStatus: string;
+    93→    observedMinimumMm: number | null;
+    94→    findingsComments: string | null;
+    95→    standard?: {
+    96→      standard: string; edition: string; nominalSizeInch: string;
+    97→      schedule: string; wallThicknessMm: number; isVerified: boolean;
+    98→    } | null;
+    99→  }>;
+   100→  revisions: Array<{
+   101→    id: string;
+   102→    revisionNumber: number;
+   103→    revisionDate: string;
+   104→    status: string;
+   105→    revisedByName: string | null;
+   106→    changeDescription: string | null;
+   107→    reviewComments: string | null;
+   108→    approvedByName: string | null;
+   109→    approvedAt: string | null;
+   110→    revisedBy?: { id: string; name: string } | null;
+   111→    approvedBy?: { id: string; name: string } | null;
+   112→  }>;
+   113→}
+   114→
+   115→function fmtMeasurement(v: number | null, status: string): string {
+   116→  if (status === "NotApplicable") return "N/A";
+   117→  if (status === "NotMeasured" || v === null || v === undefined) return "—";
+   118→  return v.toFixed(2);
+   119→}
+   120→
+   121→const STATUS_COLOR: Record<string, string> = {
+   122→  Draft: "border-zinc-400 text-zinc-600",
+   123→  "Submitted for Review": "border-blue-500 text-blue-700",
+   124→  "Returned for Revision": "border-red-500 text-red-700",
+   125→  Approved: "border-emerald-500 text-emerald-700",
+   126→  "Changes Pending Review": "border-amber-500 text-amber-700",
+   127→};
+   128→
+   129→const REVISION_STATUS_COLOR: Record<string, string> = {
+   130→  Draft: "border-zinc-400 text-zinc-600",
+   131→  "Submitted for Review": "border-blue-500 text-blue-700",
+   132→  "Returned for Revision": "border-red-500 text-red-700",
+   133→  Approved: "border-emerald-500 text-emerald-700",
+   134→  "Changes Pending Review": "border-amber-500 text-amber-700",
+   135→  Superseded: "border-zinc-400 text-zinc-500",
+   136→};
+   137→
+   138→export function PipelineReportDetailView() {
+   139→  const {
+   140→    user,
+   141→    selectedPipelineReportId,
+   142→    setView,
+   143→    openEditPipelineReport,
+   144→    refresh,
+   145→    refreshKey,
+   146→  } = useAppStore();
+   147→  const [report, setReport] = useState<FullReport | null>(null);
+   148→  const [loading, setLoading] = useState(true);
+   149→  const [error, setError] = useState<string | null>(null);
+   150→  const [acting, setActing] = useState(false);
+   151→  // Dialog state for workflow actions (submit / approve / return / revise)
+   152→  const [dialogMode, setDialogMode] = useState<null | "submit" | "approve" | "return" | "revise">(null);
+   153→  const [dialogText, setDialogText] = useState("");
+   154→
+   155→  const load = useCallback(() => {
+   156→    if (!selectedPipelineReportId) return;
+   157→    setLoading(true);
+   158→    apiFetch<FullReport>(`/api/pipeline-inspections/${selectedPipelineReportId}`)
+   159→      .then((r) => setReport(r))
+   160→      .catch((e) => setError(e.message))
+   161→      .finally(() => setLoading(false));
+   162→  }, [selectedPipelineReportId]);
+   163→
+   164→  useEffect(() => { load(); }, [load, refreshKey]);
+   165→
+   166→  // Role-based permissions (derived from session user + current report state)
+   167→  const isAdmin = user?.dashboardRole === "ADMIN";
+   168→  const isOwner = !!(user && report && report.inspectorId === user.id);
+   169→  const status = report?.status;
+   170→  // Employee can edit header/measurements only on their own Draft / Returned reports
+   171→  const canEditDraft =
+   172→    !!user && !!report && (
+   173→      isAdmin ||
+   174→      (isOwner && (status === "Draft" || status === "Returned for Revision"))
+   175→    );
+   176→  // Employee can submit (only their own Draft / Returned reports)
+   177→  const canSubmit =
+   178→    !!user && !!report && !isAdmin && isOwner &&
+   179→    (status === "Draft" || status === "Returned for Revision");
+   180→  // Employee can revise their own Approved report (creates new revision)
+   181→  const canRevise =
+   182→    !!user && !!report && !isAdmin && isOwner && status === "Approved";
+   183→  // Admin can approve or return when status is Submitted for Review or Changes Pending Review
+   184→  const canApproveOrReturn =
+   185→    !!user && !!report && isAdmin &&
+   186→    (status === "Submitted for Review" || status === "Changes Pending Review");
+   187→
+   188→  function openDialog(mode: "submit" | "approve" | "return" | "revise") {
+   189→    setDialogMode(mode);
+   190→    setDialogText("");
+   191→  }
+   192→
+   193→  async function executeWorkflow() {
+   194→    if (!report || !dialogMode) return;
+   195→    setActing(true);
+   196→    try {
+   197→      const body = dialogText.trim()
+   198→        ? (dialogMode === "submit"
+   199→            ? { submissionNotes: dialogText }
+   200→            : dialogMode === "approve"
+   201→              ? { approvalNotes: dialogText }
+   202→              : dialogMode === "return"
+   203→                ? { reviewComments: dialogText }
+   204→                : { changeDescription: dialogText })
+   205→        : {};
+   206→      const endpoint =
+   207→        dialogMode === "submit" ? "submit" :
+   208→        dialogMode === "approve" ? "approve" :
+   209→        dialogMode === "return" ? "return" :
+   210→        "revise";
+   211→      await apiFetch(`/api/pipeline-inspections/${report.id}/${endpoint}`, {
+   212→        method: "POST",
+   213→        body: JSON.stringify(body),
+   214→      });
+   215→      const labels: Record<string, string> = {
+   216→        submit: "Submitted for review",
+   217→        approve: "Approved",
+   218→        return: "Returned for revision",
+   219→        revise: "Revision started",
+   220→      };
+   221→      toast.success(labels[dialogMode]);
+   222→      setDialogMode(null);
+   223→      setDialogText("");
+   224→      refresh();
+   225→      load();
+   226→    } catch (e) {
+   227→      const err = e as { message?: string };
+   228→      toast.error(err.message ?? "Action failed");
+   229→    } finally {
+   230→      setActing(false);
+   231→    }
+   232→  }
+   233→
+   234→  async function downloadPdf(orientation?: "landscape" | "portrait") {
+   235→    if (!report) return;
+   236→    const orient = orientation ?? "landscape";
+   237→    try {
+   238→      // Use fetch() instead of window.open() so the Authorization header
+   239→      // (from localStorage) is sent along with the cookie. This fixes the
+   240→      // download failure caused by popup blockers and missing auth headers.
+   241→      const token = typeof window !== "undefined" ? window.localStorage.getItem("ira_session_token") : null;
+   242→      const res = await fetch(`/api/pipeline-inspections/${report.id}/pdf?orientation=${orient}`, {
+   243→        credentials: "include",
+   244→        headers: token ? { Authorization: `Bearer ${token}` } : {},
+   245→      });
+   246→      if (!res.ok) {
+   247→        const body = await res.json().catch(() => ({}));
+   248→        throw new Error(body?.error ?? `Download failed (HTTP ${res.status})`);
+   249→      }
+   250→      const blob = await res.blob();
+   251→      const url = URL.createObjectURL(blob);
+   252→      const a = document.createElement("a");
+   253→      a.href = url;
+   254→      // Build a descriptive filename
+   255→      const filename = `Inspection_Report_${report.reportNumber.replace(/[^a-zA-Z0-9-]/g, "_")}_${orient}.pdf`;
+   256→      a.download = filename;
+   257→      document.body.appendChild(a);
+   258→      a.click();
+   259→      a.remove();
+   260→      URL.revokeObjectURL(url);
+   261→      toast.success(`Downloaded ${filename}`);
+   262→    } catch (e) {
+   263→      const err = e as Error;
+   264→      toast.error(`PDF download failed: ${err.message}`);
+   265→    }
+   266→  }
+   267→
+   268→  if (loading) {
+   269→    return (
+   270→      <div className="p-8 text-muted-foreground flex items-center gap-2">
+   271→        <Loader2 className="h-4 w-4 animate-spin" /> Loading report...
+   272→      </div>
+   273→    );
+   274→  }
+   275→  if (error) {
+   276→    return (
+   277→      <Alert variant="destructive">
+   278→        <AlertTitle>Failed to load</AlertTitle>
+   279→        <AlertDescription>{error}</AlertDescription>
+   280→      </Alert>
+   281→    );
+   282→  }
+   283→  if (!report) return <p className="p-8 text-muted-foreground">No report selected.</p>;
+   284→
+   285→  const allVerified = report.measurements.every(
+   286→    (m) => m.standard?.isVerified || m.standard === null,
+   287→  );
+   288→
+   289→  const dialogTitle: Record<string, string> = {
+   290→    submit: "Submit Report for Review",
+   291→    approve: "Approve Report",
+   292→    return: "Return Report for Revision",
+   293→    revise: "Start New Revision",
+   294→  };
+   295→  const dialogDesc: Record<string, string> = {
+   296→    submit: "Submit this report to the administrator for approval. You won't be able to edit it until it's approved or returned.",
+   297→    approve: "Approve this report. The current state will be saved as an approved revision; previous approved revisions will be marked as Superseded but remain available.",
+   298→    return: "Return this report to the employee for correction. Mandatory review comments (at least 10 chars) will be visible to them.",
+   299→    revise: "Start a new revision of this approved report. The previously-approved version stays available; this new revision will need admin approval before becoming the current approved version.",
+   300→  };
+   301→  const dialogLabel: Record<string, string> = {
+   302→    submit: "Submission notes (optional)",
+   303→    approve: "Approval notes (optional)",
+   304→    return: "Review comments (REQUIRED, >= 10 chars)",
+   305→    revise: "What are you changing? (REQUIRED, >= 5 chars)",
+   306→  };
+   307→  const dialogActionLabel: Record<string, string> = {
+   308→    submit: "Submit for Review",
+   309→    approve: "Approve",
+   310→    return: "Return for Revision",
+   311→    revise: "Start Revision",
+   312→  };
+   313→
+   314→  return (
+   315→    <div className="space-y-4">
+   316→      {/* Top bar */}
+   317→      <div className="flex items-center justify-between">
+   318→        <Button variant="ghost" size="sm" onClick={() => setView("pipeline-reports")}>
+   319→          <ArrowLeft className="mr-2 h-4 w-4" /> Back to list
+   320→        </Button>
+   321→        <div className="flex gap-2">
+   322→          <Button variant="outline" size="sm" onClick={() => downloadPdf("landscape")}>
+   323→            <Download className="mr-2 h-4 w-4" /> PDF (Landscape)
+   324→          </Button>
+   325→          <Button variant="outline" size="sm" onClick={() => downloadPdf("portrait")}>
+   326→            <Download className="mr-2 h-4 w-4" /> PDF (Portrait)
+   327→          </Button>
+   328→          {canEditDraft && (
+   329→            <Button size="sm" onClick={() => openEditPipelineReport(report.id)}>
+   330→              <Pencil className="mr-2 h-4 w-4" /> Edit
+   331→            </Button>
+   332→          )}
+   333→          {canSubmit && (
+   334→            <Button size="sm" onClick={() => openDialog("submit")}>
+   335→              <Send className="mr-2 h-4 w-4" /> Submit for Review
+   336→            </Button>
+   337→          )}
+   338→          {canRevise && (
+   339→            <Button size="sm" variant="default" onClick={() => openDialog("revise")}>
+   340→              <GitBranch className="mr-2 h-4 w-4" /> Start New Revision
+   341→            </Button>
+   342→          )}
+   343→          {canApproveOrReturn && (
+   344→            <>
+   345→              <Button size="sm" variant="default" onClick={() => openDialog("approve")}>
+   346→                <CheckCircle2 className="mr-2 h-4 w-4" /> Approve
+   347→              </Button>
+   348→              <Button size="sm" variant="outline" className="text-red-700 border-red-300" onClick={() => openDialog("return")}>
+   349→                <RotateCcw className="mr-2 h-4 w-4" /> Return for Revision
+   350→              </Button>
+   351→            </>
+   352→          )}
+   353→        </div>
+   354→      </div>
+   355→
+   356→      {/* Status banner */}
+   357→      <div className="flex flex-wrap items-center gap-3">
+   358→        <Badge variant="outline" className={STATUS_COLOR[report.status] ?? ""}>
+   359→          {report.status}
+   360→        </Badge>
+   361→        {report.revisionNumber > 1 && (
+   362→          <Badge variant="outline" className="text-xs">
+   363→            Rev {report.revisionNumber}
+   364→          </Badge>
+   365→        )}
+   366→        {report.isDemo && (
+   367→          <Badge variant="outline" className="border-zinc-400 text-zinc-500">DEMO</Badge>
+   368→        )}
+   369→        {status === "Returned for Revision" && report.reviewComments && (
+   370→          <Alert className="flex-1 border-red-300 bg-red-50">
+   371→            <RotateCcw className="h-4 w-4 text-red-700" />
+   372→            <AlertTitle className="text-red-900">Admin returned this report for revision</AlertTitle>
+   373→            <AlertDescription className="text-red-900">
+   374→              <em>"{report.reviewComments}"</em>
+   375→              {report.returnedBy && (
+   376→                <div className="mt-1 text-xs">
+   377→                  — {report.returnedBy.name}
+   378→                  {report.returnedAt ? ` on ${new Date(report.returnedAt).toLocaleString()}` : ""}
+   379→                </div>
+   380→              )}
+   381→            </AlertDescription>
+   382→          </Alert>
+   383→        )}
+   384→      </div>
+   385→
+   386→      {/* Verification banner */}
+   387→      {!allVerified && (
+   388→        <Alert className="border-amber-300 bg-amber-50">
+   389→          <ShieldAlert className="h-4 w-4 text-amber-700" />
+   390→          <AlertTitle className="text-amber-900">Reference data not yet verified</AlertTitle>
+   391→          <AlertDescription className="text-amber-900">
+   392→            One or more nominal wall thickness values reference unverified ASME
+   393→            standard data. An administrator must verify them against the licensed
+   394→            ASME standard edition before this report can be used for production
+   395→            inspection decisions.
+   396→          </AlertDescription>
+   397→        </Alert>
+   398→      )}
+   399→
+   400→      {/* ---------- PRINTABLE REPORT ---------- */}
+   401→      <div className="rounded-md border border-zinc-400 bg-white p-8 print:shadow-none print:border-0" style={{ minHeight: "210mm" }}>
+   402→        {/* Header */}
+   403→        <div className="mb-6">
+   404→          <h1 className="text-center text-lg font-bold tracking-tight">
+   405→            PIPELINE THICKNESS MEASUREMENT REPORT
+   406→          </h1>
+   407→          <p className="text-center text-xs text-zinc-700">
+   408→            Report No: <span className="font-mono">{report.reportNumber}</span>
+   409→            {"    |    "}Rev: {report.revisionNumber}
+   410→            {"    |    "}Date: {new Date(report.inspectionDate).toISOString().slice(0, 10)}
+   411→            {"    |    "}Status: {report.status}
+   412→          </p>
+   413→        </div>
+   414→
+   415→        {/* Logo placeholders */}
+   416→        <div className="mb-4 flex items-start justify-between">
+   417→          <div className="flex h-14 w-28 items-center justify-center border border-zinc-400 text-[10px] text-zinc-500">
+   418→            SERVICE COMPANY<br />LOGO
+   419→          </div>
+   420→          <div className="flex h-14 w-28 items-center justify-center border border-zinc-400 text-[10px] text-zinc-500 text-center">
+   421→            {report.client.name.slice(0, 24)}<br />CLIENT LOGO
+   422→          </div>
+   423→        </div>
+   424→
+   425→        {/* Header info grid */}
+   426→        <div className="mb-4 grid grid-cols-2 gap-0 border border-zinc-500 text-xs">
+   427→          {[
+   428→            ["Client", report.client.name],
+   429→            ["Location", report.plant.location ?? "—"],
+   430→            ["Plant Name", report.plant.name],
+   431→            ["Inspection Area", report.inspectionArea ?? "—"],
+   432→            ["Pipeline Description", report.pipelineDescription ?? "—"],
+   433→            ["Pipeline Identification No.", report.pipelineIdentificationNumber ?? "—"],
+   434→            ["Isometric Drawing No.", report.isometricDrawingNumber ?? "—"],
+   435→            ["Material of Construction (MOC)", report.materialOfConstruction ?? "—"],
+   436→            ["Applicable Standard", `${report.applicableStandard ?? "—"} ${report.standardEdition ?? ""}`.trim()],
+   437→            ["Inspector", report.inspectorName],
+   438→          ].map(([label, value], idx) => (
+   439→            <div key={idx} className={`flex border-b border-r border-zinc-300 ${idx % 2 === 1 ? "border-r-0" : ""} ${idx >= 8 ? "border-b-0" : ""}`}>
+   440→              <div className="w-1/2 bg-zinc-100 px-2 py-1 font-semibold border-r border-zinc-300">{label}</div>
+   441→              <div className="flex-1 px-2 py-1">{value}</div>
+   442→            </div>
+   443→          ))}
+   444→        </div>
+   445→
+   446→        {/* Measurement table */}
+   447→        <div className="overflow-x-auto">
+   448→          <table className="w-full border-collapse text-[11px]">
+   449→            <thead>
+   450→              <tr className="bg-emerald-800 text-white">
+   451→                <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 50 }}>Dia mm<br />(inch)</th>
+   452→                <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 55 }}>Pipe<br />Schedule</th>
+   453→                <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 55 }}>Nominal<br />Thickness<br />(mm)</th>
+   454→                <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 60 }}>Component<br />Type</th>
+   455→                <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 45 }}>Point<br />No</th>
+   456→                <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 65 }}>
+   457→                  <div className="flex flex-col items-center">
+   458→                    <span>12 o'clock</span><span>North</span><span>(mm)</span>
+   459→                  </div>
+   460→                </th>
+   461→                <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 65 }}>
+   462→                  <div className="flex flex-col items-center">
+   463→                    <span>3 o'clock</span><span>East</span><span>(mm)</span>
+   464→                  </div>
+   465→                </th>
+   466→                <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 65 }}>
+   467→                  <div className="flex flex-col items-center">
+   468→                    <span>6 o'clock</span><span>South</span><span>(mm)</span>
+   469→                  </div>
+   470→                </th>
+   471→                <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 65 }}>
+   472→                  <div className="flex flex-col items-center">
+   473→                    <span>9 o'clock</span><span>West</span><span>(mm)</span>
+   474→                  </div>
+   475→                </th>
+   476→                <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 70 }}>
+   477→                  <div className="flex flex-col items-center">
+   478→                    <span>Observed</span><span>Minimum</span><span>Thickness (mm)</span>
+   479→                  </div>
+   480→                </th>
+   481→                <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 200 }}>Findings / Comments</th>
+   482→              </tr>
+   483→            </thead>
+   484→            <tbody>
+   485→              {report.measurements.length === 0 && (
+   486→                <tr>
+   487→                  <td colSpan={11} className="border border-zinc-400 text-center py-4 text-zinc-500">
+   488→                    No measurement rows recorded.
+   489→                  </td>
+   490→                </tr>
+   491→              )}
+   492→              {report.measurements.map((m) => (
+   493→                <tr key={m.id} className="hover:bg-zinc-50">
+   494→                  <td className="border border-zinc-400 px-2 py-1 text-center font-mono">{m.pipeSizeInch}</td>
+   495→                  <td className="border border-zinc-400 px-2 py-1 text-center font-mono">{m.pipeSchedule}</td>
+   496→                  <td className="border border-zinc-400 px-2 py-1 text-center tabular-nums">
+   497→                    {m.nominalThicknessMm !== null ? m.nominalThicknessMm.toFixed(2) : "—"}
+   498→                    {m.standard && !m.standard.isVerified && (
+   499→                      <span className="ml-1 text-[9px] text-amber-700" title="Reference data not yet verified">(unv)</span>
+   500→                    )}
+   501→                  </td>
+   502→                  <td className="border border-zinc-400 px-2 py-1 text-center">
+   503→                    {m.componentType?.label ?? m.componentTypeCode}
+   504→                  </td>
+   505→                  <td className="border border-zinc-400 px-2 py-1 text-center font-mono">{m.pointNo}</td>
+   506→                  <td className="border border-zinc-400 px-2 py-1 text-center tabular-nums">{fmtMeasurement(m.northMm, m.northStatus)}</td>
+   507→                  <td className="border border-zinc-400 px-2 py-1 text-center tabular-nums">{fmtMeasurement(m.eastMm, m.eastStatus)}</td>
+   508→                  <td className="border border-zinc-400 px-2 py-1 text-center tabular-nums">{fmtMeasurement(m.southMm, m.southStatus)}</td>
+   509→                  <td className="border border-zinc-400 px-2 py-1 text-center tabular-nums">{fmtMeasurement(m.westMm, m.westStatus)}</td>
+   510→                  <td className="border border-zinc-400 px-2 py-1 text-center font-semibold tabular-nums bg-emerald-50">
+   511→                    {m.observedMinimumMm !== null ? m.observedMinimumMm.toFixed(2) : "—"}
+   512→                  </td>
+   513→                  <td className="border border-zinc-400 px-2 py-1 text-left whitespace-pre-wrap">{m.findingsComments ?? "—"}</td>
+   514→                </tr>
+   515→              ))}
+   516→            </tbody>
+   517→          </table>
+   518→        </div>
+   519→
+   520→        {/* Findings + Comments */}
+   521→        <div className="mt-4 space-y-3">
+   522→          <div>
+   523→            <h3 className="text-xs font-bold uppercase text-zinc-700">Findings Summary</h3>
+   524→            <p className="mt-1 text-xs whitespace-pre-wrap">{report.findingsSummary ?? "—"}</p>
+   525→          </div>
+   526→          <div>
+   527→            <h3 className="text-xs font-bold uppercase text-zinc-700">Comments</h3>
+   528→            <p className="mt-1 text-xs whitespace-pre-wrap">{report.comments ?? "—"}</p>
+   529→          </div>
+   530→        </div>
+   531→
+   532→        {/* Sign-off */}
+   533→        <div className="mt-6 grid grid-cols-3 gap-2">
+   534→          {[
+   535→            { label: "Inspected by", name: report.inspectorName, date: new Date(report.inspectionDate).toISOString().slice(0, 10) },
+   536→            { label: "Reviewed / Approved by", name: report.approver?.name ?? "—", date: report.approvedAt?.slice(0, 10) ?? "—" },
+   537→            { label: "Revision", name: `Rev ${report.revisionNumber}`, date: report.status },
+   538→          ].map((b, i) => (
+   539→            <div key={i} className="border border-zinc-400 p-2 text-xs">
+   540→              <div className="text-[10px] text-zinc-500">{b.label}</div>
+   541→              <div className="mt-2 font-bold">{b.name}</div>
+   542→              <div className="mt-3 text-[10px] text-zinc-500">Date / Status: {b.date}</div>
+   543→            </div>
+   544→          ))}
+   545→        </div>
+   546→
+   547→        {/* Override note */}
+   548→        {report.overrideReason && (
+   549→          <div className="mt-4 rounded-md border border-red-400 bg-red-50 p-2 text-xs text-red-900">
+   550→            <strong>Override applied (recorded):</strong> {report.overrideReason}
+   551→            <div className="mt-1 text-[10px]">
+   552→              Applied at {report.overrideAppliedAt ? new Date(report.overrideAppliedAt).toLocaleString() : "—"} by an authorized administrator.
+   553→            </div>
+   554→          </div>
+   555→        )}
+   556→
+   557→        {/* Footer */}
+   558→        <div className="mt-6 border-t border-zinc-300 pt-2 text-center text-[10px] text-zinc-500">
+   559→          Page 1 | Generated {new Date().toISOString().slice(0, 19).replace("T", " ")} | Inspection Report Automation System
+   560→        </div>
+   561→      </div>
+   562→
+   563→      {/* ---------- WORKFLOW DIALOG ---------- */}
+   564→      <Dialog open={dialogMode !== null} onOpenChange={(o) => { if (!o) setDialogMode(null); }}>
+   565→        <DialogContent>
+   566→          <DialogHeader>
+   567→            <DialogTitle>{dialogMode && dialogTitle[dialogMode]}</DialogTitle>
+   568→            <DialogDescription>{dialogMode && dialogDesc[dialogMode]}</DialogDescription>
+   569→          </DialogHeader>
+   570→          <div className="space-y-2">
+   571→            <Label>{dialogMode && dialogLabel[dialogMode]}</Label>
+   572→            <Textarea
+   573→              rows={4}
+   574→              value={dialogText}
+   575→              onChange={(e) => setDialogText(e.target.value)}
+   576→              placeholder={
+   577→                dialogMode === "return"
+   578→                  ? "Please describe what needs to be corrected..."
+   579→                  : dialogMode === "revise"
+   580→                    ? "Briefly describe what's being changed in this revision..."
+   581→                    : "Optional notes..."
+   582→              }
+   583→            />
+   584→          </div>
+   585→          <DialogFooter>
+   586→            <Button variant="ghost" onClick={() => setDialogMode(null)}>Cancel</Button>
+   587→            <Button onClick={executeWorkflow} disabled={acting}>
+   588→              {acting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+   589→              {dialogMode && dialogActionLabel[dialogMode]}
+   590→            </Button>
+   591→          </DialogFooter>
+   592→        </DialogContent>
+   593→      </Dialog>
+   594→
+   595→      {/* ---------- REVISION HISTORY ---------- */}
+   596→      {report.revisions.length > 0 && (
+   597→        <Card>
+   598→          <CardHeader>
+   599→            <CardTitle className="text-base flex items-center gap-2">
+   600→              <GitBranch className="h-4 w-4" /> Revision History ({report.revisions.length})
+   601→            </CardTitle>
+   602→            <CardDescription>
+   603→              Each approved version is preserved as a separate revision. The currently-approved revision is highlighted.
+   604→            </CardDescription>
+   605→          </CardHeader>
+   606→          <CardContent>
+   607→            <div className="divide-y">
+   608→              {report.revisions.map((r) => (
+   609→                <div key={r.id} className={`py-3 text-xs ${r.id === report.currentApprovedRevisionId ? "bg-emerald-50/50 -mx-3 px-3 rounded" : ""}`}>
+   610→                  <div className="flex flex-wrap items-center gap-2">
+   611→                    <Badge variant="outline" className="font-mono">Rev {r.revisionNumber}</Badge>
+   612→                    <Badge variant="outline" className={REVISION_STATUS_COLOR[r.status] ?? ""}>
+   613→                      {r.status}
+   614→                    </Badge>
+   615→                    {r.id === report.currentApprovedRevisionId && (
+   616→                      <Badge variant="outline" className="border-emerald-500 text-emerald-700">
+   617→                        Current Approved
+   618→                      </Badge>
+   619→                    )}
+   620→                    <span className="text-muted-foreground">
+   621→                      {new Date(r.revisionDate).toLocaleString()}
+   622→                    </span>
+   623→                    {r.revisedByName && (
+   624→                      <span className="text-muted-foreground">· by {r.revisedByName}</span>
+   625→                    )}
+   626→                  </div>
+   627→                  {r.changeDescription && (
+   628→                    <p className="mt-1">{r.changeDescription}</p>
+   629→                  )}
+   630→                  {r.reviewComments && (
+   631→                    <p className="mt-1 text-red-700 italic">Admin comments: "{r.reviewComments}"</p>
+   632→                  )}
+   633→                  {r.approvedByName && (
+   634→                    <p className="mt-1 text-emerald-700 text-[11px]">
+   635→                      Approved by {r.approvedByName}
+   636→                      {r.approvedAt ? ` on ${new Date(r.approvedAt).toLocaleString()}` : ""}
+   637→                    </p>
+   638→                  )}
+   639→                </div>
+   640→              ))}
+   641→            </div>
+   642→          </CardContent>
+   643→        </Card>
+   644→      )}
+   645→
+   646→      <Card className="bg-muted/30">
+   647→        <CardContent className="flex items-start gap-3 p-4">
+   648→          <AlertTriangle className="h-5 w-5 shrink-0 text-muted-foreground" />
+   649→          <div className="text-xs text-muted-foreground">
+   650→            <strong className="text-foreground">Workflow summary:</strong>{" "}
+   651→            Status <code className="rounded bg-muted px-1">{report.status}</code> ·{" "}
+   652→            {status === "Draft" && "Employee is editing. Can submit for review when ready."}
+   653→            {status === "Submitted for Review" && "Awaiting admin approval. Employee can't edit until admin acts."}
+   654→            {status === "Returned for Revision" && "Admin returned with comments. Employee should fix and resubmit."}
+   655→            {status === "Approved" && "Report is approved. Employee can start a new revision; admin can still edit directly."}
+   656→            {status === "Changes Pending Review" && "Employee is editing a new revision of an approved report. Will need admin approval."}
+   657→          </div>
+   658→        </CardContent>
+   659→      </Card>
+   660→    </div>
+   661→  );
+   662→}
+   663→

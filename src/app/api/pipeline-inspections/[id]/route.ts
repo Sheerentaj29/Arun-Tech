@@ -38,6 +38,18 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       reportPhotos: {
         orderBy: { sortOrder: "asc" },
       },
+      drawingLinks: {
+        orderBy: { createdAt: "asc" },
+        include: {
+          drawing: {
+            include: {
+              client: { select: { id: true, name: true } },
+              plant: { select: { id: true, name: true } },
+              revisions: { orderBy: { createdAt: "desc" }, take: 1 },
+            },
+          },
+        },
+      },
     },
   });
   if (!report) return NextResponse.json({ error: "Not found" }, { status: 404 });
