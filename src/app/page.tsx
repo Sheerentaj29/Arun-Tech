@@ -24,6 +24,7 @@ import { PipelineReportFormView } from "@/components/views/pipeline-report-form-
 import { PipelineReportDetailView } from "@/components/views/pipeline-report-detail-view";
 import { PipeStandardsView } from "@/components/views/pipe-standards-view";
 import { EmployeesView } from "@/components/views/employees-view";
+import { DrawingsView } from "@/components/views/drawings-view";
 
 interface SessionUser {
   id: string;
@@ -108,6 +109,8 @@ export default function Home() {
           {view === "pipe-standards" && <PipeStandardsView />}
           {/* Employee management (admin only — sidebar hides it for employees) */}
           {view === "employees" && <EmployeesView />}
+          {/* Engineering Drawings module */}
+          {view === "drawings" && <DrawingsView />}
         </div>
       </main>
     </div>

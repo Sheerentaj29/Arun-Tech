@@ -24,6 +24,8 @@ export type ViewKey =
   | "pipe-standards"
   // Admin: employee management
   | "employees"
+  // Engineering drawings module
+  | "drawings"
   // Alias for backwards compat with code that uses "dashboard"
   | "dashboard";
 

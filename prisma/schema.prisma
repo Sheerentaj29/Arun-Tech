@@ -56,6 +56,7 @@ model Client {
   plants               Plant[]
   equipment            Equipment[]
   pipelineInspections  PipelineInspection[]
+  engineeringDrawings  EngineeringDrawing[]
 }
 
 model Plant {
@@ -72,6 +73,7 @@ model Plant {
   client    Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
   equipment Equipment[]
   pipelineInspections PipelineInspection[]
+  engineeringDrawings  EngineeringDrawing[]
 }
 
 // =====================================================
@@ -120,6 +122,7 @@ model Equipment {
   plant      Plant        @relation(fields: [plantId], references: [id], onDelete: Cascade)
   createdBy  User         @relation("EquipmentCreatedBy", fields: [createdById], references: [id])
   inspections Inspection[]
+  engineeringDrawings  EngineeringDrawing[]
 
   @@unique([clientId, equipmentId])
   @@index([clientId])
@@ -306,6 +309,7 @@ model PipelineInspection {
   measurements ThicknessMeasurement[]
   revisions   ReportRevision[]
   reportPhotos ReportPhoto[]
+  drawingLinks DrawingInspectionLink[]
 
   @@unique([clientId, reportNumber])
   @@index([clientId])
@@ -433,5 +437,92 @@ model ReportPhoto {
 
   pipelineInspection PipelineInspection @relation(fields: [pipelineInspectionId], references: [id], onDelete: Cascade)
 
+  @@index([pipelineInspectionId])
+}
+
+// =====================================================
+// ENGINEERING DRAWINGS
+// =====================================================
+// Engineering drawings (AutoCAD DWG/DXF, PDF, images) uploaded by
+// admins/employees. Each drawing has metadata (title, number, type,
+// revision) and one or more file revisions stored on disk.
+// Drawings can be associated with clients, plants, equipment, and
+// inspection reports.
+
+model EngineeringDrawing {
+  id              String   @id @default(cuid())
+  title           String   // human-readable drawing title
+  drawingNumber   String   // e.g. "ISO-PIPE-001"
+  drawingType     String   // Plant Layout | P&ID | Isometric | Pipeline Layout | GA | Mechanical | Structural | Electrical | Instrumentation | Other
+  description     String?
+  
+  clientId        String
+  plantId         String?
+  equipmentId     String?  // optional link to Equipment Master
+  
+  // Which revision is currently active
+  activeRevisionId String?
+  
+  isDemo          Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  client          Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  plant           Plant?       @relation(fields: [plantId], references: [id], onDelete: SetNull)
+  equipment       Equipment?   @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
+  revisions       DrawingRevision[]
+  inspectionLinks DrawingInspectionLink[]
+  
+  @@unique([clientId, drawingNumber])
+  @@index([clientId])
+  @@index([plantId])
+  @@index([equipmentId])
+  @@index([drawingType])
+}
+
+model DrawingRevision {
+  id              String   @id @default(cuid())
+  drawingId       String
+  revisionNumber  String   // "Rev 0", "Rev 1", "Rev 2", etc.
+  revisionDate    DateTime @default(now())
+  
+  // File storage
+  fileName        String   // original filename from upload
+  filePath        String   // absolute path on disk (storage/drawings/...)
+  fileSize        Int      // bytes
+  mimeType        String   // detected MIME type
+  fileExtension   String   // .dwg, .dxf, .pdf, .png, etc.
+  
+  // Preview (for image/PDF formats only; null for DWG/DXF)
+  previewPath     String?  // path to generated preview image (if applicable)
+  
+  // Upload metadata
+  uploadedById    String?
+  uploadedByName  String?
+  notes           String?
+  isActive        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  
+  drawing         EngineeringDrawing @relation(fields: [drawingId], references: [id], onDelete: Cascade)
+  
+  @@index([drawingId])
+  @@index([isActive])
+}
+
+// Links drawings to specific inspection reports
+model DrawingInspectionLink {
+  id                      String   @id @default(cuid())
+  drawingId               String
+  drawingRevisionId       String?  // specific revision (null = use active)
+  pipelineInspectionId    String
+  attachedById            String?
+  attachedByName          String?
+  createdAt               DateTime @default(now())
+  
+  drawing                 EngineeringDrawing @relation(fields: [drawingId], references: [id], onDelete: Cascade)
+  pipelineInspection      PipelineInspection @relation(fields: [pipelineInspectionId], references: [id], onDelete: Cascade)
+  
+  @@unique([drawingId, pipelineInspectionId])
+  @@index([drawingId])
   @@index([pipelineInspectionId])
 }

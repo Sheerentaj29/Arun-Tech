@@ -29,9 +29,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string;
   }
 
   const buf = readFileSync(photo.filePath);
+  const safeFilename = photo.fileName.replace(/[^\w.-]/g, "_");
   return new NextResponse(buf, {
     headers: {
       "Content-Type": photo.mimeType,
+      "Content-Disposition": `inline; filename="${safeFilename}"`,
       "Content-Length": String(buf.length),
       "Cache-Control": "private, max-age=3600",
     },

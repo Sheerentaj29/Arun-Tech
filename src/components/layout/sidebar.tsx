@@ -13,6 +13,7 @@ import {
   Gauge,
   Ruler,
   Users,
+  PenTool,
 } from "lucide-react";
 import { useAppStore, type ViewKey } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -36,6 +37,8 @@ const NAV: Array<{
   { key: "equipment", label: "Equipment Master", icon: Database, roles: ["ADMIN", "EMPLOYEE"] },
   // Pipeline thickness reports — admin sees all, employee sees their own
   { key: "pipeline-reports", label: "Pipeline Reports", icon: Gauge, roles: ["ADMIN", "EMPLOYEE"] },
+  // Engineering drawings module
+  { key: "drawings", label: "Engineering Drawings", icon: PenTool, roles: ["ADMIN", "EMPLOYEE"] },
   // Inspections (equipment-master inspection history — preserved)
   { key: "inspections", label: "Inspections", icon: FileText, roles: ["ADMIN", "EMPLOYEE"] },
   // Admin-only views
