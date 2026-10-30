@@ -231,10 +231,38 @@ export function PipelineReportDetailView() {
     }
   }
 
-  function downloadPdf(orientation?: "landscape" | "portrait") {
+  async function downloadPdf(orientation?: "landscape" | "portrait") {
     if (!report) return;
     const orient = orientation ?? "landscape";
-    window.open(`/api/pipeline-inspections/${report.id}/pdf?orientation=${orient}`, "_blank");
+    try {
+      // Use fetch() instead of window.open() so the Authorization header
+      // (from localStorage) is sent along with the cookie. This fixes the
+      // download failure caused by popup blockers and missing auth headers.
+      const token = typeof window !== "undefined" ? window.localStorage.getItem("ira_session_token") : null;
+      const res = await fetch(`/api/pipeline-inspections/${report.id}/pdf?orientation=${orient}`, {
+        credentials: "include",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error ?? `Download failed (HTTP ${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      // Build a descriptive filename
+      const filename = `Inspection_Report_${report.reportNumber.replace(/[^a-zA-Z0-9-]/g, "_")}_${orient}.pdf`;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success(`Downloaded ${filename}`);
+    } catch (e) {
+      const err = e as Error;
+      toast.error(`PDF download failed: ${err.message}`);
+    }
   }
 
   if (loading) {

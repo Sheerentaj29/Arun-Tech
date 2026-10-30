@@ -2,12 +2,15 @@
 //
 // Download the PDF for a pipeline inspection report.
 // - If the report is Approved AND a persisted PDF exists on disk, serve that
-//   file directly (the exact bytes the admin approved — never re-generated).
+//   file directly (the exact bytes that were approved — never re-generated).
 // - If the report is in Draft/Submitted/Returned state, generate a preview PDF
 //   on-the-fly with the requested orientation.
 //
-// Query params:
-//   orientation: "landscape" (default) | "portrait"
+// The generated PDF includes:
+//   Page 1: Report header details
+//   Pages 2-N: Engineering drawings (one per page, if attached)
+//   Next page: Measurement table
+//   Following pages: Findings, photos, sign-off
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
@@ -49,10 +52,10 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   }
   const { id } = await ctx.params;
 
-  // Parse orientation from query string
   const url = new URL(req.url);
   const orientation = (url.searchParams.get("orientation") as "landscape" | "portrait") || "landscape";
 
+  // Load the report with ALL related data: measurements, photos, AND linked drawings
   const report = await db.pipelineInspection.findUnique({
     where: { id },
     include: {
@@ -70,8 +73,25 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       reportPhotos: {
         orderBy: { sortOrder: "asc" },
       },
+      // Load linked engineering drawings with their active revision's file
+      drawingLinks: {
+        include: {
+          drawing: {
+            include: {
+              client: { select: { id: true, name: true } },
+              plant: { select: { id: true, name: true } },
+              equipment: { select: { id: true, name: true } },
+              revisions: {
+                orderBy: { createdAt: "desc" },
+                // Get the active revision (or the one specified in the link)
+              },
+            },
+          },
+        },
+      },
     },
   });
+
   if (!report) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   // PERMISSION: employees can only download their own reports
@@ -83,6 +103,39 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     );
   }
 
+  // Build the drawings array for the PDF generator
+  // Each linked drawing gets its active revision's file path
+  const linkedDrawings: any[] = [];
+  for (const link of report.drawingLinks) {
+    const drawing = link.drawing;
+    // Find the active revision (or the specific linked revision)
+    const activeRev = link.drawingRevisionId
+      ? drawing.revisions.find((r) => r.id === link.drawingRevisionId)
+      : drawing.revisions.find((r) => r.isActive) ?? drawing.revisions[0];
+
+    if (activeRev) {
+      linkedDrawings.push({
+        id: drawing.id,
+        title: drawing.title,
+        drawingNumber: drawing.drawingNumber,
+        drawingType: drawing.drawingType,
+        revisionNumber: activeRev.revisionNumber,
+        fileName: activeRev.fileName,
+        filePath: activeRev.filePath,
+        fileExtension: activeRev.fileExtension,
+        mimeType: activeRev.mimeType,
+        clientName: drawing.client?.name,
+        plantName: drawing.plant?.name,
+      });
+    }
+  }
+
+  // Attach the drawings to the report object for the PDF generator
+  const reportForPdf = {
+    ...report,
+    linkedDrawings,
+  };
+
   let buf: Buffer;
   let sourceLabel: string;
 
@@ -90,16 +143,23 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     report.status === "Approved" &&
     report.pdfPath &&
     existsSync(report.pdfPath) &&
-    orientation === "landscape" // Only serve persisted PDF for default (landscape)
+    orientation === "landscape"
   ) {
     // ── APPROVED REPORT (landscape): serve the persisted PDF from disk ──
     buf = readFileSync(report.pdfPath);
     sourceLabel = `persisted (${report.pdfPath})`;
   } else {
-    // ── DRAFT/SUBMITTED/RETURNED OR PORTRAIT: generate a preview PDF on-the-fly ──
-    // This includes ALL saved data: measurements, custom columns, photos, etc.
-    buf = await generatePdfBuffer(report, orientation);
-    sourceLabel = `generated ${orientation} (${buf.length} bytes)`;
+    // ── Generate a fresh PDF with the requested orientation ──
+    try {
+      buf = await generatePdfBuffer(reportForPdf, orientation);
+      sourceLabel = `generated ${orientation} (${buf.length} bytes, ${linkedDrawings.length} drawings)`;
+    } catch (err) {
+      console.error("[PDF] Generation failed:", err);
+      return NextResponse.json(
+        { error: `PDF generation failed: ${(err as Error).message}. Check server logs for details.` },
+        { status: 500 },
+      );
+    }
   }
 
   await recordAudit({
@@ -108,14 +168,14 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     details: `Downloaded PDF (${orientation}) for ${report.reportNumber} (${sourceLabel})`,
   });
 
-  const filename = orientation === "portrait"
-    ? `${report.reportNumber}_portrait.pdf`
-    : `${report.reportNumber}.pdf`;
+  // Use "attachment" disposition to force download (not inline display)
+  const safeReportNumber = report.reportNumber.replace(/[^a-zA-Z0-9-]/g, "_");
+  const filename = `Inspection_Report_${safeReportNumber}_${orientation}.pdf`;
 
   return new NextResponse(buf, {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="${filename}"`,
+      "Content-Disposition": `attachment; filename="${filename}"`,
       "Content-Length": String(buf.length),
       "Cache-Control": "private, no-cache, no-store, must-revalidate",
     },

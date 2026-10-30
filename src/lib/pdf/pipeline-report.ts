@@ -152,12 +152,16 @@ export async function generatePipelineReportPdf(
   const allPhotos = input.photos ?? input.report.reportPhotos ?? [];
   const customCols = getCustomColumns(report);
 
-  // ── SEPARATE DIAGRAMS FROM REGULAR PHOTOS ──
-  // Diagrams (AutoCAD isometrics etc.) get full-page treatment before
-  // the measurement table. Regular inspection photos stay in the
-  // gallery at the end.
-  const diagrams = allPhotos.filter((p) => isDiagram(p));
-  const regularPhotos = allPhotos.filter((p) => !isDiagram(p));
+  // ── LINKED ENGINEERING DRAWINGS ──
+  // These are drawings linked to the report via the DrawingInspectionLink
+  // model. Each gets its own FULL PAGE before the measurement table.
+  // The PDF route loads them with their active revision's file path.
+  const linkedDrawings: any[] = (report as any).linkedDrawings ?? [];
+
+  // Regular inspection photos stay in the gallery at the end.
+  // (We no longer filter photos by "diagram" keywords — drawings come
+  // from the dedicated Engineering Drawings module.)
+  const regularPhotos = allPhotos;
 
   // Determine columns: system + custom
   const systemCols = orientation === "landscape" ? SYSTEM_COLUMNS_LANDSCAPE : SYSTEM_COLUMNS_PORTRAIT;
@@ -314,56 +318,82 @@ export async function generatePipelineReportPdf(
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // DIAGRAMS — each on its OWN FULL PAGE, before the measurement table
+  // ENGINEERING DRAWINGS — each on its OWN FULL PAGE, before the table
   // ═══════════════════════════════════════════════════════════════
-  if (diagrams.length > 0) {
-    for (let i = 0; i < diagrams.length; i++) {
-      const diagram = diagrams[i];
-      // Each diagram gets a fresh full page
+  if (linkedDrawings.length > 0) {
+    for (let i = 0; i < linkedDrawings.length; i++) {
+      const drawing = linkedDrawings[i];
+      // Each drawing gets a fresh full page
       addNewPage();
 
-      // Draw the diagram as large as possible within the page margins
       const availW = pageW - 2 * MARGIN;
-      const availH = pageH - 2 * MARGIN - 20; // leave room for caption at bottom
+      const availH = pageH - 2 * MARGIN - 40; // room for header + caption
 
-      // Title above the diagram
-      doc.font("Helvetica-Bold").fontSize(10).fillColor("#000");
-      const caption = diagram.caption || diagram.fileName;
-      doc.text(`Diagram ${i + 1}: ${caption}`, MARGIN, MARGIN, {
-        width: availW, align: "center",
-      });
+      // Drawing header: title, number, revision
+      doc.font("Helvetica-Bold").fontSize(11).fillColor("#000");
+      doc.text(`${drawing.title}`, MARGIN, MARGIN, { width: availW, align: "center" });
+      doc.font("Helvetica").fontSize(8).fillColor("#444");
+      const subLine = `Drawing No: ${drawing.drawingNumber}  |  Revision: ${drawing.revisionNumber}  |  Type: ${drawing.drawingType}`;
+      doc.text(subLine, MARGIN, MARGIN + 16, { width: availW, align: "center" });
 
-      if (diagram.filePath && existsSync(diagram.filePath)) {
+      // Client/plant info
+      if (drawing.clientName || drawing.plantName) {
+        const locLine = [drawing.clientName, drawing.plantName].filter(Boolean).join(" — ");
+        doc.fontSize(7).fillColor("#666");
+        doc.text(locLine, MARGIN, MARGIN + 30, { width: availW, align: "center" });
+      }
+      doc.fillColor("#000");
+
+      // Embed the drawing file
+      const drawingY = MARGIN + 40;
+      const drawingH = availH - 40;
+
+      if (drawing.filePath && existsSync(drawing.filePath)) {
         try {
-          const imgBuf = readFileSync(diagram.filePath);
-          // Embed the image, fit within available space, preserving aspect ratio
-          doc.image(imgBuf, MARGIN, MARGIN + 16, {
-            fit: [availW, availH - 16],
-            align: "center",
-            valign: "center",
-          });
+          const imgBuf = readFileSync(drawing.filePath);
+          const ext = (drawing.fileExtension || "").toLowerCase();
+
+          if (ext === ".pdf") {
+            // For PDF drawings, we can't embed a PDF inside a PDF.
+            // Show a placeholder with download instructions.
+            doc.fillColor("#999").fontSize(10);
+            doc.rect(MARGIN, drawingY, availW, drawingH).stroke("#ccc");
+            doc.text(
+              `[PDF Drawing: ${drawing.fileName}]\n\nThis drawing is a PDF file and cannot be embedded directly.\nDownload the original file to view it.`,
+              MARGIN + 20, drawingY + drawingH / 2 - 20,
+              { width: availW - 40, align: "center" },
+            );
+            doc.fillColor("#000");
+          } else {
+            // Image formats (PNG, JPEG, TIFF) — embed directly
+            doc.image(imgBuf, MARGIN, drawingY, {
+              fit: [availW, drawingH],
+              align: "center",
+              valign: "center",
+            });
+          }
         } catch (err) {
-          // If the image is unreadable, show a warning
+          // For DWG/DXF or unreadable files, show a clear message
           doc.fillColor("#999").fontSize(9);
-          doc.text("[Diagram image unreadable]", MARGIN, MARGIN + 50, {
-            width: availW, align: "center",
-          });
+          doc.rect(MARGIN, drawingY, availW, drawingH).stroke("#ccc");
+          const ext = (drawing.fileExtension || "").toUpperCase();
+          doc.text(
+            `[${ext} File: ${drawing.fileName}]\n\nPreview not available for ${ext} files.\nDownload the original CAD file to view it in AutoCAD or compatible software.`,
+            MARGIN + 20, drawingY + drawingH / 2 - 20,
+            { width: availW - 40, align: "center" },
+          );
           doc.fillColor("#000");
         }
       } else {
         doc.fillColor("#999").fontSize(9);
-        doc.text(`[File missing: ${diagram.fileName}]`, MARGIN, MARGIN + 50, {
-          width: availW, align: "center",
-        });
+        doc.rect(MARGIN, drawingY, availW, drawingH).stroke("#ccc");
+        doc.text(
+          `[File missing: ${drawing.fileName}]\n\nThe drawing file could not be found on disk.`,
+          MARGIN + 20, drawingY + drawingH / 2 - 15,
+          { width: availW - 40, align: "center" },
+        );
         doc.fillColor("#000");
       }
-
-      // Caption at the bottom of the page
-      doc.font("Helvetica").fontSize(8).fillColor("#333");
-      doc.text(caption, MARGIN, pageH - MARGIN - 14, {
-        width: availW, align: "center",
-      });
-      doc.fillColor("#000");
     }
   }
 
@@ -378,12 +408,10 @@ export async function generatePipelineReportPdf(
   const rowH2 = orientation === "landscape" ? 28 : 22;
   const maxRowY = pageH - MARGIN - 20; // leave room for footer
 
-  // If there are diagrams, the table MUST start on a fresh page
-  // (per the spec: "After all attached diagrams have been displayed,
-  // start the measurement table on a fresh page.")
+  // If there are linked drawings, the table MUST start on a fresh page
   let y: number;
 
-  if (diagrams.length > 0) {
+  if (linkedDrawings.length > 0) {
     addNewPage();
     drawTableHeader(doc, allCols, colWidths, MARGIN, pageW);
     y = MARGIN + tableHeaderH;
