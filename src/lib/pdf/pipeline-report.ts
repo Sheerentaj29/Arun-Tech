@@ -1,16 +1,18 @@
 // Server-side PDF generator for the Pipeline Thickness Measurement Report.
 // Uses pdfkit (pure JS, no native deps).
 //
-// Supports both landscape (default, wide table) and portrait (narrower,
-// wraps text + splits columns across pages) orientations.
-//
-// Includes:
-//   - Header block with client + plant + pipeline identity
-//   - Green measurement-table header (11 columns + custom columns)
-//   - Photo gallery with captions (embedded from disk)
-//   - Inspection description + findings summary
-//   - Sign-off block
-//   - Page numbering footer
+// Fixes applied:
+//   1. Dynamic row height in header info grid — long MOC values wrap
+//      without overlapping adjacent fields.
+//   2. Title/subtitle spacing — increased gap so no text overlaps.
+//   3. AutoCAD diagrams — images whose caption or filename contains
+//      "diagram", "isometric", "autocad", or "drawing" are treated as
+//      diagrams. Each diagram gets its OWN FULL PAGE, displayed BEFORE
+//      the measurement table. Regular photos stay in the gallery at the
+//      end.
+//   4. Dynamic page handling — 0 diagrams = table starts right after
+//      header; N diagrams = N full pages, then table starts on a fresh
+//      page.
 
 import PDFDocument from "pdfkit";
 import type { Writable } from "stream";
@@ -31,8 +33,6 @@ export interface PdfReportInput {
 
 type Doc = PDFDocument.PDFDocument;
 
-// Landscape A4: 841.89 × 595.28 pt
-// Portrait A4:  595.28 × 841.89 pt
 const PAGE_SIZES = {
   landscape: [841.89, 595.28] as [number, number],
   portrait: [595.28, 841.89] as [number, number],
@@ -41,6 +41,15 @@ const PAGE_SIZES = {
 const MARGIN = 28;
 const HEADER_BG = "#3a7d3a";
 const HEADER_FG = "#ffffff";
+
+// Keywords that identify a photo as an AutoCAD diagram
+const DIAGRAM_KEYWORDS = ["diagram", "isometric", "autocad", "drawing", "dwg", "iso"];
+
+function isDiagram(photo: ReportPhoto): boolean {
+  const caption = (photo.caption ?? "").toLowerCase();
+  const fileName = (photo.fileName ?? "").toLowerCase();
+  return DIAGRAM_KEYWORDS.some((kw) => caption.includes(kw) || fileName.includes(kw));
+}
 
 interface Column {
   key: string;
@@ -60,10 +69,9 @@ const SYSTEM_COLUMNS_LANDSCAPE: Column[] = [
   { key: "south",        header: "6 o'clock\nSouth\n(mm)", width: 55, vertical: true },
   { key: "west",         header: "9 o'clock\nWest\n(mm)",  width: 55, vertical: true },
   { key: "obsMin",       header: "Observed\nMinimum\n(mm)", width: 60, vertical: true },
-  { key: "findings",     header: "Findings / Comments",   width: 0 }, // fill remainder
+  { key: "findings",     header: "Findings / Comments",   width: 0 },
 ];
 
-// For portrait, we use smaller column widths so the table fits in 540pt
 const SYSTEM_COLUMNS_PORTRAIT: Column[] = [
   { key: "diaInch",      header: "Dia\n(inch)",      width: 35 },
   { key: "schedule",     header: "Schedule",         width: 42 },
@@ -107,6 +115,16 @@ function fmtMeasurement(v: number | null, status: string): string {
   return v.toFixed(2);
 }
 
+/**
+ * Calculate the wrapped height of a text string at a given font size
+ * within a given width. Used to determine dynamic row heights so long
+ * values (like MOC) don't overlap.
+ */
+function textHeight(doc: Doc, text: string, fontSize: number, maxWidth: number): number {
+  doc.fontSize(fontSize).font("Helvetica");
+  return doc.heightOfString(text ?? "—", { width: maxWidth });
+}
+
 export async function generatePipelineReportPdf(
   input: PdfReportInput,
   out: Writable,
@@ -131,8 +149,15 @@ export async function generatePipelineReportPdf(
 
   const report = input.report;
   const measurements = input.measurements;
-  const photos = input.photos ?? input.report.reportPhotos ?? [];
+  const allPhotos = input.photos ?? input.report.reportPhotos ?? [];
   const customCols = getCustomColumns(report);
+
+  // ── SEPARATE DIAGRAMS FROM REGULAR PHOTOS ──
+  // Diagrams (AutoCAD isometrics etc.) get full-page treatment before
+  // the measurement table. Regular inspection photos stay in the
+  // gallery at the end.
+  const diagrams = allPhotos.filter((p) => isDiagram(p));
+  const regularPhotos = allPhotos.filter((p) => !isDiagram(p));
 
   // Determine columns: system + custom
   const systemCols = orientation === "landscape" ? SYSTEM_COLUMNS_LANDSCAPE : SYSTEM_COLUMNS_PORTRAIT;
@@ -158,34 +183,71 @@ export async function generatePipelineReportPdf(
     doc.fillColor("#000");
   };
 
+  const addNewPage = () => {
+    doc.addPage({
+      size: pageSize,
+      layout: orientation,
+      margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
+    });
+    drawHeaderAndFooter();
+  };
+
   drawHeaderAndFooter();
 
-  // ── TITLE ──
+  // ═══════════════════════════════════════════════════════════════
+  // PAGE 1: TITLE + LOGOS + HEADER INFO GRID
+  // ═══════════════════════════════════════════════════════════════
+
+  // ── FIX 2: Title with proper spacing ──
+  const titleFontSize = orientation === "landscape" ? 13 : 11;
+  const subtitleFontSize = orientation === "landscape" ? 8 : 7;
   const titleY = MARGIN;
-  doc.fontSize(orientation === "landscape" ? 13 : 11).font("Helvetica-Bold");
+
+  // Draw the title
+  doc.fontSize(titleFontSize).font("Helvetica-Bold");
   doc.text("PIPELINE THICKNESS MEASUREMENT REPORT", MARGIN, titleY, {
     width: pageW - 2 * MARGIN, align: "center",
   });
-  doc.font("Helvetica").fontSize(8);
+
+  // Calculate actual title height (handles wrapping)
+  const titleHeight = doc.heightOfString("PIPELINE THICKNESS MEASUREMENT REPORT", {
+    width: pageW - 2 * MARGIN, align: "center",
+  });
+
+  // Draw subtitle with enough gap below the title (at least 6pt gap)
+  const subtitleY = titleY + titleHeight + 6;
+  doc.font("Helvetica").fontSize(subtitleFontSize);
   doc.text(
     `Report No: ${report.reportNumber}    |    Rev: ${report.revisionNumber}    |    Date: ${new Date(report.inspectionDate).toISOString().slice(0, 10)}    |    Status: ${report.status}`,
-    MARGIN, titleY + 18, { width: pageW - 2 * MARGIN, align: "center" },
+    MARGIN, subtitleY,
+    { width: pageW - 2 * MARGIN, align: "center" },
   );
 
-  // ── LOGO PLACEHOLDERS ──
-  doc.rect(MARGIN, titleY + 36, 110, 36).stroke();
+  const subtitleHeight = doc.heightOfString(
+    `Report No: ${report.reportNumber}    |    Rev: ${report.revisionNumber}    |    Date: ${new Date(report.inspectionDate).toISOString().slice(0, 10)}    |    Status: ${report.status}`,
+    { width: pageW - 2 * MARGIN, align: "center" },
+  );
+
+  // ── LOGO PLACEHOLDERS (positioned below subtitle with gap) ──
+  const logoY = subtitleY + subtitleHeight + 6;
+  const logoH = 36;
+  doc.rect(MARGIN, logoY, 110, logoH).stroke();
   doc.fontSize(7).fillColor("#666");
-  doc.text("SERVICE COMPANY\nLOGO", MARGIN, titleY + 48, { width: 110, align: "center" });
-  doc.rect(pageW - MARGIN - 110, titleY + 36, 110, 36).stroke();
+  doc.text("SERVICE COMPANY\nLOGO", MARGIN, logoY + 10, { width: 110, align: "center" });
+  doc.rect(pageW - MARGIN - 110, logoY, 110, logoH).stroke();
   const clientShort = report.client.name.length > 28 ? report.client.name.slice(0, 28) : report.client.name;
-  doc.text(`${clientShort}\nCLIENT LOGO`, pageW - MARGIN - 110, titleY + 48, { width: 110, align: "center" });
+  doc.text(`${clientShort}\nCLIENT LOGO`, pageW - MARGIN - 110, logoY + 10, { width: 110, align: "center" });
   doc.fillColor("#000");
 
-  // ── HEADER INFO GRID ──
-  const infoY = titleY + 80;
+  // ── FIX 1: HEADER INFO GRID with dynamic row heights ──
+  // Long values (like MOC) wrap to multiple lines. Calculate each row's
+  // height dynamically so text never overlaps.
+  const infoY = logoY + logoH + 10;
   const labelW = orientation === "landscape" ? 150 : 110;
   const valueW = (pageW - 2 * MARGIN - 2 * labelW) / 2;
-  const rowH = 14;
+  const minRowH = 14; // minimum height per row
+  const fontSizeInfo = orientation === "landscape" ? 8 : 7;
+
   const infoRows: Array<[string, string | null | undefined]> = [
     ["Client", report.client.name],
     ["Location", report.plant.location],
@@ -199,36 +261,150 @@ export async function generatePipelineReportPdf(
     ["Inspector", report.inspectorName],
   ];
 
-  infoRows.forEach((row, idx) => {
-    const side = idx % 2;
-    const rIdx = Math.floor(idx / 2);
-    const x = side === 0 ? MARGIN : MARGIN + labelW + valueW;
-    const y = infoY + rIdx * rowH;
-    doc.font("Helvetica-Bold").fontSize(orientation === "landscape" ? 8 : 7);
-    doc.rect(x, y, labelW, rowH).stroke();
-    doc.text(row[0], x + 4, y + 3, { width: labelW - 8, align: "left" });
-    doc.font("Helvetica").fontSize(orientation === "landscape" ? 8 : 7);
-    doc.rect(x + labelW, y, side === 0 ? valueW : valueW, rowH).stroke();
-    doc.text(row[1] ?? "—", x + labelW + 4, y + 3, { width: valueW - 8, align: "left" });
-  });
+  // Group rows into pairs (left + right columns) and calculate the max
+  // height needed for each pair.
+  const rowPairs: Array<{ left: [string, string]; right: [string, string]; height: number }> = [];
+  for (let i = 0; i < infoRows.length; i += 2) {
+    const left = infoRows[i];
+    const right = infoRows[i + 1] ?? ["", "—"];
 
-  // ── TABLE HEADER ──
-  const headerInfoRowsCount = Math.ceil(infoRows.length / 2);
-  const tableTop = infoY + headerInfoRowsCount * rowH + 14;
+    // Calculate the wrapped height for each value in this pair
+    const leftLabelH = textHeight(doc, left[0], fontSizeInfo, labelW - 8);
+    const leftValStr = left[1] ?? "—";
+    const leftValH = textHeight(doc, leftValStr, fontSizeInfo, valueW - 8);
+    const rightLabelH = textHeight(doc, right[0], fontSizeInfo, labelW - 8);
+    const rightValStr = right[1] ?? "—";
+    const rightValH = textHeight(doc, rightValStr, fontSizeInfo, valueW - 8);
 
-  drawTableHeader(doc, allCols, colWidths, tableTop, pageW);
+    // The row height is the maximum of all four heights, with padding
+    const maxContentH = Math.max(leftLabelH, leftValH, rightLabelH, rightValH);
+    const pairHeight = Math.max(minRowH, maxContentH + 4); // +4 for padding
+
+    rowPairs.push({
+      left: [left[0], leftValStr],
+      right: [right[0], rightValStr],
+      height: pairHeight,
+    });
+  }
+
+  // Draw each pair with its calculated height
+  let currentY = infoY;
+  for (const pair of rowPairs) {
+    const h = pair.height;
+    // Left label
+    doc.font("Helvetica-Bold").fontSize(fontSizeInfo);
+    doc.rect(MARGIN, currentY, labelW, h).stroke();
+    doc.text(pair.left[0], MARGIN + 4, currentY + 2, { width: labelW - 8, align: "left", height: h });
+    // Left value — use height option to clip text within the cell
+    doc.font("Helvetica").fontSize(fontSizeInfo);
+    doc.rect(MARGIN + labelW, currentY, valueW, h).stroke();
+    doc.text(pair.left[1], MARGIN + labelW + 4, currentY + 2, { width: valueW - 8, align: "left", height: h });
+
+    // Right label
+    const rightX = MARGIN + labelW + valueW;
+    doc.font("Helvetica-Bold").fontSize(fontSizeInfo);
+    doc.rect(rightX, currentY, labelW, h).stroke();
+    doc.text(pair.right[0], rightX + 4, currentY + 2, { width: labelW - 8, align: "left", height: h });
+    // Right value
+    doc.font("Helvetica").fontSize(fontSizeInfo);
+    doc.rect(rightX + labelW, currentY, valueW, h).stroke();
+    doc.text(pair.right[1], rightX + labelW + 4, currentY + 2, { width: valueW - 8, align: "left", height: h });
+
+    currentY += h;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // DIAGRAMS — each on its OWN FULL PAGE, before the measurement table
+  // ═══════════════════════════════════════════════════════════════
+  if (diagrams.length > 0) {
+    for (let i = 0; i < diagrams.length; i++) {
+      const diagram = diagrams[i];
+      // Each diagram gets a fresh full page
+      addNewPage();
+
+      // Draw the diagram as large as possible within the page margins
+      const availW = pageW - 2 * MARGIN;
+      const availH = pageH - 2 * MARGIN - 20; // leave room for caption at bottom
+
+      // Title above the diagram
+      doc.font("Helvetica-Bold").fontSize(10).fillColor("#000");
+      const caption = diagram.caption || diagram.fileName;
+      doc.text(`Diagram ${i + 1}: ${caption}`, MARGIN, MARGIN, {
+        width: availW, align: "center",
+      });
+
+      if (diagram.filePath && existsSync(diagram.filePath)) {
+        try {
+          const imgBuf = readFileSync(diagram.filePath);
+          // Embed the image, fit within available space, preserving aspect ratio
+          doc.image(imgBuf, MARGIN, MARGIN + 16, {
+            fit: [availW, availH - 16],
+            align: "center",
+            valign: "center",
+          });
+        } catch (err) {
+          // If the image is unreadable, show a warning
+          doc.fillColor("#999").fontSize(9);
+          doc.text("[Diagram image unreadable]", MARGIN, MARGIN + 50, {
+            width: availW, align: "center",
+          });
+          doc.fillColor("#000");
+        }
+      } else {
+        doc.fillColor("#999").fontSize(9);
+        doc.text(`[File missing: ${diagram.fileName}]`, MARGIN, MARGIN + 50, {
+          width: availW, align: "center",
+        });
+        doc.fillColor("#000");
+      }
+
+      // Caption at the bottom of the page
+      doc.font("Helvetica").fontSize(8).fillColor("#333");
+      doc.text(caption, MARGIN, pageH - MARGIN - 14, {
+        width: availW, align: "center",
+      });
+      doc.fillColor("#000");
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // MEASUREMENT TABLE — starts on a FRESH PAGE (after all diagrams)
+  // ═══════════════════════════════════════════════════════════════
+
+  // If there are diagrams OR the header info grid filled most of page 1,
+  // start the table on a fresh page. Otherwise, continue on the same page
+  // if there's room.
+  const tableHeaderH = 36;
+  const rowH2 = orientation === "landscape" ? 28 : 22;
+  const maxRowY = pageH - MARGIN - 20; // leave room for footer
+
+  // If there are diagrams, the table MUST start on a fresh page
+  // (per the spec: "After all attached diagrams have been displayed,
+  // start the measurement table on a fresh page.")
+  let y: number;
+
+  if (diagrams.length > 0) {
+    addNewPage();
+    drawTableHeader(doc, allCols, colWidths, MARGIN, pageW);
+    y = MARGIN + tableHeaderH;
+  } else {
+    if (currentY + tableHeaderH + rowH2 > maxRowY) {
+      addNewPage();
+      drawTableHeader(doc, allCols, colWidths, MARGIN, pageW);
+      y = MARGIN + tableHeaderH;
+    } else {
+      currentY += 10;
+      drawTableHeader(doc, allCols, colWidths, currentY, pageW);
+      y = currentY + tableHeaderH;
+    }
+  }
 
   // ── TABLE ROWS ──
-  let y = tableTop + 36;
-  const rowH2 = orientation === "landscape" ? 28 : 22;
-  const maxRowY = pageH - MARGIN - 60; // leave room for footer + findings
-
   for (const m of measurements) {
     if (y + rowH2 > maxRowY) {
-      doc.addPage({ size: pageSize, layout: orientation, margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN } });
-      drawHeaderAndFooter();
+      addNewPage();
       drawTableHeader(doc, allCols, colWidths, MARGIN, pageW);
-      y = MARGIN + 36;
+      y = MARGIN + tableHeaderH;
     }
     drawMeasurementRow(doc, m, allCols, colWidths, y, report, customCols);
     y += rowH2;
@@ -236,9 +412,8 @@ export async function generatePipelineReportPdf(
 
   // ── INSPECTION DESCRIPTION ──
   if (report.inspectionDescription) {
-    if (y + 80 > maxRowY) {
-      doc.addPage({ size: pageSize, layout: orientation, margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN } });
-      drawHeaderAndFooter();
+    if (y + 60 > maxRowY) {
+      addNewPage();
       y = MARGIN;
     }
     y += 10;
@@ -246,50 +421,62 @@ export async function generatePipelineReportPdf(
     doc.text("Inspection Description", MARGIN, y);
     y += 14;
     doc.font("Helvetica").fontSize(8);
-    doc.text(report.inspectionDescription, MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
-    y += Math.min(80, Math.ceil(report.inspectionDescription.length / 80) * 12);
+    const descHeight = doc.heightOfString(report.inspectionDescription, {
+      width: pageW - 2 * MARGIN,
+    });
+    doc.text(report.inspectionDescription, MARGIN, y, {
+      width: pageW - 2 * MARGIN, align: "left",
+    });
+    y += descHeight + 6;
   }
 
   // ── FINDINGS SUMMARY ──
   if (report.findingsSummary) {
-    y += 10;
     if (y + 40 > maxRowY) {
-      doc.addPage({ size: pageSize, layout: orientation, margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN } });
-      drawHeaderAndFooter();
+      addNewPage();
       y = MARGIN;
     }
+    y += 8;
     doc.font("Helvetica-Bold").fontSize(9);
     doc.text("Findings Summary", MARGIN, y);
     y += 14;
     doc.font("Helvetica").fontSize(8);
-    doc.text(report.findingsSummary ?? "—", MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
-    y += 40;
+    const findingsH = doc.heightOfString(report.findingsSummary ?? "—", {
+      width: pageW - 2 * MARGIN,
+    });
+    doc.text(report.findingsSummary ?? "—", MARGIN, y, {
+      width: pageW - 2 * MARGIN, align: "left",
+    });
+    y += findingsH + 6;
   }
 
   // ── COMMENTS ──
   if (report.comments) {
-    y += 5;
     if (y + 30 > maxRowY) {
-      doc.addPage({ size: pageSize, layout: orientation, margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN } });
-      drawHeaderAndFooter();
+      addNewPage();
       y = MARGIN;
     }
+    y += 6;
     doc.font("Helvetica-Bold").fontSize(9);
     doc.text("Comments", MARGIN, y);
     y += 14;
     doc.font("Helvetica").fontSize(8);
-    doc.text(report.comments ?? "—", MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
-    y += 30;
+    const commentsH = doc.heightOfString(report.comments ?? "—", {
+      width: pageW - 2 * MARGIN,
+    });
+    doc.text(report.comments ?? "—", MARGIN, y, {
+      width: pageW - 2 * MARGIN, align: "left",
+    });
+    y += commentsH + 6;
   }
 
-  // ── PHOTOS ──
-  if (photos.length > 0) {
-    y += 10;
+  // ── REGULAR PHOTOS (gallery — NOT diagrams) ──
+  if (regularPhotos.length > 0) {
     if (y + 100 > maxRowY) {
-      doc.addPage({ size: pageSize, layout: orientation, margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN } });
-      drawHeaderAndFooter();
+      addNewPage();
       y = MARGIN;
     }
+    y += 10;
     doc.font("Helvetica-Bold").fontSize(10).fillColor("#000");
     doc.text("Photographs", MARGIN, y);
     y += 20;
@@ -300,23 +487,20 @@ export async function generatePipelineReportPdf(
     let photosPerRow = Math.floor((pageW - 2 * MARGIN + gap) / (photoW + gap));
     if (photosPerRow < 1) photosPerRow = 1;
 
-    for (let i = 0; i < photos.length; i++) {
-      const photo = photos[i];
+    for (let i = 0; i < regularPhotos.length; i++) {
+      const photo = regularPhotos[i];
       const col = i % photosPerRow;
       const row = Math.floor(i / photosPerRow);
       const px = MARGIN + col * (photoW + gap);
       const py = y + row * (photoH + 30);
 
       if (py + photoH + 20 > maxRowY) {
-        doc.addPage({ size: pageSize, layout: orientation, margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN } });
-        drawHeaderAndFooter();
-        y = MARGIN;
+        addNewPage();
+        y = MARGIN + 20;
       }
 
-      // Draw photo border
       doc.rect(px, py, photoW, photoH).stroke("#999");
 
-      // Try to embed the actual image
       if (photo.filePath && existsSync(photo.filePath)) {
         try {
           const imgBuf = readFileSync(photo.filePath);
@@ -327,28 +511,30 @@ export async function generatePipelineReportPdf(
           });
         } catch (err) {
           doc.fillColor("#999").fontSize(7);
-          doc.text("[Image unreadable]", px + 4, py + photoH / 2 - 5, { width: photoW - 8, align: "center" });
+          doc.text("[Image unreadable]", px + 4, py + photoH / 2 - 5, {
+            width: photoW - 8, align: "center",
+          });
           doc.fillColor("#000");
         }
       } else {
         doc.fillColor("#999").fontSize(7);
-        doc.text(`[File missing: ${photo.fileName}]`, px + 4, py + photoH / 2 - 5, { width: photoW - 8, align: "center" });
+        doc.text(`[File missing: ${photo.fileName}]`, px + 4, py + photoH / 2 - 5, {
+          width: photoW - 8, align: "center",
+        });
         doc.fillColor("#000");
       }
 
-      // Caption below photo
       doc.font("Helvetica").fontSize(7).fillColor("#333");
       const caption = photo.caption || photo.fileName;
       doc.text(caption, px, py + photoH + 2, { width: photoW, align: "center" });
       doc.fillColor("#000");
     }
-    y += Math.ceil(photos.length / photosPerRow) * (photoH + 30);
+    y += Math.ceil(regularPhotos.length / photosPerRow) * (photoH + 30);
   }
 
   // ── SIGN-OFF ──
   if (y + 80 > maxRowY) {
-    doc.addPage({ size: pageSize, layout: orientation, margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN } });
-    drawHeaderAndFooter();
+    addNewPage();
     y = MARGIN;
   }
   y += 10;
@@ -388,7 +574,7 @@ export async function generatePipelineReportPdf(
   doc.end();
 }
 
-// ─── HELPERS ───
+// ─── TABLE HELPERS ───
 
 function drawTableHeader(doc: Doc, columns: Column[], colWidths: number[], y: number, pageW: number) {
   const usable = pageW - 2 * MARGIN;
