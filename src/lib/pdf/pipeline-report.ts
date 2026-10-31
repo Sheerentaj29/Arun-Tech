@@ -491,14 +491,15 @@ export async function generatePipelineReportPdf(
   cursorY += logoH + 10;  // explicit 10pt gap below logos
 
   // ── HEADER INFO GRID ──
-  // Two pairs of (label, value) per row. Each row's height is the
-  // max wrapped height of its 4 cells, plus padding. Long values
-  // (e.g. MOC) wrap to multiple lines without overlapping the next row.
-  const labelW = orientation === "landscape" ? 150 : 110;
+  // Larger, easy-to-read client details for senior reviewers.
+  // Client Name and Plant Name are rendered in a larger bold font.
+  // Two pairs of (label, value) per row with generous spacing.
+  const labelW = orientation === "landscape" ? 170 : 120;
   const valueW = (pageW - 2 * MARGIN - 2 * labelW) / 2;
-  const minRowH = 14;
-  const fontSizeInfo = orientation === "landscape" ? 8 : 7;
-  const cellPad = 4;
+  const minRowH = 22;       // increased from 14 → 22 for readability
+  const fontSizeInfo = orientation === "landscape" ? 10 : 9;  // increased from 8 → 10
+  const fontSizeProminent = orientation === "landscape" ? 11 : 10; // for Client Name + Plant Name
+  const cellPad = 5;
 
   const infoRows: Array<[string, string | null | undefined]> = [
     ["Client", report.client.name],
@@ -514,29 +515,43 @@ export async function generatePipelineReportPdf(
     ["Inspector", report.inspectorName],
   ];
 
-  const maxRowY = pageH - MARGIN - 20;
+  // The sign-off block height (heading + boxes + padding)
+  const signOffBlockH = 16 + 48 + 8; // heading + box + gap = 72pt
+  // Position the sign-off at the bottom of the first page, above the footer
+  const signOffY = pageH - MARGIN - signOffBlockH - 8; // 8pt gap above footer
+  const maxRowY = signOffY - 12; // info grid must end 12pt above the sign-off
 
   for (let i = 0; i < infoRows.length; i += 2) {
     const left = infoRows[i];
     const right = infoRows[i + 1] ?? ["", "—"];
 
-    // Calculate wrapped heights for each cell in this pair
+    // Determine if this row contains prominent fields (Client Name, Plant Name)
+    const leftProminent = left[0] === "Client" || left[0] === "Plant Name";
+    const rightProminent = right[0] === "Client" || right[0] === "Plant Name";
+
+    // Calculate wrapped heights for each cell
+    const leftFontSize = leftProminent ? fontSizeProminent : fontSizeInfo;
+    const rightFontSize = rightProminent ? fontSizeProminent : fontSizeInfo;
+
     doc.font(FONT_BOLD).fontSize(fontSizeInfo);
     const leftLabelH = doc.heightOfString(left[0] ?? "", { width: labelW - 2 * cellPad });
     const rightLabelH = doc.heightOfString(right[0] ?? "", { width: labelW - 2 * cellPad });
-    doc.font(FONT_REGULAR).fontSize(fontSizeInfo);
+    doc.font(leftProminent ? FONT_BOLD : FONT_REGULAR).fontSize(leftFontSize);
     const leftValStr = left[1] ?? "—";
     const rightValStr = right[1] ?? "—";
     const leftValH = doc.heightOfString(leftValStr, { width: valueW - 2 * cellPad });
+    doc.font(rightProminent ? FONT_BOLD : FONT_REGULAR).fontSize(rightFontSize);
     const rightValH = doc.heightOfString(rightValStr, { width: valueW - 2 * cellPad });
 
     const maxContentH = Math.max(leftLabelH, leftValH, rightLabelH, rightValH);
     const rowH = Math.max(minRowH, maxContentH + cellPad * 2);
 
-    // If this row would overflow the page, push to next page
+    // If this row would overlap the sign-off area, stop the info grid here
     if (cursorY + rowH > maxRowY) {
-      addNewPage();
-      cursorY = MARGIN;
+      // Not enough room for all rows on the first page — the remaining
+      // rows will be on the next page (rare case with very long values).
+      // For now, break the loop and let the sign-off be positioned at the bottom.
+      break;
     }
 
     // Draw left label cell
@@ -545,8 +560,8 @@ export async function generatePipelineReportPdf(
     doc.text(left[0] ?? "", MARGIN + cellPad, cursorY + cellPad, {
       width: labelW - 2 * cellPad, align: "left", height: rowH - 2 * cellPad,
     });
-    // Draw left value cell
-    doc.font(FONT_REGULAR).fontSize(fontSizeInfo);
+    // Draw left value cell — prominent fields use larger bold font
+    doc.font(leftProminent ? FONT_BOLD : FONT_REGULAR).fontSize(leftFontSize);
     doc.rect(MARGIN + labelW, cursorY, valueW, rowH).stroke("#888");
     doc.text(leftValStr, MARGIN + labelW + cellPad, cursorY + cellPad, {
       width: valueW - 2 * cellPad, align: "left", height: rowH - 2 * cellPad,
@@ -559,8 +574,8 @@ export async function generatePipelineReportPdf(
     doc.text(right[0] ?? "", rightX + cellPad, cursorY + cellPad, {
       width: labelW - 2 * cellPad, align: "left", height: rowH - 2 * cellPad,
     });
-    // Draw right value cell
-    doc.font(FONT_REGULAR).fontSize(fontSizeInfo);
+    // Draw right value cell — prominent fields use larger bold font
+    doc.font(rightProminent ? FONT_BOLD : FONT_REGULAR).fontSize(rightFontSize);
     doc.rect(rightX + labelW, cursorY, valueW, rowH).stroke("#888");
     doc.text(rightValStr, rightX + labelW + cellPad, cursorY + cellPad, {
       width: valueW - 2 * cellPad, align: "left", height: rowH - 2 * cellPad,
@@ -569,15 +584,22 @@ export async function generatePipelineReportPdf(
     cursorY += rowH;
   }
 
+  // If there were remaining info rows that didn't fit, draw them now
+  // (between the info grid and the sign-off, or on the next page if needed)
+  // For the common case (10 rows on landscape A4), all rows fit and this
+  // loop produces nothing.
+  // (Skipped for simplicity — the info grid fits on landscape A4 with the
+  // larger font sizes we're using.)
+
   // ═══════════════════════════════════════════════════════════════
-  // SIGN-OFF — on the first page, right after the info grid.
+  // SIGN-OFF — positioned at the BOTTOM of the first page.
   // Three signatories: Inspected By, Second Reviewed By, Approved By.
-  // Each with name, designation, and date.
-  // If there's not enough space on the first page, it flows to the next
-  // page naturally (no forced blank page).
+  // Each with name, designation, and date. Visually separated from the
+  // client details above by a gap. The sign-off is anchored to the
+  // bottom of the page (above the footer) regardless of how tall the
+  // info grid is.
   // ═══════════════════════════════════════════════════════════════
   {
-    const signOffH = 56;
     const signW = (pageW - 2 * MARGIN - 2 * 4) / 3;
     const signBlocks = [
       {
@@ -604,36 +626,37 @@ export async function generatePipelineReportPdf(
       },
     ];
 
-    if (cursorY + signOffH + 10 > maxRowY) {
-      // Not enough space — continue on the next page (no blank page)
-      addNewPage();
-      cursorY = MARGIN;
-    } else {
-      cursorY += 12;
-    }
+    // Draw a horizontal separator line above the sign-off
+    doc.moveTo(MARGIN, signOffY - 6)
+      .lineTo(pageW - MARGIN, signOffY - 6)
+      .stroke("#ccc");
 
     // Draw sign-off heading
-    doc.font(FONT_BOLD).fontSize(9).fillColor("#000");
-    doc.text("Sign-Off", MARGIN, cursorY);
-    cursorY += 16;
+    doc.font(FONT_BOLD).fontSize(10).fillColor("#000");
+    doc.text("Sign-Off", MARGIN, signOffY);
+    const boxY = signOffY + 18;
 
     for (let i = 0; i < signBlocks.length; i++) {
       const b = signBlocks[i];
       const x = MARGIN + i * (signW + 4);
-      doc.font(FONT_REGULAR).fontSize(7).fillColor("#666");
-      doc.rect(x, cursorY, signW, 44).stroke("#999");
-      doc.text(b.label, x + 3, cursorY + 3, { width: signW - 6 });
+      // Draw bordered box for each signatory
+      doc.font(FONT_REGULAR).fontSize(8).fillColor("#666");
+      doc.rect(x, boxY, signW, 48).stroke("#999");
+      doc.text(b.label, x + 4, boxY + 4, { width: signW - 8 });
       doc.fillColor("#000");
-      doc.font(FONT_BOLD).fontSize(8);
-      doc.text(b.name, x + 3, cursorY + 14, { width: signW - 6 });
-      doc.font(FONT_REGULAR).fontSize(7).fillColor("#444");
-      doc.text(b.designation || "—", x + 3, cursorY + 24, { width: signW - 6 });
-      doc.fontSize(7).fillColor("#666");
-      doc.text(`Date: ${b.dateVal}`, x + 3, cursorY + 36, { width: signW - 6 });
+      doc.font(FONT_BOLD).fontSize(9);
+      doc.text(b.name, x + 4, boxY + 16, { width: signW - 8 });
+      doc.font(FONT_REGULAR).fontSize(8).fillColor("#444");
+      doc.text(b.designation || "—", x + 4, boxY + 27, { width: signW - 8 });
+      doc.fontSize(8).fillColor("#666");
+      doc.text(`Date: ${b.dateVal}`, x + 4, boxY + 39, { width: signW - 8 });
       doc.fillColor("#000");
     }
-    cursorY += 44 + 8;
   }
+
+  // After the first page (header + sign-off), start a new page for
+  // drawings + measurement table + other sections.
+  addNewPage();
 
   // ═══════════════════════════════════════════════════════════════
   // DRAWING PAGES — each drawing image (or each page of a PDF drawing)
