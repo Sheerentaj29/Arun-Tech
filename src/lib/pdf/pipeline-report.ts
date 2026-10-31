@@ -814,32 +814,6 @@ export async function generatePipelineReportPdf(
     y += descHeight + 6;
   }
 
-  // ── FINDINGS SUMMARY ──
-  if (report.findingsSummary) {
-    if (y + 40 > maxRowY) { addNewPage(); y = MARGIN; }
-    y += 8;
-    doc.font(FONT_BOLD).fontSize(9);
-    doc.text("Findings Summary", MARGIN, y);
-    y += 14;
-    doc.font(FONT_REGULAR).fontSize(8);
-    const findingsH = doc.heightOfString(report.findingsSummary ?? "—", { width: pageW - 2 * MARGIN });
-    doc.text(report.findingsSummary ?? "—", MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
-    y += findingsH + 6;
-  }
-
-  // ── COMMENTS ──
-  if (report.comments) {
-    if (y + 30 > maxRowY) { addNewPage(); y = MARGIN; }
-    y += 6;
-    doc.font(FONT_BOLD).fontSize(9);
-    doc.text("Comments", MARGIN, y);
-    y += 14;
-    doc.font(FONT_REGULAR).fontSize(8);
-    const commentsH = doc.heightOfString(report.comments ?? "—", { width: pageW - 2 * MARGIN });
-    doc.text(report.comments ?? "—", MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
-    y += commentsH + 6;
-  }
-
   // ── SUMMARY OF SITE OBSERVATIONS ──
   {
     const text = ((report as any).siteObservationSummary ?? "").trim();
@@ -864,26 +838,6 @@ export async function generatePipelineReportPdf(
       y += 8;
       doc.font(FONT_BOLD).fontSize(9);
       doc.text("Results", MARGIN, y);
-      y += 14;
-      doc.font(FONT_REGULAR).fontSize(8);
-      const h = doc.heightOfString(text, { width: pageW - 2 * MARGIN });
-      doc.text(text, MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
-      y += h + 6;
-    }
-  }
-
-  // ── RECOMMENDATIONS ──
-  // This field exists on all report types (it was originally only used for
-  // PIPELINE_CONDITION, but the schema now has it on PipelineInspection
-  // for all types). For thickness/visual reports, it's the general
-  // "Recommendations" field.
-  {
-    const text = (report.recommendations ?? "").trim();
-    if (text) {
-      if (y + 40 > maxRowY) { addNewPage(); y = MARGIN; }
-      y += 8;
-      doc.font(FONT_BOLD).fontSize(9);
-      doc.text("Recommendations", MARGIN, y);
       y += 14;
       doc.font(FONT_REGULAR).fontSize(8);
       const h = doc.heightOfString(text, { width: pageW - 2 * MARGIN });

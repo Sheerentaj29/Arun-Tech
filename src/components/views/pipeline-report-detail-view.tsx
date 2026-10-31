@@ -697,18 +697,6 @@ export function PipelineReportDetailView() {
           </div>
         )}
 
-        {/* Findings + Comments */}
-        <div className="mt-4 space-y-3">
-          <div>
-            <h3 className="text-xs font-bold text-zinc-700">Findings Summary</h3>
-            <p className="mt-1 text-xs whitespace-pre-wrap">{report.findingsSummary ?? "—"}</p>
-          </div>
-          <div>
-            <h3 className="text-xs font-bold text-zinc-700">Comments</h3>
-            <p className="mt-1 text-xs whitespace-pre-wrap">{report.comments ?? "—"}</p>
-          </div>
-        </div>
-
         {/* Summary Of Site Observations */}
         {report.siteObservationSummary && (
           <div className="mt-4">
@@ -722,14 +710,6 @@ export function PipelineReportDetailView() {
           <div className="mt-3">
             <h3 className="text-xs font-bold text-zinc-700">Results</h3>
             <p className="mt-1 text-xs whitespace-pre-wrap">{report.results}</p>
-          </div>
-        )}
-
-        {/* Recommendations */}
-        {report.recommendations && (
-          <div className="mt-3">
-            <h3 className="text-xs font-bold text-zinc-700">Recommendations</h3>
-            <p className="mt-1 text-xs whitespace-pre-wrap">{report.recommendations}</p>
           </div>
         )}
 

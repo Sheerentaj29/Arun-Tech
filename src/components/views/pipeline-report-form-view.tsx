@@ -1006,10 +1006,17 @@ export function PipelineReportFormView() {
         const fd = new FormData();
         fd.append("file", file);
         fd.append("caption", "");
+        // IMPORTANT: include the Authorization header from localStorage.
+        // The apiFetch helper does this automatically, but raw fetch() does
+        // not. On the preview URL (cross-origin), the session cookie may
+        // not be sent by the browser — so without this header, the API
+        // returns 401 and the upload fails with "Failed to upload".
+        const token = typeof window !== "undefined" ? window.localStorage.getItem("ira_session_token") : null;
         const res = await fetch(`/api/pipeline-inspections/${editingPipelineReportId}/photos`, {
           method: "POST",
           body: fd,
           credentials: "include",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
@@ -1491,24 +1498,6 @@ export function PipelineReportFormView() {
               type="date"
               value={header.inspectionDate}
               onChange={(e) => updateHeader("inspectionDate", e.target.value)}
-            />
-          </div>
-          <div className="space-y-2 sm:col-span-3">
-            <Label>Findings Summary</Label>
-            <Textarea
-              rows={2}
-              value={header.findingsSummary}
-              onChange={(e) => updateHeader("findingsSummary", e.target.value)}
-              placeholder="Overall findings to appear in the report footer"
-            />
-          </div>
-          <div className="space-y-2 sm:col-span-3">
-            <Label>Comments</Label>
-            <Textarea
-              rows={2}
-              value={header.comments}
-              onChange={(e) => updateHeader("comments", e.target.value)}
-              placeholder="General comments"
             />
           </div>
         </CardContent>
@@ -2501,31 +2490,7 @@ export function PipelineReportFormView() {
               </p>
             </div>
 
-            {/* B. Findings Summary */}
-            <div className="space-y-2">
-              <Label className="text-sm font-semibold">Findings Summary</Label>
-              <Textarea
-                rows={3}
-                value={header.findingsSummary}
-                onChange={(e) => updateHeader("findingsSummary", e.target.value)}
-                placeholder="Brief overall summary of findings..."
-                className="text-sm"
-              />
-            </div>
-
-            {/* C. Comments */}
-            <div className="space-y-2">
-              <Label className="text-sm font-semibold">General Comments</Label>
-              <Textarea
-                rows={2}
-                value={header.comments}
-                onChange={(e) => updateHeader("comments", e.target.value)}
-                placeholder="Any additional comments..."
-                className="text-sm"
-              />
-            </div>
-
-            {/* D. Summary of Site Observations */}
+            {/* B. Summary of Site Observations */}
             <div className="space-y-2">
               <Label className="text-sm font-semibold">Summary Of Site Observations</Label>
               <Textarea
@@ -2537,7 +2502,7 @@ export function PipelineReportFormView() {
               />
             </div>
 
-            {/* E. Results */}
+            {/* C. Results */}
             <div className="space-y-2">
               <Label className="text-sm font-semibold">Results</Label>
               <Textarea
@@ -2549,19 +2514,7 @@ export function PipelineReportFormView() {
               />
             </div>
 
-            {/* F. Recommendations */}
-            <div className="space-y-2">
-              <Label className="text-sm font-semibold">Recommendations</Label>
-              <Textarea
-                rows={3}
-                value={header.recommendations}
-                onChange={(e) => updateHeader("recommendations", e.target.value)}
-                placeholder="Recommended actions, repairs, monitoring, or follow-up activities..."
-                className="text-sm"
-              />
-            </div>
-
-            {/* G. Conclusion */}
+            {/* D. Conclusion */}
             <div className="space-y-2">
               <Label className="text-sm font-semibold">Conclusion</Label>
               <Textarea
