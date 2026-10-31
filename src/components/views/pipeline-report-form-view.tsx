@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/select";
 import { useAppStore, type PipelineReportType } from "@/lib/store";
 import { apiFetch } from "@/lib/api-client";
+import { AuthImage } from "@/components/auth-image";
 import { toast } from "sonner";
 
 // ---------- REPORT TYPE METADATA ----------
@@ -144,7 +145,10 @@ interface ReportHeader {
   materialOfConstruction: string;
   applicableStandard: string;
   standardEdition: string;
-  inspectionDate: string;
+  inspectionDate: string; // preserved for backward compat
+  fromDate: string;
+  toDate: string;
+  primaryPhotoPath: string;
   findingsSummary: string;
   comments: string;
   inspectionDescription: string;
@@ -185,6 +189,9 @@ const EMPTY_HEADER: ReportHeader = {
   applicableStandard: "ASME B36.10M",
   standardEdition: "2018",
   inspectionDate: new Date().toISOString().slice(0, 10),
+  fromDate: new Date().toISOString().slice(0, 10),
+  toDate: new Date().toISOString().slice(0, 10),
+  primaryPhotoPath: "",
   findingsSummary: "",
   comments: "",
   inspectionDescription: "",
@@ -424,6 +431,9 @@ export function PipelineReportFormView() {
           applicableStandard: r.applicableStandard ?? "ASME B36.10M",
           standardEdition: r.standardEdition ?? "2018",
           inspectionDate: r.inspectionDate.slice(0, 10),
+          fromDate: r.fromDate ? r.fromDate.slice(0, 10) : r.inspectionDate.slice(0, 10),
+          toDate: r.toDate ? r.toDate.slice(0, 10) : r.inspectionDate.slice(0, 10),
+          primaryPhotoPath: r.primaryPhotoPath ?? "",
           findingsSummary: r.findingsSummary ?? "",
           comments: r.comments ?? "",
           inspectionDescription: r.inspectionDescription ?? "",
@@ -1493,13 +1503,156 @@ export function PipelineReportFormView() {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Inspection Date</Label>
+            <Label>From Date</Label>
             <Input
               type="date"
-              value={header.inspectionDate}
-              onChange={(e) => updateHeader("inspectionDate", e.target.value)}
+              value={header.fromDate}
+              onChange={(e) => updateHeader("fromDate", e.target.value)}
             />
           </div>
+          <div className="space-y-2">
+            <Label>To Date</Label>
+            <Input
+              type="date"
+              value={header.toDate}
+              onChange={(e) => {
+                updateHeader("toDate", e.target.value);
+                if (header.fromDate && e.target.value < header.fromDate) {
+                  toast.error("To Date cannot be earlier than From Date");
+                }
+              }}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ─── Primary Inspection Photo ─── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Primary Inspection Photo</CardTitle>
+          <CardDescription>
+            Upload one main photo of the pipeline, vessel, or equipment being inspected.
+            This photo appears on the first page of the PDF, after the client details.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!editingPipelineReportId && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+              Save the report header first (Step 1) to enable photo upload.
+            </p>
+          )}
+          {editingPipelineReportId && !header.primaryPhotoPath && (
+            <label className="cursor-pointer">
+              <input
+                type="file"
+                accept=".png,.jpg,.jpeg,image/png,image/jpeg"
+                className="hidden"
+                onChange={async (e) => {
+                  if (!e.target.files?.[0] || !editingPipelineReportId) return;
+                  const file = e.target.files[0];
+                  if (!file.type.startsWith("image/")) {
+                    toast.error("Only image files (PNG, JPG, JPEG) are supported.");
+                    return;
+                  }
+                  try {
+                    const fd = new FormData();
+                    fd.append("file", file);
+                    fd.append("caption", "Primary inspection photo");
+                    const token = typeof window !== "undefined" ? window.localStorage.getItem("ira_session_token") : null;
+                    // Upload via the photos endpoint, then set the path as primary
+                    const res = await fetch(`/api/pipeline-inspections/${editingPipelineReportId}/photos`, {
+                      method: "POST",
+                      body: fd,
+                      credentials: "include",
+                      headers: token ? { Authorization: `Bearer ${token}` } : {},
+                    });
+                    if (!res.ok) throw new Error("Upload failed");
+                    const photo = await res.json();
+                    // Save the photo path as the primary photo
+                    await apiFetch(`/api/pipeline-inspections/${editingPipelineReportId}`, {
+                      method: "PUT",
+                      body: JSON.stringify({ primaryPhotoPath: photo.filePath }),
+                    });
+                    setHeader((h) => ({ ...h, primaryPhotoPath: photo.filePath }));
+                    toast.success("Primary photo uploaded");
+                  } catch (err) {
+                    toast.error("Failed to upload primary photo");
+                  }
+                  e.target.value = "";
+                }}
+              />
+              <div className="border-2 border-dashed border-zinc-300 rounded-md p-6 text-center cursor-pointer hover:border-amber-400 transition-colors">
+                <Camera className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
+                <p className="text-sm text-muted-foreground">Click to upload primary photo</p>
+                <p className="text-xs text-muted-foreground mt-1">PNG · JPG · JPEG</p>
+              </div>
+            </label>
+          )}
+          {editingPipelineReportId && header.primaryPhotoPath && (
+            <div className="flex items-start gap-4">
+              <div className="border rounded-md overflow-hidden" style={{ maxWidth: "300px" }}>
+                <AuthImage
+                  src={`/api/pipeline-inspections/${editingPipelineReportId}/primary-photo`}
+                  alt="Primary inspection photo"
+                  className="w-full h-auto max-h-[200px] object-contain"
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    // Remove primary photo (just clear the path, don't delete the file)
+                    await apiFetch(`/api/pipeline-inspections/${editingPipelineReportId}`, {
+                      method: "PUT",
+                      body: JSON.stringify({ primaryPhotoPath: "" }),
+                    });
+                    setHeader((h) => ({ ...h, primaryPhotoPath: "" }));
+                    toast.success("Primary photo removed");
+                  }}
+                >
+                  <Trash2 className="mr-1 h-4 w-4" /> Remove Photo
+                </Button>
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    accept=".png,.jpg,.jpeg,image/png,image/jpeg"
+                    className="hidden"
+                    onChange={async (e) => {
+                      if (!e.target.files?.[0] || !editingPipelineReportId) return;
+                      const file = e.target.files[0];
+                      try {
+                        const fd = new FormData();
+                        fd.append("file", file);
+                        fd.append("caption", "Primary inspection photo");
+                        const token = typeof window !== "undefined" ? window.localStorage.getItem("ira_session_token") : null;
+                        const res = await fetch(`/api/pipeline-inspections/${editingPipelineReportId}/photos`, {
+                          method: "POST",
+                          body: fd,
+                          credentials: "include",
+                          headers: token ? { Authorization: `Bearer ${token}` } : {},
+                        });
+                        if (!res.ok) throw new Error("Upload failed");
+                        const photo = await res.json();
+                        await apiFetch(`/api/pipeline-inspections/${editingPipelineReportId}`, {
+                          method: "PUT",
+                          body: JSON.stringify({ primaryPhotoPath: photo.filePath }),
+                        });
+                        setHeader((h) => ({ ...h, primaryPhotoPath: photo.filePath }));
+                        toast.success("Primary photo replaced");
+                      } catch (err) {
+                        toast.error("Failed to replace primary photo");
+                      }
+                      e.target.value = "";
+                    }}
+                  />
+                  <Button size="sm" asChild>
+                    <span><Camera className="mr-1 h-4 w-4" /> Replace Photo</span>
+                  </Button>
+                </label>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -2685,6 +2838,76 @@ export function PipelineReportFormView() {
           </CardContent>
         </Card>
 
+        {/* ─── Equipment / Instrument Certificates ─── */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base">Equipment / Instrument Certificates</CardTitle>
+                <CardDescription>Calibration certificates for instruments and equipment used during the inspection.</CardDescription>
+              </div>
+              <label className="cursor-pointer">
+                <input type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" multiple className="hidden"
+                  onChange={async (e) => {
+                    if (!e.target.files || !editingPipelineReportId) return;
+                    const token = typeof window !== "undefined" ? window.localStorage.getItem("ira_session_token") : null;
+                    for (const file of Array.from(e.target.files)) {
+                      try {
+                        const fd = new FormData(); fd.append("file", file); fd.append("category", "EQUIPMENT");
+                        fd.append("title", file.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim());
+                        const res = await fetch(`/api/pipeline-inspections/${editingPipelineReportId}/certificates`, {
+                          method: "POST", body: fd, credentials: "include",
+                          headers: token ? { Authorization: `Bearer ${token}` } : {},
+                        });
+                        if (!res.ok) throw new Error("Upload failed");
+                        toast.success(`Uploaded "${file.name}"`);
+                      } catch { toast.error(`Failed to upload "${file.name}"`); }
+                    }
+                    e.target.value = ""; refresh();
+                  }}
+                />
+                <Button size="sm" asChild disabled={!editingPipelineReportId}><span><Plus className="mr-1 h-4 w-4" /> Add Certificate</span></Button>
+              </label>
+            </div>
+          </CardHeader>
+          <CardContent><CertificateList reportId={editingPipelineReportId} category="EQUIPMENT" /></CardContent>
+        </Card>
+
+        {/* ─── Personnel / Inspector Certificates ─── */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base">Personnel / Inspector Certificates</CardTitle>
+                <CardDescription>Certificates associated with inspectors or personnel involved in the inspection.</CardDescription>
+              </div>
+              <label className="cursor-pointer">
+                <input type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" multiple className="hidden"
+                  onChange={async (e) => {
+                    if (!e.target.files || !editingPipelineReportId) return;
+                    const token = typeof window !== "undefined" ? window.localStorage.getItem("ira_session_token") : null;
+                    for (const file of Array.from(e.target.files)) {
+                      try {
+                        const fd = new FormData(); fd.append("file", file); fd.append("category", "PERSONNEL");
+                        fd.append("title", file.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim());
+                        const res = await fetch(`/api/pipeline-inspections/${editingPipelineReportId}/certificates`, {
+                          method: "POST", body: fd, credentials: "include",
+                          headers: token ? { Authorization: `Bearer ${token}` } : {},
+                        });
+                        if (!res.ok) throw new Error("Upload failed");
+                        toast.success(`Uploaded "${file.name}"`);
+                      } catch { toast.error(`Failed to upload "${file.name}"`); }
+                    }
+                    e.target.value = ""; refresh();
+                  }}
+                />
+                <Button size="sm" asChild disabled={!editingPipelineReportId}><span><Plus className="mr-1 h-4 w-4" /> Add Certificate</span></Button>
+              </label>
+            </div>
+          </CardHeader>
+          <CardContent><CertificateList reportId={editingPipelineReportId} category="PERSONNEL" /></CardContent>
+        </Card>
+
         {/* Step 3 navigation */}
         <div className="flex items-center gap-2">
           <Button variant="ghost" onClick={goPrevious}>
@@ -2707,6 +2930,77 @@ export function PipelineReportFormView() {
         </div>
       </>
       )}
+    </div>
+  );
+}
+
+// ─── CertificateList component (used in Step 4 of the form) ───
+// Fetches and displays certificates for a given report + category.
+// Supports image previews (via AuthImage) and PDF file icons.
+// Allows deletion.
+
+function CertificateList({ reportId, category }: { reportId: string | null; category: string }) {
+  const [items, setItems] = useState<Array<{
+    id: string; title: string; fileName: string; fileExtension: string; fileSize: number;
+  }>>([]);
+  const [loading, setLoading] = useState(false);
+  const { refreshKey } = useAppStore();
+
+  useEffect(() => {
+    if (!reportId) return;
+    setLoading(true);
+    apiFetch<{ items: any[] }>(`/api/pipeline-inspections/${reportId}/certificates`)
+      .then((r) => setItems(r.items.filter((c) => c.category === category)))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [reportId, category, refreshKey]);
+
+  if (!reportId) return <p className="text-xs text-muted-foreground">Save the report first.</p>;
+  if (loading) return <p className="text-xs text-muted-foreground">Loading…</p>;
+  if (items.length === 0) return <p className="text-xs text-muted-foreground">No certificates uploaded.</p>;
+
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+      {items.map((cert) => {
+        const ext = (cert.fileExtension || "").toLowerCase();
+        const isImage = [".png", ".jpg", ".jpeg"].includes(ext);
+        const rawUrl = `/api/pipeline-inspections/${reportId}/certificates/${cert.id}/raw`;
+        return (
+          <div key={cert.id} className="border border-zinc-300 rounded overflow-hidden relative">
+            <div className="bg-zinc-50 flex items-center justify-center" style={{ minHeight: "80px" }}>
+              {isImage ? (
+                <AuthImage src={rawUrl} alt={cert.title} className="w-full h-auto max-h-[100px] object-contain" />
+              ) : (
+                <div className="flex flex-col items-center text-muted-foreground p-2">
+                  <FileText className="h-8 w-8" />
+                  <span className="text-xs mt-1">PDF</span>
+                </div>
+              )}
+            </div>
+            <div className="p-2">
+              <div className="text-xs font-medium truncate" title={cert.title}>{cert.title}</div>
+              <div className="text-[10px] text-muted-foreground truncate">{cert.fileName}</div>
+              <div className="flex items-center justify-between mt-1">
+                <span className="text-[8px] uppercase text-muted-foreground">{ext.replace(".", "")}</span>
+                <span className="text-[8px] text-muted-foreground">{Math.round(cert.fileSize / 1024)}KB</span>
+              </div>
+            </div>
+            <button
+              onClick={async () => {
+                try {
+                  await apiFetch(`/api/pipeline-inspections/${reportId}/certificates/${cert.id}`, { method: "DELETE" });
+                  setItems((arr) => arr.filter((c) => c.id !== cert.id));
+                  toast.success("Certificate removed");
+                } catch { toast.error("Remove failed"); }
+              }}
+              className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 hover:bg-red-700 z-10"
+              title="Remove certificate"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 }

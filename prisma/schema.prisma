@@ -256,7 +256,10 @@ model PipelineInspection {
   applicableStandard       String? // e.g. "ASME B36.10M"
   standardEdition          String? // e.g. "2018"
 
-  inspectionDate           DateTime @default(now())
+  inspectionDate           DateTime @default(now()) // preserved for backward compat
+  fromDate                 DateTime? // Start date of inspection/service activity
+  toDate                   DateTime?   // End date of inspection/service activity
+  primaryPhotoPath         String?  // Path to the primary inspection photo (pipeline/vessel/equipment)
   // Approval workflow statuses:
   //   Draft                  — employee is still editing the report
   //   Submitted for Review    — employee has submitted; waiting for admin
@@ -354,6 +357,7 @@ model PipelineInspection {
   revisions   ReportRevision[]
   reportPhotos ReportPhoto[]
   drawingLinks DrawingInspectionLink[]
+  certificates InspectionCertificate[]
 
   @@unique([clientId, reportNumber])
   @@index([clientId])
@@ -607,4 +611,33 @@ model DrawingInspectionLink {
   @@unique([drawingId, pipelineInspectionId])
   @@index([drawingId])
   @@index([pipelineInspectionId])
+}
+
+// =====================================================
+// INSPECTION CERTIFICATES
+// =====================================================
+// Certificates uploaded for an inspection report, split into two
+// categories:
+//   EQUIPMENT — calibration certificates for instruments/equipment
+//   PERSONNEL — certificates associated with inspectors/personnel
+
+model InspectionCertificate {
+  id                   String   @id @default(cuid())
+  pipelineInspectionId String
+  category             String   // "EQUIPMENT" | "PERSONNEL"
+  title                String   // certificate name/title
+  fileName             String   // original filename
+  filePath             String   // path on disk
+  fileSize             Int      // bytes
+  mimeType             String   // detected MIME type
+  fileExtension        String   // .pdf, .png, .jpg, .jpeg
+  sortOrder            Int      @default(0)
+  uploadedById         String?
+  uploadedByName       String?
+  createdAt            DateTime @default(now())
+
+  pipelineInspection   PipelineInspection @relation(fields: [pipelineInspectionId], references: [id], onDelete: Cascade)
+
+  @@index([pipelineInspectionId])
+  @@index([category])
 }

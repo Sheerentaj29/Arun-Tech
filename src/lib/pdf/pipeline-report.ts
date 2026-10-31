@@ -107,6 +107,16 @@ export interface PdfReportInput {
     approver: Pick<User, "id" | "name" | "email"> | null;
     reportPhotos?: ReportPhoto[];
     visualObservations?: VisualInspectionObservation[];
+    certificates?: Array<{
+      id: string;
+      category: string;
+      title: string;
+      fileName: string;
+      filePath: string;
+      fileExtension: string;
+      mimeType: string;
+      sortOrder: number;
+    }>;
   };
   measurements: ThicknessMeasurement[];
   photos?: ReportPhoto[];
@@ -360,6 +370,10 @@ export async function generatePipelineReportPdf(
   const allPhotos = input.photos ?? input.report.reportPhotos ?? [];
   const customCols = getCustomColumns(report);
   const linkedDrawings = input.linkedDrawings ?? (report as any).linkedDrawings ?? [];
+  const certificates: Array<{
+    id: string; category: string; title: string; fileName: string;
+    filePath: string; fileExtension: string; mimeType: string; sortOrder: number;
+  }> = (report as any).certificates ?? [];
 
   // Determine columns: system + custom
   const systemCols = orientation === "landscape"
@@ -428,11 +442,18 @@ export async function generatePipelineReportPdf(
   doc.text(titleText, MARGIN, cursorY, { width: usableW, align: "center" });
   cursorY += titleHeight + 8;  // explicit 8pt gap below title
 
-  // ── SUBTITLE (Report No | Rev | Date | Status) ──
+  // ── SUBTITLE (Report No | Rev | Date Range | Status) ──
   const subtitleFontSize = orientation === "landscape" ? 9 : 8;
+  const fromDateStr = (report as any).fromDate
+    ? new Date((report as any).fromDate).toISOString().slice(0, 10)
+    : new Date(report.inspectionDate).toISOString().slice(0, 10);
+  const toDateStr = (report as any).toDate
+    ? new Date((report as any).toDate).toISOString().slice(0, 10)
+    : fromDateStr;
+  const dateRange = fromDateStr === toDateStr ? fromDateStr : `${fromDateStr} – ${toDateStr}`;
   const subtitleText =
     `Report No: ${report.reportNumber}    |    Rev: ${report.revisionNumber}    |    ` +
-    `Date: ${new Date(report.inspectionDate).toISOString().slice(0, 10)}    |    ` +
+    `Date: ${dateRange}    |    ` +
     `Status: ${report.status}`;
   doc.font(FONT_REGULAR).fontSize(subtitleFontSize).fillColor("#333");
   const subtitleHeight = doc.heightOfString(subtitleText, { width: usableW, align: "center" });
@@ -584,12 +605,36 @@ export async function generatePipelineReportPdf(
     cursorY += rowH;
   }
 
-  // If there were remaining info rows that didn't fit, draw them now
-  // (between the info grid and the sign-off, or on the next page if needed)
-  // For the common case (10 rows on landscape A4), all rows fit and this
-  // loop produces nothing.
-  // (Skipped for simplicity — the info grid fits on landscape A4 with the
-  // larger font sizes we're using.)
+  // ═══════════════════════════════════════════════════════════════
+  // PRIMARY INSPECTION PHOTO — displayed on the first page, between
+  // the client details and the sign-off block. Scaled to fit the
+  // available space while preserving aspect ratio.
+  // ═══════════════════════════════════════════════════════════════
+  const primaryPhotoPath = (report as any).primaryPhotoPath ?? null;
+  if (primaryPhotoPath && existsSync(primaryPhotoPath)) {
+    // Calculate available space between info grid end and sign-off start
+    const photoAvailH = signOffY - 12 - cursorY - 16; // 12pt gap above sign-off, 16pt for label
+    if (photoAvailH > 40) {
+      try {
+        const photoBuf = readFileSync(primaryPhotoPath);
+        // Draw label
+        doc.font(FONT_BOLD).fontSize(9).fillColor("#000");
+        doc.text("Primary Inspection Photo", MARGIN, cursorY + 4);
+        cursorY += 18;
+        // Draw the photo centered, preserving aspect ratio
+        const photoAvailW = usableW;
+        const photoBoxH = Math.min(photoAvailH - 18, 120); // max 120pt tall
+        doc.image(photoBuf, MARGIN, cursorY, {
+          fit: [photoAvailW, photoBoxH],
+          align: "center",
+          valign: "center",
+        });
+        cursorY += photoBoxH + 4;
+      } catch {
+        // Skip if image can't be read
+      }
+    }
+  }
 
   // ═══════════════════════════════════════════════════════════════
   // SIGN-OFF — positioned at the BOTTOM of the first page.
@@ -606,7 +651,7 @@ export async function generatePipelineReportPdf(
         label: "Inspected By",
         name: report.inspectorName ?? "—",
         designation: (report as any).inspectorDesignation ?? "",
-        dateVal: new Date(report.inspectionDate).toISOString().slice(0, 10),
+        dateVal: fromDateStr,
       },
       {
         label: "Second Reviewed By",
@@ -822,6 +867,98 @@ export async function generatePipelineReportPdf(
     // multi-line text blocks for the longer fields.
     startBodyOnFreshPage(80);
     y = drawConditionAssessment(doc, report as any, y, pageW, pageH, MARGIN, maxRowY, addNewPage);
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // CERTIFICATION SECTION — immediately after the measurement table.
+  // Two sub-sections: Equipment/Instrument Certificates and
+  // Personnel/Inspector Certificates. Each certificate gets its own
+  // page. PDF certificates are rasterized page-by-page.
+  // ═══════════════════════════════════════════════════════════════
+  if (certificates.length > 0) {
+    const equipCerts = certificates.filter((c) => c.category === "EQUIPMENT");
+    const personnelCerts = certificates.filter((c) => c.category === "PERSONNEL");
+
+    // Helper to render a certificate on its own page(s)
+    const renderCertificate = async (cert: typeof certificates[0]) => {
+      const ext = (cert.fileExtension || "").toLowerCase();
+      if (!cert.filePath || !existsSync(cert.filePath)) return;
+
+      if (ext === ".pdf") {
+        // Rasterize each page of the PDF certificate
+        const pageBuffers = await rasterizePdfPages(cert.filePath);
+        for (let p = 0; p < pageBuffers.length; p++) {
+          addNewPage();
+          // Certificate header
+          doc.font(FONT_BOLD).fontSize(11).fillColor("#000");
+          doc.text(cert.title || "Certificate", MARGIN, MARGIN, { width: usableW, align: "center" });
+          doc.font(FONT_REGULAR).fontSize(8).fillColor("#444");
+          const subLine = `File: ${cert.fileName}` + (pageBuffers.length > 1 ? `  |  Page ${p + 1} of ${pageBuffers.length}` : "");
+          doc.text(subLine, MARGIN, MARGIN + 16, { width: usableW, align: "center" });
+          doc.fillColor("#000");
+          // Render the rasterized page
+          const certY = MARGIN + 32;
+          const certH = pageH - MARGIN - certY - 20;
+          doc.rect(MARGIN, certY, usableW, certH).stroke("#ddd");
+          try {
+            doc.image(pageBuffers[p], MARGIN, certY, { fit: [usableW, certH], align: "center", valign: "center" });
+          } catch {}
+        }
+      } else if ([".png", ".jpg", ".jpeg"].includes(ext)) {
+        // Image certificate — one page
+        addNewPage();
+        doc.font(FONT_BOLD).fontSize(11).fillColor("#000");
+        doc.text(cert.title || "Certificate", MARGIN, MARGIN, { width: usableW, align: "center" });
+        doc.font(FONT_REGULAR).fontSize(8).fillColor("#444");
+        doc.text(`File: ${cert.fileName}`, MARGIN, MARGIN + 16, { width: usableW, align: "center" });
+        doc.fillColor("#000");
+        const certY = MARGIN + 32;
+        const certH = pageH - MARGIN - certY - 20;
+        doc.rect(MARGIN, certY, usableW, certH).stroke("#ddd");
+        try {
+          const imgBuf = readFileSync(cert.filePath);
+          doc.image(imgBuf, MARGIN, certY, { fit: [usableW, certH], align: "center", valign: "center" });
+        } catch {}
+      }
+    };
+
+    // Equipment/Instrument Certificates sub-section
+    if (equipCerts.length > 0) {
+      // Certification heading on the current page (or new page if no room)
+      if (y + 30 > maxRowY) { addNewPage(); y = MARGIN; }
+      y += 10;
+      doc.font(FONT_BOLD).fontSize(12).fillColor("#000");
+      doc.text("Certification", MARGIN, y);
+      y += 20;
+      doc.font(FONT_BOLD).fontSize(10);
+      doc.text(`Equipment / Instrument Certificates (${equipCerts.length})`, MARGIN, y);
+      y += 16;
+
+      for (const cert of equipCerts) {
+        await renderCertificate(cert);
+      }
+    }
+
+    // Personnel/Inspector Certificates sub-section
+    if (personnelCerts.length > 0) {
+      if (equipCerts.length === 0) {
+        // If no equipment certs, still show the Certification heading
+        if (y + 30 > maxRowY) { addNewPage(); y = MARGIN; }
+        y += 10;
+        doc.font(FONT_BOLD).fontSize(12).fillColor("#000");
+        doc.text("Certification", MARGIN, y);
+        y += 20;
+      }
+
+      // Personnel heading on a fresh page or continuing
+      addNewPage();
+      doc.font(FONT_BOLD).fontSize(10).fillColor("#000");
+      doc.text(`Personnel / Inspector Certificates (${personnelCerts.length})`, MARGIN, MARGIN, { width: usableW });
+
+      for (const cert of personnelCerts) {
+        await renderCertificate(cert);
+      }
+    }
   }
 
   // ── INSPECTION DESCRIPTION ──

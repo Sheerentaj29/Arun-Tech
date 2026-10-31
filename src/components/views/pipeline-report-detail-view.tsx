@@ -69,6 +69,9 @@ interface FullReport {
   recommendations?: string | null;
   nextInspectionRecommendation?: string | null;
   // ─── NEW REPORT SECTIONS + SIGN-OFF FIELDS ───
+  fromDate?: string | null;
+  toDate?: string | null;
+  primaryPhotoPath?: string | null;
   siteObservationSummary?: string | null;
   results?: string | null;
   conclusion?: string | null;
@@ -78,6 +81,11 @@ interface FullReport {
   secondReviewedAt?: string | null;
   approvedByDesignation?: string | null;
   recommendations?: string | null;
+  // ─── Certificates ───
+  certificates?: Array<{
+    id: string; category: string; title: string; fileName: string;
+    fileExtension: string; fileSize: number; mimeType: string; sortOrder: number;
+  }>;
   inspectionDate: string;
   status: string;
   revisionNumber: number;
@@ -518,7 +526,7 @@ export function PipelineReportDetailView() {
           <p className="text-center text-xs text-zinc-700">
             Report No: <span className="font-mono">{report.reportNumber}</span>
             {"    |    "}Rev: {report.revisionNumber}
-            {"    |    "}Date: {new Date(report.inspectionDate).toISOString().slice(0, 10)}
+            {"    |    "}Date: {report.fromDate ? new Date(report.fromDate).toISOString().slice(0, 10) : new Date(report.inspectionDate).toISOString().slice(0, 10)}{report.toDate && report.toDate !== report.fromDate ? ` – ${new Date(report.toDate).toISOString().slice(0, 10)}` : ""}
             {"    |    "}Status: {report.status}
           </p>
         </div>
@@ -682,6 +690,102 @@ export function PipelineReportDetailView() {
                     <div className="flex items-center justify-between text-[8px] text-zinc-400">
                       <span className="uppercase">{ext.replace(".", "")}</span>
                       <span>{Math.round(rev.fileSize / 1024)} KB</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Primary Inspection Photo */}
+        {report.primaryPhotoPath && (
+          <div className="mt-4">
+            <h3 className="text-xs font-bold text-zinc-700 mb-2">Primary Inspection Photo</h3>
+            <div className="border border-zinc-300 rounded overflow-hidden" style={{ maxWidth: "400px" }}>
+              <AuthImage
+                src={`/api/pipeline-inspections/${report.id}/primary-photo`}
+                alt="Primary inspection photo"
+                className="w-full h-auto max-h-[300px] object-contain"
+                onClick={() => setLightbox({
+                  url: `/api/pipeline-inspections/${report.id}/primary-photo`,
+                  caption: "Primary Inspection Photo",
+                })}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Equipment / Instrument Certificates */}
+        {report.certificates && report.certificates.filter(c => c.category === "EQUIPMENT").length > 0 && (
+          <div className="mt-6">
+            <h3 className="text-xs font-bold text-zinc-700 mb-2 border-b border-zinc-300 pb-1">
+              Equipment / Instrument Certificates ({report.certificates.filter(c => c.category === "EQUIPMENT").length})
+            </h3>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {report.certificates.filter(c => c.category === "EQUIPMENT").map((cert) => {
+                const ext = (cert.fileExtension || "").toLowerCase();
+                const isImage = [".png", ".jpg", ".jpeg"].includes(ext);
+                const rawUrl = `/api/pipeline-inspections/${report.id}/certificates/${cert.id}/raw`;
+                return (
+                  <div key={cert.id} className="border border-zinc-300 rounded overflow-hidden">
+                    <div className="bg-zinc-50 flex items-center justify-center cursor-zoom-in" style={{ minHeight: "80px" }}
+                      onClick={() => isImage && setLightbox({ url: rawUrl, caption: cert.title })}>
+                      {isImage ? (
+                        <AuthImage src={rawUrl} alt={cert.title} className="w-full h-auto max-h-[120px] object-contain" />
+                      ) : (
+                        <div className="flex flex-col items-center text-muted-foreground p-2">
+                          <FileText className="h-8 w-8" />
+                          <span className="text-xs mt-1">PDF Document</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-2">
+                      <div className="text-xs font-medium truncate">{cert.title}</div>
+                      <div className="text-[10px] text-muted-foreground truncate">{cert.fileName}</div>
+                      <div className="flex items-center justify-between text-[8px] text-zinc-400 mt-0.5">
+                        <span className="uppercase">{ext.replace(".", "")}</span>
+                        <span>{Math.round(cert.fileSize / 1024)}KB</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Personnel / Inspector Certificates */}
+        {report.certificates && report.certificates.filter(c => c.category === "PERSONNEL").length > 0 && (
+          <div className="mt-6">
+            <h3 className="text-xs font-bold text-zinc-700 mb-2 border-b border-zinc-300 pb-1">
+              Personnel / Inspector Certificates ({report.certificates.filter(c => c.category === "PERSONNEL").length})
+            </h3>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {report.certificates.filter(c => c.category === "PERSONNEL").map((cert) => {
+                const ext = (cert.fileExtension || "").toLowerCase();
+                const isImage = [".png", ".jpg", ".jpeg"].includes(ext);
+                const rawUrl = `/api/pipeline-inspections/${report.id}/certificates/${cert.id}/raw`;
+                return (
+                  <div key={cert.id} className="border border-zinc-300 rounded overflow-hidden">
+                    <div className="bg-zinc-50 flex items-center justify-center cursor-zoom-in" style={{ minHeight: "80px" }}
+                      onClick={() => isImage && setLightbox({ url: rawUrl, caption: cert.title })}>
+                      {isImage ? (
+                        <AuthImage src={rawUrl} alt={cert.title} className="w-full h-auto max-h-[120px] object-contain" />
+                      ) : (
+                        <div className="flex flex-col items-center text-muted-foreground p-2">
+                          <FileText className="h-8 w-8" />
+                          <span className="text-xs mt-1">PDF Document</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-2">
+                      <div className="text-xs font-medium truncate">{cert.title}</div>
+                      <div className="text-[10px] text-muted-foreground truncate">{cert.fileName}</div>
+                      <div className="flex items-center justify-between text-[8px] text-zinc-400 mt-0.5">
+                        <span className="uppercase">{ext.replace(".", "")}</span>
+                        <span>{Math.round(cert.fileSize / 1024)}KB</span>
+                      </div>
                     </div>
                   </div>
                 );

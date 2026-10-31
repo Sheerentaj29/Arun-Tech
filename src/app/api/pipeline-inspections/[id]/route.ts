@@ -54,6 +54,10 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       visualObservations: {
         orderBy: { sortOrder: "asc" },
       },
+      // Inspection certificates (equipment + personnel)
+      certificates: {
+        orderBy: [{ category: "asc" }, { sortOrder: "asc" }],
+      },
     },
   });
   if (!report) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -154,6 +158,9 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       applicableStandard: body.applicableStandard ?? existing.applicableStandard,
       standardEdition: body.standardEdition ?? existing.standardEdition,
       inspectionDate: body.inspectionDate ? new Date(body.inspectionDate) : existing.inspectionDate,
+      fromDate: body.fromDate !== undefined ? (body.fromDate ? new Date(body.fromDate) : null) : existing.fromDate,
+      toDate: body.toDate !== undefined ? (body.toDate ? new Date(body.toDate) : null) : existing.toDate,
+      primaryPhotoPath: body.primaryPhotoPath !== undefined ? (body.primaryPhotoPath || null) : existing.primaryPhotoPath,
       findingsSummary: body.findingsSummary ?? existing.findingsSummary,
       comments: body.comments ?? existing.comments,
       inspectionDescription: body.inspectionDescription ?? existing.inspectionDescription,
