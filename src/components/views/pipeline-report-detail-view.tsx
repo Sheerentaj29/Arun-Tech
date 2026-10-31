@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAppStore } from "@/lib/store";
 import { apiFetch } from "@/lib/api-client";
+import { AuthImage } from "@/components/auth-image";
 import { toast } from "sonner";
 
 interface FullReport {
@@ -653,7 +654,7 @@ export function PipelineReportDetailView() {
                       style={{ minHeight: "80px" }}
                     >
                       {previewUrl ? (
-                        <img
+                        <AuthImage
                           src={previewUrl}
                           alt={drawing.title}
                           className="w-full h-auto max-h-[120px] object-contain cursor-zoom-in"
@@ -661,14 +662,6 @@ export function PipelineReportDetailView() {
                             url: previewUrl,
                             caption: `${drawing.title} — ${drawing.drawingNumber}`,
                           })}
-                          onError={(e) => {
-                            const img = e.target as HTMLImageElement;
-                            img.style.display = "none";
-                            const parent = img.parentElement;
-                            if (parent) {
-                              parent.innerHTML = '<div class="text-zinc-400 text-[9px] p-2 text-center">Preview unavailable</div>';
-                            }
-                          }}
                         />
                       ) : ext === ".pdf" ? (
                         <div className="p-2 text-center text-zinc-500">
@@ -740,18 +733,10 @@ export function PipelineReportDetailView() {
                         caption: photo.caption || photo.fileName,
                       })}
                     >
-                      <img
+                      <AuthImage
                         src={rawUrl}
                         alt={photo.caption || photo.fileName}
                         className="w-full h-auto max-h-[140px] object-contain"
-                        onError={(e) => {
-                          const img = e.target as HTMLImageElement;
-                          img.style.display = "none";
-                          const parent = img.parentElement;
-                          if (parent) {
-                            parent.innerHTML = '<div class="text-zinc-400 text-[9px] p-2 text-center">Image load failed<br/>' + `${photo.fileName}` + '</div>';
-                          }
-                        }}
                       />
                     </div>
                     <div className="p-1.5">
@@ -912,7 +897,7 @@ export function PipelineReportDetailView() {
             <X className="h-8 w-8" />
           </button>
           <div className="max-h-full max-w-full" onClick={(e) => e.stopPropagation()}>
-            <img
+            <AuthImage
               src={lightbox.url}
               alt={lightbox.caption}
               className="max-h-[85vh] max-w-[90vw] object-contain rounded-lg shadow-2xl"
