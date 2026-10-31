@@ -92,7 +92,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       revisions: true,
       inspector: true,
       approver: true,
-      client: { select: { id: true, name: true } },
+      client: { select: { id: true, name: true, logoPath: true } },
       plant: { select: { id: true, name: true, location: true, address: true } },
       // Include photos + linked drawings so the approved PDF actually
       // contains them

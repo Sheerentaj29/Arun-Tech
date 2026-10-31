@@ -67,6 +67,16 @@ interface FullReport {
   riskPriorityLevel?: string | null;
   recommendations?: string | null;
   nextInspectionRecommendation?: string | null;
+  // ─── NEW REPORT SECTIONS + SIGN-OFF FIELDS ───
+  siteObservationSummary?: string | null;
+  results?: string | null;
+  conclusion?: string | null;
+  inspectorDesignation?: string | null;
+  secondReviewedByName?: string | null;
+  secondReviewedByDesignation?: string | null;
+  secondReviewedAt?: string | null;
+  approvedByDesignation?: string | null;
+  recommendations?: string | null;
   inspectionDate: string;
   status: string;
   revisionNumber: number;
@@ -690,14 +700,46 @@ export function PipelineReportDetailView() {
         {/* Findings + Comments */}
         <div className="mt-4 space-y-3">
           <div>
-            <h3 className="text-xs font-bold uppercase text-zinc-700">Findings Summary</h3>
+            <h3 className="text-xs font-bold text-zinc-700">Findings Summary</h3>
             <p className="mt-1 text-xs whitespace-pre-wrap">{report.findingsSummary ?? "—"}</p>
           </div>
           <div>
-            <h3 className="text-xs font-bold uppercase text-zinc-700">Comments</h3>
+            <h3 className="text-xs font-bold text-zinc-700">Comments</h3>
             <p className="mt-1 text-xs whitespace-pre-wrap">{report.comments ?? "—"}</p>
           </div>
         </div>
+
+        {/* Summary Of Site Observations */}
+        {report.siteObservationSummary && (
+          <div className="mt-4">
+            <h3 className="text-xs font-bold text-zinc-700">Summary Of Site Observations</h3>
+            <p className="mt-1 text-xs whitespace-pre-wrap">{report.siteObservationSummary}</p>
+          </div>
+        )}
+
+        {/* Results */}
+        {report.results && (
+          <div className="mt-3">
+            <h3 className="text-xs font-bold text-zinc-700">Results</h3>
+            <p className="mt-1 text-xs whitespace-pre-wrap">{report.results}</p>
+          </div>
+        )}
+
+        {/* Recommendations */}
+        {report.recommendations && (
+          <div className="mt-3">
+            <h3 className="text-xs font-bold text-zinc-700">Recommendations</h3>
+            <p className="mt-1 text-xs whitespace-pre-wrap">{report.recommendations}</p>
+          </div>
+        )}
+
+        {/* Conclusion */}
+        {report.conclusion && (
+          <div className="mt-3">
+            <h3 className="text-xs font-bold text-zinc-700">Conclusion</h3>
+            <p className="mt-1 text-xs whitespace-pre-wrap">{report.conclusion}</p>
+          </div>
+        )}
 
         {/* Inspection Photos section — shows uploaded photos as thumbnails with captions */}
         {report.reportPhotos && report.reportPhotos.length > 0 && (

@@ -149,9 +149,17 @@ interface ReportHeader {
   comments: string;
   inspectionDescription: string;
   customColumns: string; // JSON array of {id, name, unit}
-  // ─── PIPELINE CONDITION fields (only used when reportType = PIPELINE_CONDITION;
-  // ignored otherwise) ───
-  pipelineAgeYears: string;       // free-text input → parsed to number on save
+  // ─── NEW REPORT SECTIONS (all report types) ───
+  siteObservationSummary: string;
+  results: string;
+  conclusion: string;
+  // ─── SIGN-OFF FIELDS ───
+  inspectorDesignation: string;
+  secondReviewedByName: string;
+  secondReviewedByDesignation: string;
+  approvedByDesignation: string;
+  // Condition fields default empty
+  pipelineAgeYears: string;
   serviceFluid: string;
   operatingCondition: string;
   overallConditionRating: string;
@@ -181,6 +189,15 @@ const EMPTY_HEADER: ReportHeader = {
   comments: "",
   inspectionDescription: "",
   customColumns: "[]",
+  // New report sections (all types)
+  siteObservationSummary: "",
+  results: "",
+  conclusion: "",
+  // Sign-off fields
+  inspectorDesignation: "",
+  secondReviewedByName: "",
+  secondReviewedByDesignation: "",
+  approvedByDesignation: "",
   // Condition fields default empty
   pipelineAgeYears: "",
   serviceFluid: "",
@@ -411,6 +428,15 @@ export function PipelineReportFormView() {
           comments: r.comments ?? "",
           inspectionDescription: r.inspectionDescription ?? "",
           customColumns: r.customColumns ?? "[]",
+          // New report sections (all types)
+          siteObservationSummary: r.siteObservationSummary ?? "",
+          results: r.results ?? "",
+          conclusion: r.conclusion ?? "",
+          // Sign-off fields
+          inspectorDesignation: r.inspectorDesignation ?? "",
+          secondReviewedByName: r.secondReviewedByName ?? "",
+          secondReviewedByDesignation: r.secondReviewedByDesignation ?? "",
+          approvedByDesignation: r.approvedByDesignation ?? "",
           // Condition fields (only populated for PIPELINE_CONDITION reports)
           pipelineAgeYears: r.pipelineAgeYears != null ? String(r.pipelineAgeYears) : "",
           serviceFluid: r.serviceFluid ?? "",
@@ -2499,7 +2525,109 @@ export function PipelineReportFormView() {
               />
             </div>
 
-            {/* D. Photo Upload */}
+            {/* D. Summary of Site Observations */}
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Summary Of Site Observations</Label>
+              <Textarea
+                rows={4}
+                value={header.siteObservationSummary}
+                onChange={(e) => updateHeader("siteObservationSummary", e.target.value)}
+                placeholder="Concise summary of all observations made during the site inspection..."
+                className="text-sm"
+              />
+            </div>
+
+            {/* E. Results */}
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Results</Label>
+              <Textarea
+                rows={3}
+                value={header.results}
+                onChange={(e) => updateHeader("results", e.target.value)}
+                placeholder="Summary of the inspection or measurement results..."
+                className="text-sm"
+              />
+            </div>
+
+            {/* F. Recommendations */}
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Recommendations</Label>
+              <Textarea
+                rows={3}
+                value={header.recommendations}
+                onChange={(e) => updateHeader("recommendations", e.target.value)}
+                placeholder="Recommended actions, repairs, monitoring, or follow-up activities..."
+                className="text-sm"
+              />
+            </div>
+
+            {/* G. Conclusion */}
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Conclusion</Label>
+              <Textarea
+                rows={2}
+                value={header.conclusion}
+                onChange={(e) => updateHeader("conclusion", e.target.value)}
+                placeholder="Final overall conclusion of the inspection..."
+                className="text-sm"
+              />
+            </div>
+
+            {/* H. Sign-off fields */}
+            <div className="rounded-md border border-zinc-200 p-3 space-y-3 bg-muted/20">
+              <Label className="text-sm font-semibold block">Sign-Off Details</Label>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="space-y-2">
+                  <Label className="text-xs">Inspected By — Name</Label>
+                  <Input
+                    value={header.inspectorName}
+                    readOnly
+                    className="text-sm bg-muted/30"
+                    placeholder="Auto-filled from session"
+                  />
+                  <Label className="text-xs">Inspected By — Designation</Label>
+                  <Input
+                    value={header.inspectorDesignation}
+                    onChange={(e) => updateHeader("inspectorDesignation", e.target.value)}
+                    placeholder="e.g. NDT Technician"
+                    className="text-sm"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Second Reviewed By — Name</Label>
+                  <Input
+                    value={header.secondReviewedByName}
+                    onChange={(e) => updateHeader("secondReviewedByName", e.target.value)}
+                    placeholder="e.g. Rahul Sharma"
+                    className="text-sm"
+                  />
+                  <Label className="text-xs">Second Reviewed By — Designation</Label>
+                  <Input
+                    value={header.secondReviewedByDesignation}
+                    onChange={(e) => updateHeader("secondReviewedByDesignation", e.target.value)}
+                    placeholder="e.g. Senior Inspector"
+                    className="text-sm"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Approved By — Name</Label>
+                  <Input
+                    value={header.approvedByDesignation ? `Admin (set during approval)` : "Set during admin approval"}
+                    readOnly
+                    className="text-sm bg-muted/30"
+                  />
+                  <Label className="text-xs">Approved By — Designation</Label>
+                  <Input
+                    value={header.approvedByDesignation}
+                    onChange={(e) => updateHeader("approvedByDesignation", e.target.value)}
+                    placeholder="e.g. QA Manager"
+                    className="text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* I. Photo Upload */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <Label className="text-sm font-semibold">Photographs</Label>

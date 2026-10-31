@@ -319,6 +319,27 @@ model PipelineInspection {
   recommendations          String?  // Recommendations (free text, multi-line)
   nextInspectionRecommendation String? // Next Inspection Recommendation
 
+  // ─── NEW REPORT SECTIONS (all report types) ───
+  // These appear after the measurement/observation data and before the
+  // inspection photos in the final PDF. They are editable in the form
+  // (Step 4: Findings & Photos) and visible during review.
+  siteObservationSummary   String?  // Summary of Site Observations
+  results                  String?  // Results
+  conclusion               String?  // Conclusion
+
+  // ─── SIGN-OFF FIELDS ───
+  // The existing inspectorName / approver fields are preserved.
+  // New fields for the three-signatory sign-off:
+  //   Inspected By → inspectorName (existing) + inspectorDesignation (new)
+  //   Second Reviewed By → secondReviewedByName + secondReviewedByDesignation + secondReviewedAt
+  //   Approved By → approver.name (existing) + approvedByDesignation (new) + approvedAt (existing)
+  inspectorDesignation       String?  // Designation of the inspector
+  secondReviewedById         String?  // User who did the second review
+  secondReviewedByName       String?  // Name snapshot
+  secondReviewedByDesignation String? // Designation
+  secondReviewedAt           DateTime? // Date of second review
+  approvedByDesignation      String?  // Designation of the approver
+
   isDemo                   Boolean  @default(false)
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt

@@ -43,6 +43,31 @@ import { mkdtempSync, readdirSync, unlinkSync, rmdirSync } from "fs";
 
 const execFileAsync = promisify(execFile);
 
+// ─── Font registration: Geist Sans ───
+// The Geist font package provides TTF files. We register them with pdfkit
+// so the generated PDF uses Geist Sans consistently.
+const GEIST_REGULAR = "/home/z/my-project/node_modules/geist/dist/fonts/geist-sans/Geist-Regular.ttf";
+const GEIST_BOLD = "/home/z/my-project/node_modules/geist/dist/fonts/geist-sans/Geist-Bold.ttf";
+const GEIST_MEDIUM = "/home/z/my-project/node_modules/geist/dist/fonts/geist-sans/Geist-Medium.ttf";
+
+// Fall back to Helvetica if Geist TTFs are not found (shouldn't happen)
+const FONT_REGULAR = existsSync(GEIST_REGULAR) ? "GeistSans" : "Helvetica";
+const FONT_BOLD = existsSync(GEIST_BOLD) ? "GeistSans-Bold" : "Helvetica-Bold";
+const FONT_MEDIUM = existsSync(GEIST_MEDIUM) ? "GeistSans-Medium" : "Helvetica-Bold";
+
+// Default body font size per the spec: 10.5pt
+const BODY_FONT_SIZE = 10.5;
+
+// Service company logo path (uploaded by admin via /api/settings/service-logo)
+function findServiceLogo(): string | null {
+  const dir = "/home/z/my-project/storage/logos";
+  for (const ext of ["png", "jpg", "jpeg", "webp", "gif"]) {
+    const p = join(dir, `service-company.${ext}`);
+    if (existsSync(p)) return p;
+  }
+  return null;
+}
+
 // ─── Report type metadata ───
 // The title is the only piece used directly by the PDF generator; the
 // shortLabel / accent are used by the UI (not here).
@@ -76,13 +101,11 @@ export interface LinkedDrawing {
 
 export interface PdfReportInput {
   report: PipelineInspection & {
-    client: Pick<Client, "id" | "name">;
+    client: Pick<Client, "id" | "name" | "logoPath">;
     plant: Pick<Plant, "id" | "name" | "location" | "address">;
     inspector: Pick<User, "id" | "name" | "email">;
     approver: Pick<User, "id" | "name" | "email"> | null;
     reportPhotos?: ReportPhoto[];
-    // Visual inspection observations — populated when reportType = PIPELINE_VISUAL.
-    // The Prisma include returns these as `report.visualObservations`.
     visualObservations?: VisualInspectionObservation[];
   };
   measurements: ThicknessMeasurement[];
@@ -322,6 +345,12 @@ export async function generatePipelineReportPdf(
       Producer: "Inspection Report Automation System",
     },
   });
+
+  // Register Geist Sans fonts (if available)
+  if (existsSync(GEIST_REGULAR)) doc.registerFont("GeistSans", GEIST_REGULAR);
+  if (existsSync(GEIST_BOLD)) doc.registerFont("GeistSans-Bold", GEIST_BOLD);
+  if (existsSync(GEIST_MEDIUM)) doc.registerFont("GeistSans-Medium", GEIST_MEDIUM);
+
   doc.pipe(out);
 
   const report = input.report;
@@ -394,7 +423,7 @@ export async function generatePipelineReportPdf(
 
   // ── TITLE ──
   const titleFontSize = orientation === "landscape" ? 14 : 12;
-  doc.font("Helvetica-Bold").fontSize(titleFontSize).fillColor("#000");
+  doc.font(FONT_BOLD).fontSize(titleFontSize).fillColor("#000");
   const titleHeight = doc.heightOfString(titleText, { width: usableW, align: "center" });
   doc.text(titleText, MARGIN, cursorY, { width: usableW, align: "center" });
   cursorY += titleHeight + 8;  // explicit 8pt gap below title
@@ -405,28 +434,59 @@ export async function generatePipelineReportPdf(
     `Report No: ${report.reportNumber}    |    Rev: ${report.revisionNumber}    |    ` +
     `Date: ${new Date(report.inspectionDate).toISOString().slice(0, 10)}    |    ` +
     `Status: ${report.status}`;
-  doc.font("Helvetica").fontSize(subtitleFontSize).fillColor("#333");
+  doc.font(FONT_REGULAR).fontSize(subtitleFontSize).fillColor("#333");
   const subtitleHeight = doc.heightOfString(subtitleText, { width: usableW, align: "center" });
   doc.text(subtitleText, MARGIN, cursorY, { width: usableW, align: "center" });
   cursorY += subtitleHeight + 10;  // explicit 10pt gap below subtitle
 
   // ── LOGOS (positioned strictly below subtitle) ──
-  const logoH = 34;
-  const logoW = 110;
-  // Left logo box
-  doc.rect(MARGIN, cursorY, logoW, logoH).stroke("#999");
-  doc.fontSize(7).fillColor("#666").font("Helvetica");
-  doc.text("SERVICE COMPANY\nLOGO", MARGIN, cursorY + 10, {
-    width: logoW, align: "center",
-  });
-  // Right logo box
-  doc.rect(pageW - MARGIN - logoW, cursorY, logoW, logoH).stroke("#999");
-  const clientShort = report.client.name.length > 28
-    ? report.client.name.slice(0, 28)
-    : report.client.name;
-  doc.text(`${clientShort}\nCLIENT LOGO`, pageW - MARGIN - logoW, cursorY + 10, {
-    width: logoW, align: "center",
-  });
+  // Left: service company logo (if uploaded), otherwise a text placeholder.
+  // Right: client company logo (if uploaded), otherwise a text placeholder.
+  // Both logos preserve aspect ratio and fit within a fixed-size box.
+  const logoH = 40;
+  const logoW = 120;
+  const serviceLogoPath = findServiceLogo();
+  const clientLogoPath = report.client.logoPath ?? null;
+
+  // Left logo box (service company)
+  doc.rect(MARGIN, cursorY, logoW, logoH).stroke("#ccc");
+  if (serviceLogoPath && existsSync(serviceLogoPath)) {
+    try {
+      const logoBuf = readFileSync(serviceLogoPath);
+      doc.image(logoBuf, MARGIN, cursorY, { fit: [logoW - 4, logoH - 4], align: "center", valign: "center" });
+    } catch {
+      doc.fontSize(7).fillColor("#999").font(FONT_REGULAR);
+      doc.text("Service Company\nLogo", MARGIN, cursorY + 10, { width: logoW, align: "center" });
+    }
+  } else {
+    doc.fontSize(7).fillColor("#999").font(FONT_REGULAR);
+    doc.text("Service Company\nLogo", MARGIN, cursorY + 10, { width: logoW, align: "center" });
+  }
+
+  // Right logo box (client)
+  doc.rect(pageW - MARGIN - logoW, cursorY, logoW, logoH).stroke("#ccc");
+  if (clientLogoPath && existsSync(clientLogoPath)) {
+    try {
+      const logoBuf = readFileSync(clientLogoPath);
+      doc.image(logoBuf, pageW - MARGIN - logoW, cursorY, { fit: [logoW - 4, logoH - 4], align: "center", valign: "center" });
+    } catch {
+      const clientShort = report.client.name.length > 28
+        ? report.client.name.slice(0, 28)
+        : report.client.name;
+      doc.fontSize(7).fillColor("#999").font(FONT_REGULAR);
+      doc.text(`${clientShort}\nClient Logo`, pageW - MARGIN - logoW, cursorY + 10, {
+        width: logoW, align: "center",
+      });
+    }
+  } else {
+    const clientShort = report.client.name.length > 28
+      ? report.client.name.slice(0, 28)
+      : report.client.name;
+    doc.fontSize(7).fillColor("#999").font(FONT_REGULAR);
+    doc.text(`${clientShort}\nClient Logo`, pageW - MARGIN - logoW, cursorY + 10, {
+      width: logoW, align: "center",
+    });
+  }
   doc.fillColor("#000");
   cursorY += logoH + 10;  // explicit 10pt gap below logos
 
@@ -461,10 +521,10 @@ export async function generatePipelineReportPdf(
     const right = infoRows[i + 1] ?? ["", "—"];
 
     // Calculate wrapped heights for each cell in this pair
-    doc.font("Helvetica-Bold").fontSize(fontSizeInfo);
+    doc.font(FONT_BOLD).fontSize(fontSizeInfo);
     const leftLabelH = doc.heightOfString(left[0] ?? "", { width: labelW - 2 * cellPad });
     const rightLabelH = doc.heightOfString(right[0] ?? "", { width: labelW - 2 * cellPad });
-    doc.font("Helvetica").fontSize(fontSizeInfo);
+    doc.font(FONT_REGULAR).fontSize(fontSizeInfo);
     const leftValStr = left[1] ?? "—";
     const rightValStr = right[1] ?? "—";
     const leftValH = doc.heightOfString(leftValStr, { width: valueW - 2 * cellPad });
@@ -480,13 +540,13 @@ export async function generatePipelineReportPdf(
     }
 
     // Draw left label cell
-    doc.font("Helvetica-Bold").fontSize(fontSizeInfo).fillColor("#000");
+    doc.font(FONT_BOLD).fontSize(fontSizeInfo).fillColor("#000");
     doc.rect(MARGIN, cursorY, labelW, rowH).stroke("#888");
     doc.text(left[0] ?? "", MARGIN + cellPad, cursorY + cellPad, {
       width: labelW - 2 * cellPad, align: "left", height: rowH - 2 * cellPad,
     });
     // Draw left value cell
-    doc.font("Helvetica").fontSize(fontSizeInfo);
+    doc.font(FONT_REGULAR).fontSize(fontSizeInfo);
     doc.rect(MARGIN + labelW, cursorY, valueW, rowH).stroke("#888");
     doc.text(leftValStr, MARGIN + labelW + cellPad, cursorY + cellPad, {
       width: valueW - 2 * cellPad, align: "left", height: rowH - 2 * cellPad,
@@ -494,19 +554,85 @@ export async function generatePipelineReportPdf(
 
     // Draw right label cell
     const rightX = MARGIN + labelW + valueW;
-    doc.font("Helvetica-Bold").fontSize(fontSizeInfo);
+    doc.font(FONT_BOLD).fontSize(fontSizeInfo);
     doc.rect(rightX, cursorY, labelW, rowH).stroke("#888");
     doc.text(right[0] ?? "", rightX + cellPad, cursorY + cellPad, {
       width: labelW - 2 * cellPad, align: "left", height: rowH - 2 * cellPad,
     });
     // Draw right value cell
-    doc.font("Helvetica").fontSize(fontSizeInfo);
+    doc.font(FONT_REGULAR).fontSize(fontSizeInfo);
     doc.rect(rightX + labelW, cursorY, valueW, rowH).stroke("#888");
     doc.text(rightValStr, rightX + labelW + cellPad, cursorY + cellPad, {
       width: valueW - 2 * cellPad, align: "left", height: rowH - 2 * cellPad,
     });
 
     cursorY += rowH;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // SIGN-OFF — on the first page, right after the info grid.
+  // Three signatories: Inspected By, Second Reviewed By, Approved By.
+  // Each with name, designation, and date.
+  // If there's not enough space on the first page, it flows to the next
+  // page naturally (no forced blank page).
+  // ═══════════════════════════════════════════════════════════════
+  {
+    const signOffH = 56;
+    const signW = (pageW - 2 * MARGIN - 2 * 4) / 3;
+    const signBlocks = [
+      {
+        label: "Inspected By",
+        name: report.inspectorName ?? "—",
+        designation: (report as any).inspectorDesignation ?? "",
+        dateVal: new Date(report.inspectionDate).toISOString().slice(0, 10),
+      },
+      {
+        label: "Second Reviewed By",
+        name: (report as any).secondReviewedByName ?? "—",
+        designation: (report as any).secondReviewedByDesignation ?? "",
+        dateVal: (report as any).secondReviewedAt
+          ? new Date((report as any).secondReviewedAt).toISOString().slice(0, 10)
+          : "—",
+      },
+      {
+        label: "Approved By",
+        name: report.approver?.name ?? "—",
+        designation: (report as any).approvedByDesignation ?? "",
+        dateVal: report.approvedAt
+          ? new Date(report.approvedAt).toISOString().slice(0, 10)
+          : "—",
+      },
+    ];
+
+    if (cursorY + signOffH + 10 > maxRowY) {
+      // Not enough space — continue on the next page (no blank page)
+      addNewPage();
+      cursorY = MARGIN;
+    } else {
+      cursorY += 12;
+    }
+
+    // Draw sign-off heading
+    doc.font(FONT_BOLD).fontSize(9).fillColor("#000");
+    doc.text("Sign-Off", MARGIN, cursorY);
+    cursorY += 16;
+
+    for (let i = 0; i < signBlocks.length; i++) {
+      const b = signBlocks[i];
+      const x = MARGIN + i * (signW + 4);
+      doc.font(FONT_REGULAR).fontSize(7).fillColor("#666");
+      doc.rect(x, cursorY, signW, 44).stroke("#999");
+      doc.text(b.label, x + 3, cursorY + 3, { width: signW - 6 });
+      doc.fillColor("#000");
+      doc.font(FONT_BOLD).fontSize(8);
+      doc.text(b.name, x + 3, cursorY + 14, { width: signW - 6 });
+      doc.font(FONT_REGULAR).fontSize(7).fillColor("#444");
+      doc.text(b.designation || "—", x + 3, cursorY + 24, { width: signW - 6 });
+      doc.fontSize(7).fillColor("#666");
+      doc.text(`Date: ${b.dateVal}`, x + 3, cursorY + 36, { width: signW - 6 });
+      doc.fillColor("#000");
+    }
+    cursorY += 44 + 8;
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -659,7 +785,7 @@ export async function generatePipelineReportPdf(
     }
     // If no observations, emit a placeholder row
     if (visualObservations.length === 0) {
-      doc.font("Helvetica").fontSize(8).fillColor("#666");
+      doc.font(FONT_REGULAR).fontSize(8).fillColor("#666");
       doc.rect(MARGIN, y, pageW - 2 * MARGIN, rowH2).stroke("#bbb");
       doc.text("No visual observations recorded.", MARGIN + 4, y + 9, {
         width: pageW - 2 * MARGIN - 8, align: "center",
@@ -679,10 +805,10 @@ export async function generatePipelineReportPdf(
   if (report.inspectionDescription) {
     if (y + 60 > maxRowY) { addNewPage(); y = MARGIN; }
     y += 10;
-    doc.font("Helvetica-Bold").fontSize(9).fillColor("#000");
+    doc.font(FONT_BOLD).fontSize(9).fillColor("#000");
     doc.text("Inspection Description", MARGIN, y);
     y += 14;
-    doc.font("Helvetica").fontSize(8);
+    doc.font(FONT_REGULAR).fontSize(8);
     const descHeight = doc.heightOfString(report.inspectionDescription, { width: pageW - 2 * MARGIN });
     doc.text(report.inspectionDescription, MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
     y += descHeight + 6;
@@ -692,10 +818,10 @@ export async function generatePipelineReportPdf(
   if (report.findingsSummary) {
     if (y + 40 > maxRowY) { addNewPage(); y = MARGIN; }
     y += 8;
-    doc.font("Helvetica-Bold").fontSize(9);
+    doc.font(FONT_BOLD).fontSize(9);
     doc.text("Findings Summary", MARGIN, y);
     y += 14;
-    doc.font("Helvetica").fontSize(8);
+    doc.font(FONT_REGULAR).fontSize(8);
     const findingsH = doc.heightOfString(report.findingsSummary ?? "—", { width: pageW - 2 * MARGIN });
     doc.text(report.findingsSummary ?? "—", MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
     y += findingsH + 6;
@@ -705,23 +831,94 @@ export async function generatePipelineReportPdf(
   if (report.comments) {
     if (y + 30 > maxRowY) { addNewPage(); y = MARGIN; }
     y += 6;
-    doc.font("Helvetica-Bold").fontSize(9);
+    doc.font(FONT_BOLD).fontSize(9);
     doc.text("Comments", MARGIN, y);
     y += 14;
-    doc.font("Helvetica").fontSize(8);
+    doc.font(FONT_REGULAR).fontSize(8);
     const commentsH = doc.heightOfString(report.comments ?? "—", { width: pageW - 2 * MARGIN });
     doc.text(report.comments ?? "—", MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
     y += commentsH + 6;
   }
 
+  // ── SUMMARY OF SITE OBSERVATIONS ──
+  {
+    const text = ((report as any).siteObservationSummary ?? "").trim();
+    if (text) {
+      if (y + 40 > maxRowY) { addNewPage(); y = MARGIN; }
+      y += 8;
+      doc.font(FONT_BOLD).fontSize(9).fillColor("#000");
+      doc.text("Summary Of Site Observations", MARGIN, y);
+      y += 14;
+      doc.font(FONT_REGULAR).fontSize(8);
+      const h = doc.heightOfString(text, { width: pageW - 2 * MARGIN });
+      doc.text(text, MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
+      y += h + 6;
+    }
+  }
+
+  // ── RESULTS ──
+  {
+    const text = ((report as any).results ?? "").trim();
+    if (text) {
+      if (y + 40 > maxRowY) { addNewPage(); y = MARGIN; }
+      y += 8;
+      doc.font(FONT_BOLD).fontSize(9);
+      doc.text("Results", MARGIN, y);
+      y += 14;
+      doc.font(FONT_REGULAR).fontSize(8);
+      const h = doc.heightOfString(text, { width: pageW - 2 * MARGIN });
+      doc.text(text, MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
+      y += h + 6;
+    }
+  }
+
+  // ── RECOMMENDATIONS ──
+  // This field exists on all report types (it was originally only used for
+  // PIPELINE_CONDITION, but the schema now has it on PipelineInspection
+  // for all types). For thickness/visual reports, it's the general
+  // "Recommendations" field.
+  {
+    const text = (report.recommendations ?? "").trim();
+    if (text) {
+      if (y + 40 > maxRowY) { addNewPage(); y = MARGIN; }
+      y += 8;
+      doc.font(FONT_BOLD).fontSize(9);
+      doc.text("Recommendations", MARGIN, y);
+      y += 14;
+      doc.font(FONT_REGULAR).fontSize(8);
+      const h = doc.heightOfString(text, { width: pageW - 2 * MARGIN });
+      doc.text(text, MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
+      y += h + 6;
+    }
+  }
+
+  // ── CONCLUSION ──
+  {
+    const text = ((report as any).conclusion ?? "").trim();
+    if (text) {
+      if (y + 40 > maxRowY) { addNewPage(); y = MARGIN; }
+      y += 8;
+      doc.font(FONT_BOLD).fontSize(9);
+      doc.text("Conclusion", MARGIN, y);
+      y += 14;
+      doc.font(FONT_REGULAR).fontSize(8);
+      const h = doc.heightOfString(text, { width: pageW - 2 * MARGIN });
+      doc.text(text, MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
+      y += h + 6;
+    }
+  }
+
   // ── PHOTOGRAPHS (gallery) ──
+  // Consistent professional grid layout: fixed-size thumbnails with
+  // preserved aspect ratio, centered within each cell.
   if (allPhotos.length > 0) {
     if (y + 100 > maxRowY) { addNewPage(); y = MARGIN; }
     y += 10;
-    doc.font("Helvetica-Bold").fontSize(10).fillColor("#000");
-    doc.text("Photographs", MARGIN, y);
+    doc.font(FONT_BOLD).fontSize(10).fillColor("#000");
+    doc.text("Inspection Photographs", MARGIN, y);
     y += 20;
 
+    // Fixed thumbnail size — consistent across all photos
     const photoW = orientation === "landscape" ? 180 : 140;
     const photoH = orientation === "landscape" ? 120 : 95;
     const gap = 10;
@@ -740,31 +937,34 @@ export async function generatePipelineReportPdf(
         y = MARGIN + 20;
       }
 
+      // Consistent bordered cell for each photo
       doc.rect(px, py, photoW, photoH).stroke("#999");
       if (photo.filePath && existsSync(photo.filePath)) {
         try {
           const imgBuf = readFileSync(photo.filePath);
+          // Fit image preserving aspect ratio, centered in the cell
           doc.image(imgBuf, px + 1, py + 1, {
             fit: [photoW - 2, photoH - 2],
             align: "center",
             valign: "center",
           });
         } catch {
-          doc.fillColor("#999").fontSize(7).font("Helvetica");
-          doc.text("[Image unreadable]", px + 4, py + photoH / 2 - 5, {
+          doc.fillColor("#999").fontSize(7).font(FONT_REGULAR);
+          doc.text("[Image Unreadable]", px + 4, py + photoH / 2 - 5, {
             width: photoW - 8, align: "center",
           });
           doc.fillColor("#000");
         }
       } else {
-        doc.fillColor("#999").fontSize(7).font("Helvetica");
-        doc.text(`[File missing: ${photo.fileName}]`, px + 4, py + photoH / 2 - 5, {
+        doc.fillColor("#999").fontSize(7).font(FONT_REGULAR);
+        doc.text(`[File Missing: ${photo.fileName}]`, px + 4, py + photoH / 2 - 5, {
           width: photoW - 8, align: "center",
         });
         doc.fillColor("#000");
       }
 
-      doc.font("Helvetica").fontSize(7).fillColor("#333");
+      // Caption below each photo
+      doc.font(FONT_REGULAR).fontSize(7).fillColor("#333");
       const caption = photo.caption || photo.fileName;
       doc.text(caption, px, py + photoH + 2, { width: photoW, align: "center" });
       doc.fillColor("#000");
@@ -772,57 +972,19 @@ export async function generatePipelineReportPdf(
     y += Math.ceil(allPhotos.length / photosPerRow) * (photoH + 30);
   }
 
-  // ── SIGN-OFF ──
-  if (y + 80 > maxRowY) { addNewPage(); y = MARGIN; }
-  y += 10;
-  doc.font("Helvetica-Bold").fontSize(9).fillColor("#000");
-  doc.text("Sign-off", MARGIN, y);
-  y += 18;
-
-  const signW = (pageW - 2 * MARGIN - 2 * 8) / 3;
-  const signBlocks = [
-    {
-      label: "Inspected by",
-      name: report.inspectorName,
-      dateVal: new Date(report.inspectionDate).toISOString().slice(0, 10),
-    },
-    {
-      label: "Reviewed / Approved by",
-      name: report.approver?.name ?? "—",
-      dateVal: report.approvedAt
-        ? new Date(report.approvedAt).toISOString().slice(0, 10)
-        : "—",
-    },
-    {
-      label: "Revision",
-      name: `Rev ${report.revisionNumber}`,
-      dateVal: report.status,
-    },
-  ];
-  for (let i = 0; i < signBlocks.length; i++) {
-    const b = signBlocks[i];
-    const x = MARGIN + i * (signW + 8);
-    doc.font("Helvetica").fontSize(7).fillColor("#666");
-    doc.rect(x, y, signW, 50).stroke("#999");
-    doc.text(b.label, x + 4, y + 4, { width: signW - 8 });
-    doc.fillColor("#000");
-    doc.font("Helvetica-Bold").fontSize(8);
-    doc.text(b.name, x + 4, y + 16, { width: signW - 8 });
-    doc.font("Helvetica").fontSize(7).fillColor("#666");
-    doc.text(`Date / Status: ${b.dateVal}`, x + 4, y + 36, { width: signW - 8 });
-    doc.fillColor("#000");
-  }
-
   // ── OVERRIDE NOTE ──
   if (report.overrideReason) {
     y += 60;
-    doc.font("Helvetica-Bold").fontSize(8).fillColor("#a00");
-    doc.text("OVERRIDE APPLIED (recorded):", MARGIN, y, { width: 200 });
-    doc.font("Helvetica").fillColor("#000").fontSize(7);
+    doc.font(FONT_BOLD).fontSize(8).fillColor("#a00");
+    doc.text("Override Applied (Recorded):", MARGIN, y, { width: 200 });
+    doc.font(FONT_REGULAR).fillColor("#000").fontSize(7);
     doc.text(report.overrideReason, MARGIN + 140, y, {
       width: pageW - 2 * MARGIN - 140,
     });
   }
+
+  // NOTE: The sign-off is now on the first page (after the info grid),
+  // not at the end of the document. See the "SIGN-OFF" block above.
 
   doc.end();
 }
@@ -848,11 +1010,11 @@ function drawDrawingImagePage(
   const boxY = MARGIN + headerH;
 
   // Drawing header
-  doc.font("Helvetica-Bold").fontSize(11).fillColor("#000");
+  doc.font(FONT_BOLD).fontSize(11).fillColor("#000");
   doc.text(drawing.title || "Drawing", MARGIN, MARGIN, {
     width: availW, align: "center",
   });
-  doc.font("Helvetica").fontSize(8).fillColor("#444");
+  doc.font(FONT_REGULAR).fontSize(8).fillColor("#444");
   const subLine =
     `Drawing No: ${drawing.drawingNumber}    |    Revision: ${drawing.revisionNumber}    |    ` +
     `Type: ${drawing.drawingType}` +
@@ -889,7 +1051,7 @@ function drawDrawingImagePage(
 
   // Caption at the bottom (same lineBreak:false trick as the footer to
   // avoid triggering a phantom page-break when y is below the printable area)
-  doc.font("Helvetica").fontSize(7).fillColor("#666");
+  doc.font(FONT_REGULAR).fontSize(7).fillColor("#666");
   const captionText = `${drawing.fileName}  ·  ${drawing.fileExtension?.toUpperCase() ?? ""}`;
   const captionW = doc.widthOfString(captionText);
   const captionX = MARGIN + (pageW - 2 * MARGIN - captionW) / 2;
@@ -910,11 +1072,11 @@ function drawDrawingPlaceholder(
   const boxH = pageH - MARGIN - headerH - 30;
 
   // Header
-  doc.font("Helvetica-Bold").fontSize(11).fillColor("#000");
+  doc.font(FONT_BOLD).fontSize(11).fillColor("#000");
   doc.text(drawing.title || "Drawing", MARGIN, MARGIN, {
     width: availW, align: "center",
   });
-  doc.font("Helvetica").fontSize(8).fillColor("#444");
+  doc.font(FONT_REGULAR).fontSize(8).fillColor("#444");
   doc.text(
     `Drawing No: ${drawing.drawingNumber}    |    Revision: ${drawing.revisionNumber}    |    Type: ${drawing.drawingType}`,
     MARGIN, MARGIN + 16,
@@ -943,7 +1105,7 @@ function drawVisualTableHeader(doc: Doc, columns: Column[], colWidths: number[],
   const usable = pageW - 2 * MARGIN;
   doc.rect(MARGIN, y, usable, 36).fill(VISUAL_HEADER_BG).fillColor(VISUAL_HEADER_FG);
   let x = MARGIN;
-  doc.font("Helvetica-Bold").fontSize(7).fillColor(VISUAL_HEADER_FG);
+  doc.font(FONT_BOLD).fontSize(7).fillColor(VISUAL_HEADER_FG);
   for (let i = 0; i < columns.length; i++) {
     const c = columns[i];
     const w = colWidths[i];
@@ -971,7 +1133,7 @@ function drawVisualObservationRow(
   doc.rect(MARGIN, y, usable, rowH).stroke("#999");
   let x = MARGIN;
   const cellPad = 3;
-  doc.font("Helvetica").fontSize(7).fillColor("#000");
+  doc.font(FONT_REGULAR).fontSize(7).fillColor("#000");
 
   for (let i = 0; i < columns.length; i++) {
     const c = columns[i];
@@ -1025,7 +1187,7 @@ function drawConditionAssessment(
 
   // Section heading
   if (y + 20 > maxRowY) { addNewPage(); y = margin; }
-  doc.font("Helvetica-Bold").fontSize(11).fillColor("#000");
+  doc.font(FONT_BOLD).fontSize(11).fillColor("#000");
   doc.text("Condition Assessment", margin, y, { width: pageW - 2 * margin, align: "left" });
   y += 22;
 
@@ -1049,10 +1211,10 @@ function drawConditionAssessment(
     const left = singleLineFields[i];
     const right = singleLineFields[i + 1] ?? ["", "—"];
 
-    doc.font("Helvetica-Bold").fontSize(fontSizeInfo);
+    doc.font(FONT_BOLD).fontSize(fontSizeInfo);
     const leftLabelH = doc.heightOfString(left[0] ?? "", { width: labelW - 2 * cellPad });
     const rightLabelH = doc.heightOfString(right[0] ?? "", { width: labelW - 2 * cellPad });
-    doc.font("Helvetica").fontSize(fontSizeInfo);
+    doc.font(FONT_REGULAR).fontSize(fontSizeInfo);
     const leftValStr = left[1] ?? "—";
     const rightValStr = right[1] ?? "—";
     const leftValH = doc.heightOfString(leftValStr, { width: valueW - 2 * cellPad });
@@ -1062,21 +1224,21 @@ function drawConditionAssessment(
     if (y + rowH > maxRowY) { addNewPage(); y = margin; }
 
     // Left label
-    doc.font("Helvetica-Bold").fontSize(fontSizeInfo).fillColor("#000");
+    doc.font(FONT_BOLD).fontSize(fontSizeInfo).fillColor("#000");
     doc.rect(margin, y, labelW, rowH).stroke("#888");
     doc.text(left[0] ?? "", margin + cellPad, y + cellPad, { width: labelW - 2 * cellPad, align: "left" });
     // Left value
-    doc.font("Helvetica").fontSize(fontSizeInfo);
+    doc.font(FONT_REGULAR).fontSize(fontSizeInfo);
     doc.rect(margin + labelW, y, valueW, rowH).stroke("#888");
     doc.text(leftValStr, margin + labelW + cellPad, y + cellPad, { width: valueW - 2 * cellPad, align: "left" });
 
     // Right label
     const rightX = margin + labelW + valueW;
-    doc.font("Helvetica-Bold").fontSize(fontSizeInfo);
+    doc.font(FONT_BOLD).fontSize(fontSizeInfo);
     doc.rect(rightX, y, labelW, rowH).stroke("#888");
     doc.text(right[0] ?? "", rightX + cellPad, y + cellPad, { width: labelW - 2 * cellPad, align: "left" });
     // Right value
-    doc.font("Helvetica").fontSize(fontSizeInfo);
+    doc.font(FONT_REGULAR).fontSize(fontSizeInfo);
     doc.rect(rightX + labelW, y, valueW, rowH).stroke("#888");
     doc.text(rightValStr, rightX + labelW + cellPad, y + cellPad, { width: valueW - 2 * cellPad, align: "left" });
 
@@ -1095,17 +1257,17 @@ function drawConditionAssessment(
   for (const [label, value] of multiLineFields) {
     const text = (value ?? "").trim();
     if (!text) continue;  // skip empty fields entirely
-    doc.font("Helvetica").fontSize(8);
+    doc.font(FONT_REGULAR).fontSize(8);
     const textH = doc.heightOfString(text, { width: pageW - 2 * margin - 8 });
     const blockH = 18 + textH + 8;  // label + gap + text + bottom pad
     if (y + blockH > maxRowY) { addNewPage(); y = margin; }
     // Label
-    doc.font("Helvetica-Bold").fontSize(9).fillColor("#000");
+    doc.font(FONT_BOLD).fontSize(9).fillColor("#000");
     doc.text(label, margin, y);
     y += 14;
     // Bordered text box
     doc.rect(margin, y, pageW - 2 * margin, textH + 8).stroke("#bbb");
-    doc.font("Helvetica").fontSize(8);
+    doc.font(FONT_REGULAR).fontSize(8);
     doc.text(text, margin + 4, y + 4, { width: pageW - 2 * margin - 8, align: "left" });
     y += textH + 8 + 8;
   }
@@ -1119,7 +1281,7 @@ function drawTableHeader(doc: Doc, columns: Column[], colWidths: number[], y: nu
   const usable = pageW - 2 * MARGIN;
   doc.rect(MARGIN, y, usable, 36).fill(HEADER_BG).fillColor(HEADER_FG);
   let x = MARGIN;
-  doc.font("Helvetica-Bold").fontSize(7).fillColor(HEADER_FG);
+  doc.font(FONT_BOLD).fontSize(7).fillColor(HEADER_FG);
   for (let i = 0; i < columns.length; i++) {
     const c = columns[i];
     const w = colWidths[i];
@@ -1159,7 +1321,7 @@ function drawMeasurementRow(
   doc.rect(MARGIN, y, usable, rowH).stroke("#999");
   let x = MARGIN;
   const cellPad = 3;
-  doc.font("Helvetica").fontSize(8).fillColor("#000");
+  doc.font(FONT_REGULAR).fontSize(8).fillColor("#000");
 
   for (let i = 0; i < columns.length; i++) {
     const c = columns[i];

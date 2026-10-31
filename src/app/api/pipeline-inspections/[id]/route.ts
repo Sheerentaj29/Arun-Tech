@@ -16,7 +16,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const report = await db.pipelineInspection.findUnique({
     where: { id },
     include: {
-      client: { select: { id: true, name: true } },
+      client: { select: { id: true, name: true, logoPath: true } },
       plant: { select: { id: true, name: true, location: true, address: true } },
       inspector: { select: { id: true, name: true, email: true } },
       approver: { select: { id: true, name: true, email: true } },
@@ -178,6 +178,16 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       riskPriorityLevel: body.riskPriorityLevel !== undefined ? (body.riskPriorityLevel?.trim() || null) : existing.riskPriorityLevel,
       recommendations: body.recommendations !== undefined ? (body.recommendations?.trim() || null) : existing.recommendations,
       nextInspectionRecommendation: body.nextInspectionRecommendation !== undefined ? (body.nextInspectionRecommendation?.trim() || null) : existing.nextInspectionRecommendation,
+      // ─── NEW REPORT SECTIONS (all report types) ───
+      siteObservationSummary: body.siteObservationSummary !== undefined ? (body.siteObservationSummary?.trim() || null) : existing.siteObservationSummary,
+      results: body.results !== undefined ? (body.results?.trim() || null) : existing.results,
+      conclusion: body.conclusion !== undefined ? (body.conclusion?.trim() || null) : existing.conclusion,
+      // ─── SIGN-OFF FIELDS ───
+      inspectorDesignation: body.inspectorDesignation !== undefined ? (body.inspectorDesignation?.trim() || null) : existing.inspectorDesignation,
+      secondReviewedByName: body.secondReviewedByName !== undefined ? (body.secondReviewedByName?.trim() || null) : existing.secondReviewedByName,
+      secondReviewedByDesignation: body.secondReviewedByDesignation !== undefined ? (body.secondReviewedByDesignation?.trim() || null) : existing.secondReviewedByDesignation,
+      secondReviewedAt: body.secondReviewedAt !== undefined ? (body.secondReviewedAt ? new Date(body.secondReviewedAt) : null) : existing.secondReviewedAt,
+      approvedByDesignation: body.approvedByDesignation !== undefined ? (body.approvedByDesignation?.trim() || null) : existing.approvedByDesignation,
     },
   });
 

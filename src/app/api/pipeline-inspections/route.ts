@@ -167,6 +167,15 @@ export async function POST(req: NextRequest) {
       riskPriorityLevel: body.riskPriorityLevel?.trim() || null,
       recommendations: body.recommendations?.trim() || null,
       nextInspectionRecommendation: body.nextInspectionRecommendation?.trim() || null,
+      // ─── NEW REPORT SECTIONS (all report types) ───
+      siteObservationSummary: body.siteObservationSummary?.trim() || null,
+      results: body.results?.trim() || null,
+      conclusion: body.conclusion?.trim() || null,
+      // ─── SIGN-OFF FIELDS ───
+      inspectorDesignation: body.inspectorDesignation?.trim() || null,
+      secondReviewedByName: body.secondReviewedByName?.trim() || null,
+      secondReviewedByDesignation: body.secondReviewedByDesignation?.trim() || null,
+      approvedByDesignation: body.approvedByDesignation?.trim() || null,
       isDemo: false,
     },
     include: {

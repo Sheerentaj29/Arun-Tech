@@ -70,7 +70,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const report = await db.pipelineInspection.findUnique({
     where: { id },
     include: {
-      client: { select: { id: true, name: true } },
+      client: { select: { id: true, name: true, logoPath: true } },
       plant: { select: { id: true, name: true, location: true, address: true } },
       inspector: { select: { id: true, name: true, email: true } },
       approver: { select: { id: true, name: true, email: true } },
