@@ -541,6 +541,9 @@ export async function generatePipelineReportPdf(
   // Position the sign-off at the bottom of the first page, above the footer
   const signOffY = pageH - MARGIN - signOffBlockH - 8; // 8pt gap above footer
   const maxRowY = signOffY - 12; // info grid must end 12pt above the sign-off
+  // For pages AFTER the first page (no sign-off), the available space
+  // extends to just above the footer.
+  const pageMaxY = pageH - MARGIN - 8;
 
   for (let i = 0; i < infoRows.length; i += 2) {
     const left = infoRows[i];
@@ -789,12 +792,13 @@ export async function generatePipelineReportPdf(
   // initialize to 0 to satisfy the type checker.
   let y: number = 0;
 
-  // Helper: decide whether to start on a fresh page or continue
+  // Helper: decide whether to start on a fresh page or continue.
+  // Uses pageMaxY (not maxRowY) because these pages don't have a sign-off.
   const startBodyOnFreshPage = (neededSpace: number) => {
     if (linkedDrawings.length > 0) {
       addNewPage();
       y = MARGIN;
-    } else if (cursorY + neededSpace > maxRowY) {
+    } else if (cursorY + neededSpace > pageMaxY) {
       addNewPage();
       y = MARGIN;
     } else {
@@ -809,7 +813,7 @@ export async function generatePipelineReportPdf(
     drawTableHeader(doc, allCols, colWidths, y, pageW);
     y += tableHeaderH;
     for (const m of measurements) {
-      if (y + rowH2 > maxRowY) {
+      if (y + rowH2 > pageMaxY) {
         addNewPage();
         drawTableHeader(doc, allCols, colWidths, MARGIN, pageW);
         y = MARGIN + tableHeaderH;
@@ -843,7 +847,7 @@ export async function generatePipelineReportPdf(
     drawVisualTableHeader(doc, visCols, visColWidths, y, pageW);
     y += tableHeaderH;
     for (const o of visualObservations) {
-      if (y + rowH2 > maxRowY) {
+      if (y + rowH2 > pageMaxY) {
         addNewPage();
         drawVisualTableHeader(doc, visCols, visColWidths, MARGIN, pageW);
         y = MARGIN + tableHeaderH;
@@ -866,110 +870,222 @@ export async function generatePipelineReportPdf(
     // Render as a labeled grid (similar to the header info grid) plus
     // multi-line text blocks for the longer fields.
     startBodyOnFreshPage(80);
-    y = drawConditionAssessment(doc, report as any, y, pageW, pageH, MARGIN, maxRowY, addNewPage);
+    y = drawConditionAssessment(doc, report as any, y, pageW, pageH, MARGIN, pageMaxY, addNewPage);
   }
 
   // ═══════════════════════════════════════════════════════════════
   // CERTIFICATION SECTION — immediately after the measurement table.
-  // Two sub-sections: Equipment/Instrument Certificates and
-  // Personnel/Inspector Certificates. Each certificate gets its own
-  // page. PDF certificates are rasterized page-by-page.
+  // Layout rules:
+  //   - "Certification" heading + sub-heading go on the SAME page as
+  //     the first certificate (never alone at the bottom of a page).
+  //   - Each certificate gets its own page.
+  //   - PDF certificates are rasterized page-by-page.
+  //   - No blank pages when no certificates are uploaded.
   // ═══════════════════════════════════════════════════════════════
   if (certificates.length > 0) {
     const equipCerts = certificates.filter((c) => c.category === "EQUIPMENT");
     const personnelCerts = certificates.filter((c) => c.category === "PERSONNEL");
 
-    // Helper to render a certificate on its own page(s)
-    const renderCertificate = async (cert: typeof certificates[0]) => {
+    // Helper: render a certificate on the current page (assumes a new page
+    // has already been created). Returns nothing — each cert is on its own page.
+    const renderCertificateOnPage = async (cert: typeof certificates[0]) => {
       const ext = (cert.fileExtension || "").toLowerCase();
-      if (!cert.filePath || !existsSync(cert.filePath)) return;
+      if (!cert.filePath || !existsSync(cert.filePath)) {
+        // Draw a placeholder
+        doc.font(FONT_REGULAR).fontSize(9).fillColor("#999");
+        doc.text(`[File missing: ${cert.fileName}]`, MARGIN, MARGIN + 36, { width: usableW, align: "center" });
+        doc.fillColor("#000");
+        return;
+      }
+
+      // Certificate header (title + file name) at the top of the page
+      doc.font(FONT_BOLD).fontSize(11).fillColor("#000");
+      doc.text(cert.title || "Certificate", MARGIN, MARGIN, { width: usableW, align: "center" });
+      doc.font(FONT_REGULAR).fontSize(8).fillColor("#444");
+      doc.text(`File: ${cert.fileName}`, MARGIN, MARGIN + 16, { width: usableW, align: "center" });
+      doc.fillColor("#000");
+
+      // Available area for the certificate image
+      const certY = MARGIN + 32;
+      const certH = pageMaxY - certY;
 
       if (ext === ".pdf") {
         // Rasterize each page of the PDF certificate
         const pageBuffers = await rasterizePdfPages(cert.filePath);
-        for (let p = 0; p < pageBuffers.length; p++) {
-          addNewPage();
-          // Certificate header
-          doc.font(FONT_BOLD).fontSize(11).fillColor("#000");
-          doc.text(cert.title || "Certificate", MARGIN, MARGIN, { width: usableW, align: "center" });
-          doc.font(FONT_REGULAR).fontSize(8).fillColor("#444");
-          const subLine = `File: ${cert.fileName}` + (pageBuffers.length > 1 ? `  |  Page ${p + 1} of ${pageBuffers.length}` : "");
-          doc.text(subLine, MARGIN, MARGIN + 16, { width: usableW, align: "center" });
+        if (pageBuffers.length === 0) {
+          doc.fillColor("#999").fontSize(9).font(FONT_REGULAR);
+          doc.text("[Could not rasterize PDF certificate]", MARGIN, certY + certH / 2, { width: usableW, align: "center" });
           doc.fillColor("#000");
-          // Render the rasterized page
-          const certY = MARGIN + 32;
-          const certH = pageH - MARGIN - certY - 20;
+          return;
+        }
+        for (let p = 0; p < pageBuffers.length; p++) {
+          if (p > 0) addNewPage(); // subsequent pages of the same PDF cert
+          // Re-draw the header on subsequent pages
+          if (p > 0) {
+            doc.font(FONT_BOLD).fontSize(11).fillColor("#000");
+            doc.text(cert.title || "Certificate", MARGIN, MARGIN, { width: usableW, align: "center" });
+            doc.font(FONT_REGULAR).fontSize(8).fillColor("#444");
+            doc.text(`File: ${cert.fileName}  |  Page ${p + 1} of ${pageBuffers.length}`, MARGIN, MARGIN + 16, { width: usableW, align: "center" });
+            doc.fillColor("#000");
+          }
           doc.rect(MARGIN, certY, usableW, certH).stroke("#ddd");
           try {
             doc.image(pageBuffers[p], MARGIN, certY, { fit: [usableW, certH], align: "center", valign: "center" });
           } catch {}
         }
       } else if ([".png", ".jpg", ".jpeg"].includes(ext)) {
-        // Image certificate — one page
-        addNewPage();
-        doc.font(FONT_BOLD).fontSize(11).fillColor("#000");
-        doc.text(cert.title || "Certificate", MARGIN, MARGIN, { width: usableW, align: "center" });
-        doc.font(FONT_REGULAR).fontSize(8).fillColor("#444");
-        doc.text(`File: ${cert.fileName}`, MARGIN, MARGIN + 16, { width: usableW, align: "center" });
-        doc.fillColor("#000");
-        const certY = MARGIN + 32;
-        const certH = pageH - MARGIN - certY - 20;
+        // Image certificate — render on this page
         doc.rect(MARGIN, certY, usableW, certH).stroke("#ddd");
         try {
           const imgBuf = readFileSync(cert.filePath);
           doc.image(imgBuf, MARGIN, certY, { fit: [usableW, certH], align: "center", valign: "center" });
-        } catch {}
+        } catch {
+          doc.fillColor("#999").fontSize(9).font(FONT_REGULAR);
+          doc.text("[Could not embed image]", MARGIN, certY + certH / 2, { width: usableW, align: "center" });
+          doc.fillColor("#000");
+        }
       }
     };
 
-    // Equipment/Instrument Certificates sub-section
+    // Equipment / Instrument Certificates
     if (equipCerts.length > 0) {
-      // Certification heading on the current page (or new page if no room)
-      if (y + 30 > maxRowY) { addNewPage(); y = MARGIN; }
-      y += 10;
-      doc.font(FONT_BOLD).fontSize(12).fillColor("#000");
-      doc.text("Certification", MARGIN, y);
-      y += 20;
-      doc.font(FONT_BOLD).fontSize(10);
-      doc.text(`Equipment / Instrument Certificates (${equipCerts.length})`, MARGIN, y);
-      y += 16;
+      // Start a new page for the certification section — ensures the
+      // heading is never alone at the bottom of the measurement table page.
+      addNewPage();
+      // Draw "Certification" heading + sub-heading at the top of this page
+      doc.font(FONT_BOLD).fontSize(14).fillColor("#000");
+      doc.text("Certification", MARGIN, MARGIN, { width: usableW });
+      doc.font(FONT_BOLD).fontSize(11);
+      doc.text(`Equipment / Instrument Certificates (${equipCerts.length})`, MARGIN, MARGIN + 20, { width: usableW });
 
-      for (const cert of equipCerts) {
-        await renderCertificate(cert);
+      // First certificate on THIS page (below the headings)
+      // Subsequent certificates on new pages
+      for (let i = 0; i < equipCerts.length; i++) {
+        if (i > 0) addNewPage();
+        // For the first cert, render below the headings (offset Y)
+        // For subsequent certs, render at the top of the new page
+        if (i === 0) {
+          // Render the certificate header + image starting below the sub-heading
+          const cert = equipCerts[i];
+          const ext = (cert.fileExtension || "").toLowerCase();
+          const certHeaderY = MARGIN + 36; // below the two headings
+          const certY = certHeaderY + 30; // 30pt gap for title + file name text
+          const certH = pageMaxY - certY;
+
+          doc.font(FONT_BOLD).fontSize(11).fillColor("#000");
+          doc.text(cert.title || "Certificate", MARGIN, certHeaderY, { width: usableW, align: "center" });
+          doc.font(FONT_REGULAR).fontSize(8).fillColor("#444");
+          doc.text(`File: ${cert.fileName}`, MARGIN, certHeaderY + 16, { width: usableW, align: "center" });
+          doc.fillColor("#000");
+
+          if (cert.filePath && existsSync(cert.filePath)) {
+            doc.rect(MARGIN, certY, usableW, certH).stroke("#ddd");
+            if (ext === ".pdf") {
+              try {
+                const pages = await rasterizePdfPages(cert.filePath);
+                for (let p = 0; p < pages.length; p++) {
+                  if (p > 0) addNewPage();
+                  if (p > 0) {
+                    doc.font(FONT_BOLD).fontSize(11).fillColor("#000");
+                    doc.text(cert.title || "Certificate", MARGIN, MARGIN, { width: usableW, align: "center" });
+                    doc.font(FONT_REGULAR).fontSize(8).fillColor("#444");
+                    doc.text(`File: ${cert.fileName}  |  Page ${p + 1} of ${pages.length}`, MARGIN, MARGIN + 16, { width: usableW, align: "center" });
+                    doc.fillColor("#000");
+                    const newCertY = MARGIN + 32;
+                    const newCertH = pageMaxY - newCertY;
+                    doc.rect(MARGIN, newCertY, usableW, newCertH).stroke("#ddd");
+                    try { doc.image(pages[p], MARGIN, newCertY, { fit: [usableW, newCertH], align: "center", valign: "center" }); } catch {}
+                  } else {
+                    try { doc.image(pages[p], MARGIN, certY, { fit: [usableW, certH], align: "center", valign: "center" }); } catch {}
+                  }
+                }
+              } catch {}
+            } else if ([".png", ".jpg", ".jpeg"].includes(ext)) {
+              try {
+                const imgBuf = readFileSync(cert.filePath);
+                doc.image(imgBuf, MARGIN, certY, { fit: [usableW, certH], align: "center", valign: "center" });
+              } catch {}
+            }
+          }
+        } else {
+          // Subsequent certificates: render on their own page
+          await renderCertificateOnPage(equipCerts[i]);
+        }
       }
     }
 
-    // Personnel/Inspector Certificates sub-section
+    // Personnel / Inspector Certificates
     if (personnelCerts.length > 0) {
-      if (equipCerts.length === 0) {
-        // If no equipment certs, still show the Certification heading
-        if (y + 30 > maxRowY) { addNewPage(); y = MARGIN; }
-        y += 10;
-        doc.font(FONT_BOLD).fontSize(12).fillColor("#000");
-        doc.text("Certification", MARGIN, y);
-        y += 20;
-      }
-
-      // Personnel heading on a fresh page or continuing
+      // Always start on a new page
       addNewPage();
-      doc.font(FONT_BOLD).fontSize(10).fillColor("#000");
+      doc.font(FONT_BOLD).fontSize(11).fillColor("#000");
       doc.text(`Personnel / Inspector Certificates (${personnelCerts.length})`, MARGIN, MARGIN, { width: usableW });
 
-      for (const cert of personnelCerts) {
-        await renderCertificate(cert);
+      // First certificate on THIS page (below the heading)
+      for (let i = 0; i < personnelCerts.length; i++) {
+        if (i > 0) addNewPage();
+        if (i === 0) {
+          const cert = personnelCerts[i];
+          const ext = (cert.fileExtension || "").toLowerCase();
+          const certHeaderY = MARGIN + 20;
+          const certY = certHeaderY + 30; // 30pt gap for title + file name
+          const certH = pageMaxY - certY;
+
+          doc.font(FONT_BOLD).fontSize(11).fillColor("#000");
+          doc.text(cert.title || "Certificate", MARGIN, certHeaderY, { width: usableW, align: "center" });
+          doc.font(FONT_REGULAR).fontSize(8).fillColor("#444");
+          doc.text(`File: ${cert.fileName}`, MARGIN, certHeaderY + 16, { width: usableW, align: "center" });
+          doc.fillColor("#000");
+
+          if (cert.filePath && existsSync(cert.filePath)) {
+            doc.rect(MARGIN, certY, usableW, certH).stroke("#ddd");
+            if (ext === ".pdf") {
+              try {
+                const pages = await rasterizePdfPages(cert.filePath);
+                for (let p = 0; p < pages.length; p++) {
+                  if (p > 0) addNewPage();
+                  if (p > 0) {
+                    doc.font(FONT_BOLD).fontSize(11).fillColor("#000");
+                    doc.text(cert.title || "Certificate", MARGIN, MARGIN, { width: usableW, align: "center" });
+                    doc.font(FONT_REGULAR).fontSize(8).fillColor("#444");
+                    doc.text(`File: ${cert.fileName}  |  Page ${p + 1} of ${pages.length}`, MARGIN, MARGIN + 16, { width: usableW, align: "center" });
+                    doc.fillColor("#000");
+                    const newCertY = MARGIN + 32;
+                    const newCertH = pageMaxY - newCertY;
+                    doc.rect(MARGIN, newCertY, usableW, newCertH).stroke("#ddd");
+                    try { doc.image(pages[p], MARGIN, newCertY, { fit: [usableW, newCertH], align: "center", valign: "center" }); } catch {}
+                  } else {
+                    try { doc.image(pages[p], MARGIN, certY, { fit: [usableW, certH], align: "center", valign: "center" }); } catch {}
+                  }
+                }
+              } catch {}
+            } else if ([".png", ".jpg", ".jpeg"].includes(ext)) {
+              try {
+                const imgBuf = readFileSync(cert.filePath);
+                doc.image(imgBuf, MARGIN, certY, { fit: [usableW, certH], align: "center", valign: "center" });
+              } catch {}
+            }
+          }
+        } else {
+          await renderCertificateOnPage(personnelCerts[i]);
+        }
       }
     }
+
+    // After certificates, set y to pageMaxY so the next section starts on a new page
+    y = pageMaxY;
   }
 
   // ── INSPECTION DESCRIPTION ──
   if (report.inspectionDescription) {
-    if (y + 60 > maxRowY) { addNewPage(); y = MARGIN; }
+    if (y + 60 > pageMaxY) { addNewPage(); y = MARGIN; }
     y += 10;
     doc.font(FONT_BOLD).fontSize(9).fillColor("#000");
     doc.text("Inspection Description", MARGIN, y);
     y += 14;
     doc.font(FONT_REGULAR).fontSize(8);
     const descHeight = doc.heightOfString(report.inspectionDescription, { width: pageW - 2 * MARGIN });
+    if (y + descHeight > pageMaxY) { addNewPage(); y = MARGIN; }
     doc.text(report.inspectionDescription, MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
     y += descHeight + 6;
   }
@@ -978,13 +1094,14 @@ export async function generatePipelineReportPdf(
   {
     const text = ((report as any).siteObservationSummary ?? "").trim();
     if (text) {
-      if (y + 40 > maxRowY) { addNewPage(); y = MARGIN; }
+      if (y + 40 > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 8;
       doc.font(FONT_BOLD).fontSize(9).fillColor("#000");
       doc.text("Summary Of Site Observations", MARGIN, y);
       y += 14;
       doc.font(FONT_REGULAR).fontSize(8);
       const h = doc.heightOfString(text, { width: pageW - 2 * MARGIN });
+      if (y + h > pageMaxY) { addNewPage(); y = MARGIN; }
       doc.text(text, MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
       y += h + 6;
     }
@@ -994,13 +1111,14 @@ export async function generatePipelineReportPdf(
   {
     const text = ((report as any).results ?? "").trim();
     if (text) {
-      if (y + 40 > maxRowY) { addNewPage(); y = MARGIN; }
+      if (y + 40 > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 8;
       doc.font(FONT_BOLD).fontSize(9);
       doc.text("Results", MARGIN, y);
       y += 14;
       doc.font(FONT_REGULAR).fontSize(8);
       const h = doc.heightOfString(text, { width: pageW - 2 * MARGIN });
+      if (y + h > pageMaxY) { addNewPage(); y = MARGIN; }
       doc.text(text, MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
       y += h + 6;
     }
@@ -1010,23 +1128,26 @@ export async function generatePipelineReportPdf(
   {
     const text = ((report as any).conclusion ?? "").trim();
     if (text) {
-      if (y + 40 > maxRowY) { addNewPage(); y = MARGIN; }
+      if (y + 40 > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 8;
       doc.font(FONT_BOLD).fontSize(9);
       doc.text("Conclusion", MARGIN, y);
       y += 14;
       doc.font(FONT_REGULAR).fontSize(8);
       const h = doc.heightOfString(text, { width: pageW - 2 * MARGIN });
+      if (y + h > pageMaxY) { addNewPage(); y = MARGIN; }
       doc.text(text, MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
       y += h + 6;
     }
   }
 
   // ── PHOTOGRAPHS (gallery) ──
-  // Consistent professional grid layout: fixed-size thumbnails with
-  // preserved aspect ratio, centered within each cell.
+  // Sequential layout: render photos one at a time, tracking the current
+  // column position within the row and the current row Y position.
+  // When a photo + caption doesn't fit in the remaining space, move the
+  // ENTIRE photo (image + caption) to the next page — never split.
   if (allPhotos.length > 0) {
-    if (y + 100 > maxRowY) { addNewPage(); y = MARGIN; }
+    if (y + 30 > pageMaxY) { addNewPage(); y = MARGIN; }
     y += 10;
     doc.font(FONT_BOLD).fontSize(10).fillColor("#000");
     doc.text("Inspection Photographs", MARGIN, y);
@@ -1035,55 +1156,49 @@ export async function generatePipelineReportPdf(
     // Fixed thumbnail size — consistent across all photos
     const photoW = orientation === "landscape" ? 180 : 140;
     const photoH = orientation === "landscape" ? 120 : 95;
+    const captionH = 16; // space reserved for caption below each photo
+    const cellH = photoH + captionH; // total height per photo cell
     const gap = 10;
-    let photosPerRow = Math.floor((pageW - 2 * MARGIN + gap) / (photoW + gap));
-    if (photosPerRow < 1) photosPerRow = 1;
+    const photosPerRow = Math.max(1, Math.floor((pageW - 2 * MARGIN + gap) / (photoW + gap)));
+
+    let currentCol = 0;
+    let currentRowY = y;
 
     for (let i = 0; i < allPhotos.length; i++) {
       const photo = allPhotos[i];
-      const col = i % photosPerRow;
-      const row = Math.floor(i / photosPerRow);
-      const px = MARGIN + col * (photoW + gap);
-      const py = y + row * (photoH + 30);
+      const px = MARGIN + currentCol * (photoW + gap);
+      const py = currentRowY;
 
-      if (py + photoH + 20 > maxRowY) {
+      // Check if this photo + caption fits on the current page.
+      // If not, move to a new page and reset column + row.
+      if (py + cellH > pageMaxY) {
         addNewPage();
-        y = MARGIN + 20;
-      }
-
-      // Consistent bordered cell for each photo
-      doc.rect(px, py, photoW, photoH).stroke("#999");
-      if (photo.filePath && existsSync(photo.filePath)) {
-        try {
-          const imgBuf = readFileSync(photo.filePath);
-          // Fit image preserving aspect ratio, centered in the cell
-          doc.image(imgBuf, px + 1, py + 1, {
-            fit: [photoW - 2, photoH - 2],
-            align: "center",
-            valign: "center",
-          });
-        } catch {
-          doc.fillColor("#999").fontSize(7).font(FONT_REGULAR);
-          doc.text("[Image Unreadable]", px + 4, py + photoH / 2 - 5, {
-            width: photoW - 8, align: "center",
-          });
-          doc.fillColor("#000");
+        currentCol = 0;
+        currentRowY = MARGIN;
+        // Recalculate px and py for the new page
+        const newPx = MARGIN;
+        const newPy = currentRowY;
+        drawPhotoCell(doc, photo, newPx, newPy, photoW, photoH, FONT_REGULAR);
+        currentCol++;
+        if (currentCol >= photosPerRow) {
+          currentCol = 0;
+          currentRowY += cellH + gap;
         }
-      } else {
-        doc.fillColor("#999").fontSize(7).font(FONT_REGULAR);
-        doc.text(`[File Missing: ${photo.fileName}]`, px + 4, py + photoH / 2 - 5, {
-          width: photoW - 8, align: "center",
-        });
-        doc.fillColor("#000");
+        continue;
       }
 
-      // Caption below each photo
-      doc.font(FONT_REGULAR).fontSize(7).fillColor("#333");
-      const caption = photo.caption || photo.fileName;
-      doc.text(caption, px, py + photoH + 2, { width: photoW, align: "center" });
-      doc.fillColor("#000");
+      // Draw the photo cell (image + border + caption)
+      drawPhotoCell(doc, photo, px, py, photoW, photoH, FONT_REGULAR);
+
+      currentCol++;
+      if (currentCol >= photosPerRow) {
+        currentCol = 0;
+        currentRowY += cellH + gap;
+      }
     }
-    y += Math.ceil(allPhotos.length / photosPerRow) * (photoH + 30);
+
+    // Update y to after the last row
+    y = currentRowY + (currentCol > 0 ? cellH + gap : 0);
   }
 
   // ── OVERRIDE NOTE ──
@@ -1101,6 +1216,54 @@ export async function generatePipelineReportPdf(
   // not at the end of the document. See the "SIGN-OFF" block above.
 
   doc.end();
+}
+
+// ─── PHOTO CELL HELPER ───
+// Draws a single photo cell: bordered rectangle, fitted image (centered,
+// aspect ratio preserved), and caption below — all within a fixed-size
+// cell. No overlap with adjacent cells.
+
+function drawPhotoCell(
+  doc: Doc,
+  photo: ReportPhoto,
+  x: number,
+  y: number,
+  photoW: number,
+  photoH: number,
+  fontRegular: string,
+) {
+  // Draw the bordered cell
+  doc.rect(x, y, photoW, photoH).stroke("#999");
+
+  // Embed the image (fitted, centered, aspect ratio preserved)
+  if (photo.filePath && existsSync(photo.filePath)) {
+    try {
+      const imgBuf = readFileSync(photo.filePath);
+      doc.image(imgBuf, x + 1, y + 1, {
+        fit: [photoW - 2, photoH - 2],
+        align: "center",
+        valign: "center",
+      });
+    } catch {
+      doc.fillColor("#999").fontSize(7).font(fontRegular);
+      doc.text("[Image Unreadable]", x + 4, y + photoH / 2 - 5, {
+        width: photoW - 8, align: "center",
+      });
+      doc.fillColor("#000");
+    }
+  } else {
+    doc.fillColor("#999").fontSize(7).font(fontRegular);
+    doc.text(`[File Missing: ${photo.fileName}]`, x + 4, y + photoH / 2 - 5, {
+      width: photoW - 8, align: "center",
+    });
+    doc.fillColor("#000");
+  }
+
+  // Draw caption below the photo (within the cell's allocated caption space)
+  doc.font(fontRegular).fontSize(7).fillColor("#333");
+  const caption = photo.caption || photo.fileName;
+  doc.text(caption, x, y + photoH + 2, { width: photoW, align: "center" });
+  doc.fillColor("#000");
 }
 
 // ─── DRAWING PAGE HELPERS ───
