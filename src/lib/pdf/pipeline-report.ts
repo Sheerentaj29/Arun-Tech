@@ -610,29 +610,81 @@ export async function generatePipelineReportPdf(
 
   // ═══════════════════════════════════════════════════════════════
   // PRIMARY INSPECTION PHOTO — displayed on the first page, between
-  // the client details and the sign-off block. Scaled to fit the
-  // available space while preserving aspect ratio.
+  // the client details and the sign-off block.
+  //
+  // The photo is dynamically sized to fill the AVAILABLE vertical space
+  // between the bottom of the client details and the top of the
+  // sign-off block — NOT capped at a small fixed height.
+  //
+  // The image's intrinsic aspect ratio is always preserved. The photo
+  // is centered horizontally within the usable page width.
   // ═══════════════════════════════════════════════════════════════
   const primaryPhotoPath = (report as any).primaryPhotoPath ?? null;
   if (primaryPhotoPath && existsSync(primaryPhotoPath)) {
-    // Calculate available space between info grid end and sign-off start
-    const photoAvailH = signOffY - 12 - cursorY - 16; // 12pt gap above sign-off, 16pt for label
+    // Calculate the available vertical space:
+    //   signOffY      = top of the sign-off block (anchored to page bottom)
+    //   cursorY       = bottom of the client details grid
+    //   12pt gap      = breathing room above the sign-off separator line
+    //   20pt label    = "Primary Inspection Photo" heading height
+    //   8pt margin    = small gap below the heading before the image
+    const labelH = 20;
+    const gapAboveSignOff = 14;
+    const gapBelowLabel = 8;
+    const photoAvailH = signOffY - gapAboveSignOff - cursorY - labelH - gapBelowLabel;
+
     if (photoAvailH > 40) {
       try {
         const photoBuf = readFileSync(primaryPhotoPath);
-        // Draw label
-        doc.font(FONT_BOLD).fontSize(9).fillColor("#000");
-        doc.text("Primary Inspection Photo", MARGIN, cursorY + 4);
-        cursorY += 18;
-        // Draw the photo centered, preserving aspect ratio
-        const photoAvailW = usableW;
-        const photoBoxH = Math.min(photoAvailH - 18, 120); // max 120pt tall
-        doc.image(photoBuf, MARGIN, cursorY, {
-          fit: [photoAvailW, photoBoxH],
-          align: "center",
-          valign: "center",
+
+        // Draw the label heading
+        doc.font(FONT_BOLD).fontSize(10).fillColor("#000");
+        doc.text("Primary Inspection Photo", MARGIN, cursorY + 4, {
+          width: usableW, align: "left",
         });
-        cursorY += photoBoxH + 4;
+        cursorY += labelH;
+
+        // Available area for the image
+        const photoAvailW = usableW;
+        const imageTopY = cursorY + gapBelowLabel;
+
+        // Get the intrinsic pixel dimensions of the image
+        const dims = imageSize(photoBuf, doc);
+        const imgW = dims.w;
+        const imgH = dims.h;
+
+        if (imgW > 0 && imgH > 0) {
+          // Calculate the best fit that maximizes the image size within
+          // the available area while preserving aspect ratio.
+          // ratio = min(availW / imgW, availH / imgH)
+          const ratio = Math.min(photoAvailW / imgW, photoAvailH / imgH);
+          const drawW = imgW * ratio;
+          const drawH = imgH * ratio;
+
+          // Center horizontally within the usable width
+          const drawX = MARGIN + (photoAvailW - drawW) / 2;
+          const drawY = imageTopY;
+
+          // Draw a faint border around the image area for a professional look
+          doc.rect(drawX - 2, drawY - 2, drawW + 4, drawH + 4).stroke("#e0e0e0");
+
+          // Draw the image using pdfkit's fit option (more reliable than
+          // manual width+height for preserving aspect ratio)
+          doc.image(photoBuf, drawX, drawY, {
+            fit: [drawW, drawH],
+            align: "center",
+            valign: "top",
+          });
+
+          cursorY = drawY + drawH + 4;
+        } else {
+          // Couldn't parse image dimensions — use pdfkit's fit as fallback
+          doc.image(photoBuf, MARGIN, imageTopY, {
+            fit: [photoAvailW, photoAvailH],
+            align: "center",
+            valign: "top",
+          });
+          cursorY = imageTopY + photoAvailH + 4;
+        }
       } catch {
         // Skip if image can't be read
       }
