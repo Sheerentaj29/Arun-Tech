@@ -1890,16 +1890,18 @@ export function PipelineReportFormView() {
           not with the report header. */}
 
       {/* ─── Primary Inspection Photo ───
-          Uses the dedicated PrimaryPhotoUploader component which handles
-          three states cleanly:
-            A) No report header saved yet → shows a "Save Report Header"
-               button so the user can complete the required action inline.
-            B) Header saved, no photo yet → shows a drag-and-drop upload
-               zone with file-type / size hints and retry-on-error.
-            C) Photo uploaded → shows a preview + Replace / Remove buttons.
-          After the header is saved, the upload area appears automatically
-          (no page refresh needed) because the component re-renders when
-          editingPipelineReportId changes.
+          Uses the PrimaryPhotoUploader component which ALWAYS shows the
+          upload area (drag-and-drop + click). There is no large warning
+          box blocking the upload section.
+          
+          If the report header hasn't been saved yet when the user picks
+          a file, the upload handler auto-saves the header in the
+          background and then uploads the photo automatically — so the
+          user can fill in the header fields and upload the photo in one
+          smooth action.
+          
+          After a successful upload, the component transitions to the
+          preview state showing the image + Replace / Remove buttons.
       */}
       <Card>
         <CardHeader>
@@ -1909,8 +1911,8 @@ export function PipelineReportFormView() {
           </CardTitle>
           <CardDescription>
             Upload one main photo of the pipeline, vessel, or equipment being inspected.
-            This photo appears on the first page of the PDF, immediately after the Client Details section.
-            Workflow: <strong>Save Report Header</strong> → <strong>Upload Photo</strong> → <strong>Preview</strong> → <strong>Generate Report</strong>.
+            This photo appears on the first page of the generated PDF, immediately after the Client Details section,
+            filling the available space between the client details and the sign-off block.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -3673,37 +3675,42 @@ function ConsumableSelector({
 }
 
 // ─── PrimaryPhotoUploader component ───
-// A self-contained uploader for the Primary Inspection Photo with three
-// visual states:
+// A self-contained uploader for the Primary Inspection Photo.
 //
-//   STATE A — "Save Report Header first"
-//     Shown when the report hasn't been saved yet (no editingPipelineReportId).
-//     Displays a clear explanation + a prominent "Save Report Header" button
-//     that calls the parent's onSaveHeader callback. After the header is
-//     saved, the parent updates editingPipelineReportId and this component
-//     automatically transitions to STATE B (no page refresh needed).
+// Design principles:
+//   • The upload area (drag-and-drop + click) is ALWAYS visible. There is
+//     no large warning box blocking the upload section.
+//   • If the Report Header hasn't been saved yet (no reportId), the
+//     upload handler auto-saves the header in the background before
+//     uploading — so the user can fill in the header fields and upload
+//     the photo in one smooth action, without having to click a separate
+//     "Save Header" button first.
+//   • If the header is missing required fields (report number, client,
+//     plant) when the user tries to upload, a SMALL inline validation
+//     message appears below the drop zone telling them which fields are
+//     missing. The upload area itself stays visible and usable.
+//   • After a successful upload, the component transitions to the preview
+//     state showing the image + Replace / Remove buttons.
 //
-//   STATE B — "Upload Photo"
-//     Shown when the header is saved but no primary photo has been uploaded.
-//     Renders a drag-and-drop zone (also clickable to open the file picker).
-//     Validates file type and size client-side before uploading. Shows
-//     upload status (idle / uploading / error) inline. On error, displays
-//     the reason and offers a "Try again" button.
-//
-//   STATE C — "Photo Preview"
-//     Shown after a successful upload. Displays the photo preview (via
-//     AuthImage so it works on the cross-origin preview URL), the file
-//     metadata (name + size), and "Replace Photo" / "Remove Photo" buttons.
+// Visual states:
+//   STATE B — "Upload Photo" (always shown when no photo is uploaded yet)
+//     Drag-and-drop zone with file-type / size hints, upload status
+//     (idle / uploading / error), and retry on error.
+//   STATE C — "Photo Preview" (shown after a successful upload)
+//     Image preview + Replace / Remove buttons + success banner.
 //
 // Props:
 //   reportId        — the editingPipelineReportId (null when no report saved yet)
 //   primaryPhotoPath — current value of header.primaryPhotoPath
 //   onPhotoChange   — parent callback to update header.primaryPhotoPath
-//   onSaveHeader    — parent callback to save the report header (saveHeader())
+//   onSaveHeader    — parent callback to save the report header (saveHeader()).
+//                     Called automatically by the upload handler when the
+//                     header hasn't been saved yet.
 //   savingHeader    — whether the parent is currently saving the header
 //   headerValid     — whether the header has the required fields filled in
-//                     (report number, client, plant). Used to show validation
-//                     hints in STATE A.
+//                     (report number, client, plant). Used to show a small
+//                     validation message when the user tries to upload
+//                     without filling in the required fields.
 //
 // All API calls use the dedicated /api/pipeline-inspections/[id]/primary-photo
 // endpoints (POST /upload for uploading, DELETE for clearing).
@@ -3733,39 +3740,25 @@ function PrimaryPhotoUploader({
   // Bump this key to force the AuthImage to re-fetch after a replace
   // (otherwise the blob URL might be cached).
   const [previewKey, setPreviewKey] = useState(0);
+  // When the user picks a file BEFORE the report header is saved, we store
+  // the file here and save the header in the background. Once the parent
+  // updates reportId (via onSaveHeader → setEditingPipelineReportId), a
+  // useEffect below detects the new reportId and automatically retries
+  // the upload with the pending file — so the user gets a seamless
+  // "pick file → header saved → photo uploaded" flow in one action.
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
 
   // Allowed file types — keep in sync with the API endpoint.
   const ACCEPTED_TYPES = "image/png,image/jpeg,image/webp,image/gif";
   const ACCEPTED_EXTS = [".png", ".jpg", ".jpeg", ".webp", ".gif"];
   const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
-  // ─── Upload handler ───
-  // Shared by both the initial upload (STATE B) and the replace flow (STATE C).
-  // Validates the file client-side first, then POSTs it to the dedicated
-  // /primary-photo/upload endpoint.
-  async function uploadFile(file: File) {
-    if (!reportId) {
-      setUploadError("Save the report header first, then upload the photo.");
-      setUploadStatus("error");
-      return;
-    }
-    // Client-side validation
-    if (!file.type.startsWith("image/")) {
-      setUploadError(`"${file.name}" is not an image file. Allowed: PNG, JPG, JPEG, WebP, GIF.`);
-      setUploadStatus("error");
-      return;
-    }
-    if (!ACCEPTED_EXTS.some((ext) => file.name.toLowerCase().endsWith(ext))) {
-      setUploadError(`"${file.name}" has an unsupported extension. Allowed: ${ACCEPTED_EXTS.join(", ")}.`);
-      setUploadStatus("error");
-      return;
-    }
-    if (file.size > MAX_SIZE_BYTES) {
-      setUploadError(`File is too large (${(file.size / 1024 / 1024).toFixed(2)} MB). Maximum: 10 MB.`);
-      setUploadStatus("error");
-      return;
-    }
-
+  // ─── Core upload function ───
+  // Posts the file to the /primary-photo/upload endpoint. Returns true on
+  // success, false on failure. Does NOT handle the "no reportId" case —
+  // that's handled by uploadFile() below which decides whether to save
+  // the header first.
+  async function doUpload(file: File, activeReportId: string): Promise<boolean> {
     setUploadStatus("uploading");
     setUploadError(null);
     try {
@@ -3773,7 +3766,7 @@ function PrimaryPhotoUploader({
       fd.append("file", file);
       const token = typeof window !== "undefined" ? window.localStorage.getItem("ira_session_token") : null;
       const res = await fetch(
-        `/api/pipeline-inspections/${reportId}/primary-photo/upload`,
+        `/api/pipeline-inspections/${activeReportId}/primary-photo/upload`,
         {
           method: "POST",
           body: fd,
@@ -3790,14 +3783,95 @@ function PrimaryPhotoUploader({
       setPreviewKey((k) => k + 1);
       setUploadStatus("idle");
       setUploadError(null);
+      setPendingFile(null);
       toast.success("Primary photo uploaded");
+      return true;
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Upload failed";
       setUploadError(msg);
       setUploadStatus("error");
       toast.error(`Failed to upload primary photo: ${msg}`);
+      return false;
     }
   }
+
+  // ─── Upload handler (entry point) ───
+  // Shared by both the initial upload (STATE B) and the replace flow (STATE C).
+  //
+  // If the report header hasn't been saved yet (no reportId), this handler
+  // auto-saves the header first (via onSaveHeader) and stores the file as
+  // "pending". A useEffect below watches for reportId to become non-null
+  // and then automatically calls doUpload with the pending file — so the
+  // user doesn't have to re-select the file.
+  //
+  // If the header is missing required fields, a small validation message
+  // is shown below the drop zone and the upload is aborted.
+  async function uploadFile(file: File) {
+    // Client-side validation FIRST (before any API calls)
+    if (!file.type.startsWith("image/")) {
+      setUploadError(`"${file.name}" is not an image file. Allowed: PNG, JPG, JPEG, WebP, GIF.`);
+      setUploadStatus("error");
+      return;
+    }
+    if (!ACCEPTED_EXTS.some((ext) => file.name.toLowerCase().endsWith(ext))) {
+      setUploadError(`"${file.name}" has an unsupported extension. Allowed: ${ACCEPTED_EXTS.join(", ")}.`);
+      setUploadStatus("error");
+      return;
+    }
+    if (file.size > MAX_SIZE_BYTES) {
+      setUploadError(`File is too large (${(file.size / 1024 / 1024).toFixed(2)} MB). Maximum: 10 MB.`);
+      setUploadStatus("error");
+      return;
+    }
+
+    // If we already have a reportId, upload immediately.
+    if (reportId) {
+      await doUpload(file, reportId);
+      return;
+    }
+
+    // No reportId yet — the header hasn't been saved.
+    // If the header is missing required fields, show a small validation
+    // message and abort. The upload area stays visible and usable.
+    if (!headerValid) {
+      setUploadError(
+        "Please fill in the required header fields above (Report Number, Client, Plant Location) before uploading the photo.",
+      );
+      setUploadStatus("error");
+      return;
+    }
+
+    // Header is valid but hasn't been saved yet. Save it in the background,
+    // then store the file as "pending" — the useEffect below will detect
+    // when reportId becomes non-null and automatically retry the upload.
+    setPendingFile(file);
+    setUploadStatus("uploading");
+    setUploadError(null);
+    try {
+      await onSaveHeader();
+      // After onSaveHeader resolves, the parent has set editingPipelineReportId.
+      // The useEffect below will fire on the next render and call doUpload
+      // with the pending file. We don't need to do anything else here.
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to save report header";
+      setUploadError(`Could not save the report header: ${msg}`);
+      setUploadStatus("error");
+      setPendingFile(null);
+    }
+  }
+
+  // ─── Auto-retry effect ───
+  // When reportId transitions from null to non-null AND there's a pending
+  // file, automatically upload it. This gives the user a seamless
+  // "pick file → header saved → photo uploaded" flow.
+  useEffect(() => {
+    if (reportId && pendingFile) {
+      doUpload(pendingFile, reportId);
+    }
+    // We intentionally don't include doUpload in the deps — it's a stable
+    // closure that captures the current props/state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reportId, pendingFile]);
 
   // ─── Remove handler ───
   async function removePhoto() {
@@ -3857,67 +3931,8 @@ function PrimaryPhotoUploader({
     e.target.value = "";
   }
 
-  // ─── STATE A: No report header saved yet ───
-  if (!reportId) {
-    return (
-      <div className="rounded-md border-2 border-amber-200 bg-amber-50 p-4 space-y-3">
-        <div className="flex items-start gap-3">
-          <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-          <div className="space-y-1 flex-1">
-            <p className="text-sm font-semibold text-amber-900">
-              Save the Report Header to enable photo upload
-            </p>
-            <p className="text-xs text-amber-800 leading-relaxed">
-              The Primary Inspection Photo is attached to the report record.
-              Before uploading, fill in the required header fields above
-              (<strong>Report Number</strong>, <strong>Client</strong>, and{" "}
-              <strong>Plant Location</strong>) and save the header. The upload
-              area will appear here automatically once the header is saved —
-              no page refresh needed.
-            </p>
-            {!headerValid && (
-              <p className="text-xs text-amber-700 italic mt-2">
-                Required fields are still missing in the Report Header above.
-                Please fill them in before clicking the button below.
-              </p>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center gap-3 pl-8">
-          <Button
-            size="sm"
-            onClick={async () => {
-              try {
-                await onSaveHeader();
-                // After saveHeader succeeds, the parent updates reportId,
-                // which causes this component to re-render into STATE B.
-                // No additional action needed here.
-              } catch (err) {
-                // Errors are surfaced by saveHeader itself via toast + setError
-              }
-            }}
-            disabled={savingHeader}
-          >
-            {savingHeader ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving Header…
-              </>
-            ) : (
-              <>
-                <Save className="mr-2 h-4 w-4" /> Save Report Header
-              </>
-            )}
-          </Button>
-          {savingHeader && (
-            <span className="text-xs text-amber-700">Creating report record…</span>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   // ─── STATE C: Photo already uploaded — show preview + Replace/Remove ───
-  if (primaryPhotoPath) {
+  if (reportId && primaryPhotoPath) {
     return (
       <div className="space-y-3">
         {/* Preview + actions */}
@@ -4009,7 +4024,12 @@ function PrimaryPhotoUploader({
     );
   }
 
-  // ─── STATE B: Header saved, no photo yet — show upload area ───
+  // ─── STATE B: Upload area (ALWAYS shown when no photo is uploaded) ───
+  // This is the default state. The upload area is always visible — there is
+  // no large yellow warning box blocking it. If the user tries to upload
+  // before saving the header, the upload handler auto-saves the header in
+  // the background (or shows a small validation message if required fields
+  // are missing).
   return (
     <div className="space-y-3">
       {/* Drag-and-drop zone (also clickable) */}
@@ -4019,7 +4039,7 @@ function PrimaryPhotoUploader({
           accept={ACCEPTED_TYPES}
           className="hidden"
           onChange={onFileInputChange}
-          disabled={uploadStatus === "uploading"}
+          disabled={uploadStatus === "uploading" || savingHeader}
         />
         <div
           className={`border-2 border-dashed rounded-md p-8 text-center transition-colors ${
@@ -4028,7 +4048,7 @@ function PrimaryPhotoUploader({
               : uploadStatus === "error"
                 ? "border-red-300 bg-red-50"
                 : "border-zinc-300 hover:border-amber-400 hover:bg-zinc-50"
-          } ${uploadStatus === "uploading" ? "opacity-60 pointer-events-none" : ""}`}
+          } ${(uploadStatus === "uploading" || savingHeader) ? "opacity-60 pointer-events-none" : ""}`}
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
           onDrop={onDrop}
@@ -4036,7 +4056,11 @@ function PrimaryPhotoUploader({
           {uploadStatus === "uploading" ? (
             <>
               <Loader2 className="mx-auto h-10 w-10 text-amber-600 mb-3 animate-spin" />
-              <p className="text-sm font-medium text-zinc-700">Uploading photo…</p>
+              <p className="text-sm font-medium text-zinc-700">
+                {pendingFile && savingHeader
+                  ? "Saving report header, then uploading photo…"
+                  : "Uploading photo…"}
+              </p>
               <p className="text-xs text-muted-foreground mt-1">Please wait a moment</p>
             </>
           ) : uploadStatus === "error" ? (
@@ -4068,9 +4092,9 @@ function PrimaryPhotoUploader({
           )}
         </div>
       </label>
-      {/* Dismissable error message below the drop zone (in addition to the
-          inline error state above, so the user always sees the reason even
-          if they navigate away from the drop zone) */}
+      {/* Small validation / error message below the drop zone.
+          This is the ONLY place where validation feedback appears — the
+          upload area itself is never replaced by a warning box. */}
       {uploadStatus === "error" && uploadError && (
         <div className="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700 flex items-start gap-2">
           <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
