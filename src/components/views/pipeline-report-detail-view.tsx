@@ -15,6 +15,8 @@ import {
   CheckCircle2,
   RotateCcw,
   GitBranch,
+  FileText,
+  X,
 } from "lucide-react";
 import {
   Card,
@@ -91,6 +93,43 @@ interface FullReport {
   inspector: { id: string; name: string; email: string };
   approver: { id: string; name: string; email: string } | null;
   returnedBy: { id: string; name: string; email: string } | null;
+  // ─── Photos + Drawings (returned by the API but were missing from the
+  // interface, causing images to never render during report review) ───
+  reportPhotos?: Array<{
+    id: string;
+    fileName: string;
+    filePath: string;
+    fileSize: number;
+    mimeType: string;
+    caption: string | null;
+    sortOrder: number;
+    uploadedByName: string | null;
+    createdAt: string;
+  }>;
+  drawingLinks?: Array<{
+    id: string;
+    drawingId: string;
+    drawingRevisionId: string | null;
+    createdAt: string;
+    drawing: {
+      id: string;
+      title: string;
+      drawingNumber: string;
+      drawingType: string;
+      client?: { id: string; name: string } | null;
+      plant?: { id: string; name: string } | null;
+      revisions: Array<{
+        id: string;
+        revisionNumber: string;
+        fileName: string;
+        filePath: string;
+        fileExtension: string;
+        mimeType: string;
+        fileSize: number;
+        isActive: boolean;
+      }>;
+    };
+  }>;
   measurements: Array<{
     id: string;
     pointNo: string;
@@ -201,6 +240,8 @@ export function PipelineReportDetailView() {
   // Dialog state for workflow actions (submit / approve / return / revise)
   const [dialogMode, setDialogMode] = useState<null | "submit" | "approve" | "return" | "revise">(null);
   const [dialogText, setDialogText] = useState("");
+  // Lightbox state — when set, the image at this URL is shown full-screen
+  const [lightbox, setLightbox] = useState<{ url: string; caption: string } | null>(null);
 
   const load = useCallback(() => {
     if (!selectedPipelineReportId) return;
@@ -576,6 +617,76 @@ export function PipelineReportDetailView() {
           </table>
         </div>
 
+        {/* Engineering Drawings section — shows attached drawings with previews */}
+        {report.drawingLinks && report.drawingLinks.length > 0 && (
+          <div className="mt-6">
+            <h3 className="mb-2 text-xs font-bold uppercase text-zinc-700 border-b border-zinc-300 pb-1">
+              Engineering Drawings ({report.drawingLinks.length})
+            </h3>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {report.drawingLinks.map((link) => {
+                const drawing = link.drawing;
+                const rev = drawing.revisions?.[0];
+                if (!rev) return null;
+                const ext = (rev.fileExtension || "").toLowerCase();
+                const isImage = [".png", ".jpg", ".jpeg", ".webp"].includes(ext);
+                const previewUrl = isImage && drawing.id
+                  ? `/api/drawings/${drawing.id}/preview`
+                  : null;
+                return (
+                  <div key={link.id} className="border border-zinc-300 rounded p-2 text-[10px]">
+                    <div className="mb-1 font-semibold truncate" title={drawing.title}>
+                      {drawing.title}
+                    </div>
+                    <div
+                      className="relative bg-zinc-50 border border-zinc-200 rounded mb-1 flex items-center justify-center overflow-hidden"
+                      style={{ minHeight: "80px" }}
+                    >
+                      {previewUrl ? (
+                        <img
+                          src={previewUrl}
+                          alt={drawing.title}
+                          className="w-full h-auto max-h-[120px] object-contain cursor-zoom-in"
+                          onClick={() => setLightbox({
+                            url: previewUrl,
+                            caption: `${drawing.title} — ${drawing.drawingNumber}`,
+                          })}
+                          onError={(e) => {
+                            const img = e.target as HTMLImageElement;
+                            img.style.display = "none";
+                            const parent = img.parentElement;
+                            if (parent) {
+                              parent.innerHTML = '<div class="text-zinc-400 text-[9px] p-2 text-center">Preview unavailable</div>';
+                            }
+                          }}
+                        />
+                      ) : ext === ".pdf" ? (
+                        <div className="p-2 text-center text-zinc-500">
+                          <FileText className="mx-auto h-8 w-8 mb-1" />
+                          <div>PDF Document</div>
+                          <div className="text-[8px]">({rev.fileName})</div>
+                        </div>
+                      ) : (
+                        <div className="p-2 text-center text-zinc-500">
+                          <FileText className="mx-auto h-8 w-8 mb-1" />
+                          <div>{ext.toUpperCase().replace(".", "")} File</div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="truncate text-zinc-500" title={rev.fileName}>
+                      {rev.fileName}
+                    </div>
+                    <div className="flex items-center justify-between text-[8px] text-zinc-400">
+                      <span className="uppercase">{ext.replace(".", "")}</span>
+                      <span>{Math.round(rev.fileSize / 1024)} KB</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Findings + Comments */}
         <div className="mt-4 space-y-3">
           <div>
@@ -587,6 +698,55 @@ export function PipelineReportDetailView() {
             <p className="mt-1 text-xs whitespace-pre-wrap">{report.comments ?? "—"}</p>
           </div>
         </div>
+
+        {/* Inspection Photos section — shows uploaded photos as thumbnails with captions */}
+        {report.reportPhotos && report.reportPhotos.length > 0 && (
+          <div className="mt-6">
+            <h3 className="mb-2 text-xs font-bold uppercase text-zinc-700 border-b border-zinc-300 pb-1">
+              Inspection Photos ({report.reportPhotos.length})
+            </h3>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {report.reportPhotos.map((photo) => {
+                const rawUrl = `/api/pipeline-inspections/${report.id}/photos/${photo.id}/raw`;
+                return (
+                  <div key={photo.id} className="border border-zinc-300 rounded overflow-hidden">
+                    <div
+                      className="relative bg-zinc-50 cursor-zoom-in flex items-center justify-center"
+                      style={{ minHeight: "100px" }}
+                      onClick={() => setLightbox({
+                        url: rawUrl,
+                        caption: photo.caption || photo.fileName,
+                      })}
+                    >
+                      <img
+                        src={rawUrl}
+                        alt={photo.caption || photo.fileName}
+                        className="w-full h-auto max-h-[140px] object-contain"
+                        onError={(e) => {
+                          const img = e.target as HTMLImageElement;
+                          img.style.display = "none";
+                          const parent = img.parentElement;
+                          if (parent) {
+                            parent.innerHTML = '<div class="text-zinc-400 text-[9px] p-2 text-center">Image load failed<br/>' + `${photo.fileName}` + '</div>';
+                          }
+                        }}
+                      />
+                    </div>
+                    <div className="p-1.5">
+                      <div className="text-[10px] font-medium truncate" title={photo.caption ?? ""}>
+                        {photo.caption || "(no caption)"}
+                      </div>
+                      <div className="flex items-center justify-between text-[8px] text-zinc-400 mt-0.5">
+                        <span className="truncate" title={photo.fileName}>{photo.fileName}</span>
+                        <span>{Math.round(photo.fileSize / 1024)}KB</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Sign-off */}
         <div className="mt-6 grid grid-cols-3 gap-2">
@@ -716,6 +876,29 @@ export function PipelineReportDetailView() {
           </div>
         </CardContent>
       </Card>
+
+      {/* ─── Lightbox: full-screen image preview when a thumbnail is clicked ─── */}
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setLightbox(null)}
+        >
+          <button
+            className="absolute top-4 right-4 text-white/80 hover:text-white"
+            onClick={() => setLightbox(null)}
+          >
+            <X className="h-8 w-8" />
+          </button>
+          <div className="max-h-full max-w-full" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={lightbox.url}
+              alt={lightbox.caption}
+              className="max-h-[85vh] max-w-[90vw] object-contain rounded-lg shadow-2xl"
+            />
+            <p className="mt-2 text-center text-sm text-white/80">{lightbox.caption}</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

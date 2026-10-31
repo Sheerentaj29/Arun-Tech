@@ -339,7 +339,8 @@ export function PipelineReportFormView() {
   const [reportStatus, setReportStatus] = useState<string>("Draft");
 
   // ─── Step navigation state ───
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  // 4 steps: Report Details → Engineering Drawings → Measurements → Findings & Photos
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   // Custom columns parsed from header.customColumns JSON
   const [customColumns, setCustomColumns] = useState<CustomColumn[]>([]);
   // Row selection for bulk delete
@@ -841,22 +842,24 @@ export function PipelineReportFormView() {
       }
       // ALWAYS save the header — for new reports, this creates the
       // report and sets editingPipelineReportId. For existing reports,
-      // it updates the header. Must await so the ID is available
-      // before the user reaches Step 2 (measurement rows / observations
-      // / condition fields need it).
+      // it updates the header.
       await saveHeader();
       setStep(2);
     } else if (step === 2) {
+      // Engineering Drawings step — no validation needed (drawings are optional)
+      // Header is already saved from Step 1; no need to re-save here.
+      setStep(3);
+    } else if (step === 3) {
       validateStep2();
       // For PIPELINE_THICKNESS reports, persist the custom columns JSON
       // onto the header before saving. Other report types don't use
       // custom columns, but saving the header still picks up any
-      // condition field edits the user made on Step 2.
+      // condition field edits the user made on Step 3.
       if (header.reportType === "PIPELINE_THICKNESS") {
         setHeader((h) => ({ ...h, customColumns: JSON.stringify(customColumns) }));
       }
       await saveHeader();
-      setStep(3);
+      setStep(4);
     }
     if (typeof window !== "undefined") {
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -866,8 +869,10 @@ export function PipelineReportFormView() {
   function goPrevious() {
     if (step > 1) {
       // Save current state before going back
-      setHeader((h) => ({ ...h, customColumns: JSON.stringify(customColumns) }));
-      setStep((step - 1) as 1 | 2);
+      if (header.reportType === "PIPELINE_THICKNESS") {
+        setHeader((h) => ({ ...h, customColumns: JSON.stringify(customColumns) }));
+      }
+      setStep((step - 1) as 1 | 2 | 3 | 4);
       if (typeof window !== "undefined") {
         window.scrollTo({ top: 0, behavior: "smooth" });
       }
@@ -1292,8 +1297,8 @@ export function PipelineReportFormView() {
       </div>
 
       {/* ─── Step indicator ─── */}
-      <div className="flex items-center gap-2 rounded-md border bg-muted/30 p-3">
-        {[1, 2, 3].map((s) => (
+      <div className="flex items-center gap-2 rounded-md border bg-muted/30 p-3 flex-wrap">
+        {[1, 2, 3, 4].map((s) => (
           <div key={s} className="flex items-center gap-2">
             <div
               className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${
@@ -1303,13 +1308,13 @@ export function PipelineReportFormView() {
               {step > s ? "✓" : s}
             </div>
             <span className={`text-sm font-medium ${step === s ? "text-amber-700" : "text-muted-foreground"}`}>
-              {s === 1 ? "Pipeline Details" : s === 2 ? typeInfo.step2Label : "Findings & Photos"}
+              {s === 1 ? "Report Details" : s === 2 ? "Engineering Drawings" : s === 3 ? typeInfo.step2Label : "Findings & Photos"}
             </span>
-            {s < 3 && <span className="text-zinc-300">→</span>}
+            {s < 4 && <span className="text-zinc-300">→</span>}
           </div>
         ))}
         <span className="ml-auto text-xs text-muted-foreground">
-          Step {step} of 3 — {step === 1 ? "Pipeline Details" : step === 2 ? typeInfo.step2Label : "Findings & Photos"}
+          Step {step} of 4 — {step === 1 ? "Report Details" : step === 2 ? "Engineering Drawings" : step === 3 ? typeInfo.step2Label : "Findings & Photos"}
         </span>
       </div>
 
@@ -1483,21 +1488,43 @@ export function PipelineReportFormView() {
         </CardContent>
       </Card>
 
-      {/* ─── Drawing Attachments (optional, embedded as full-page images
-           in the final PDF, BEFORE the measurement table) ─── */}
+      {/* Step 1 navigation */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="ghost" onClick={saveDraft} disabled={saving}>
+          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+          Save Draft
+        </Button>
+        <Button onClick={proceedToNext} disabled={saving}>
+          Proceed to Next <ArrowRight className="ml-2 h-4 w-4" />
+        </Button>
+        {error && <span className="text-sm text-red-600">{error}</span>}
+      </div>
+      </>
+      )} {/* end step 1 */}
+
+      {/* ═══ STEP 2: ENGINEERING DRAWINGS ═══
+          A separate, clearly delineated section for attaching drawing
+          images and PDF files. Each uploaded drawing becomes one or more
+          full pages in the final PDF (images = 1 page each, PDFs are
+          rasterized page-by-page), appearing between the report header
+          and the measurement table.
+      */}
+      {step === 2 && (
+      <>
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-base flex items-center gap-2">
                 <PenTool className="h-4 w-4" />
-                Drawing Attachments
+                Engineering Drawings
               </CardTitle>
               <CardDescription>
-                Optional. Each drawing appears as one or more full pages in
-                the final PDF, before the measurement table. PNG/JPG/JPEG/WEBP
-                become one page each; a PDF drawing is rasterized page-by-page
-                (one PDF page per output page). Max 50 MB per file.
+                Optional. Attach engineering drawings (PNG, JPG, JPEG, WEBP, or PDF).
+                Each image becomes one full page in the final PDF; each page of an
+                uploaded PDF drawing is rendered as a separate output page.
+                Drawings appear after the report header and before the measurement
+                table. Max 50 MB per file.
               </CardDescription>
             </div>
             <div className="flex gap-2">
@@ -1524,7 +1551,7 @@ export function PipelineReportFormView() {
         <CardContent>
           {!editingPipelineReportId && (
             <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
-              Save the report header first (or click <strong>Proceed to Next</strong>) to enable drawing uploads.
+              Save the report header first (Step 1) to enable drawing uploads.
             </p>
           )}
           {editingPipelineReportId && drawings.length === 0 && (
@@ -1657,8 +1684,19 @@ export function PipelineReportFormView() {
         </CardContent>
       </Card>
 
-      {/* Step 1 navigation */}
-      <div className="flex flex-wrap items-center gap-2">
+      <Card className="bg-zinc-50">
+        <CardContent className="p-4 text-xs text-muted-foreground">
+          <strong>PDF page order:</strong> Report header → Engineering Drawings (one page
+          per image / per PDF page) → Measurement table → Findings → Photos → Sign-off.
+          No blank pages are inserted between the drawings and the table.
+        </CardContent>
+      </Card>
+
+      {/* Step 2 navigation */}
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" onClick={goPrevious}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> Previous
+        </Button>
         <Button variant="ghost" onClick={saveDraft} disabled={saving}>
           {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
           Save Draft
@@ -1666,17 +1704,16 @@ export function PipelineReportFormView() {
         <Button onClick={proceedToNext} disabled={saving}>
           Proceed to Next <ArrowRight className="ml-2 h-4 w-4" />
         </Button>
-        {error && <span className="text-sm text-red-600">{error}</span>}
       </div>
       </>
-      )} {/* end step 1 */}
+      )} {/* end step 2 — engineering drawings */}
 
-      {/* ═══ STEP 2: MIDDLE STEP — type-specific ═══
+      {/* ═══ STEP 3: MIDDLE STEP — type-specific ═══
           • PIPELINE_THICKNESS → measurement table (11 columns + custom)
           • PIPELINE_VISUAL    → visual inspection observations (rows)
           • PIPELINE_CONDITION → condition assessment form (single-instance fields)
       */}
-      {step === 2 && header.reportType === "PIPELINE_THICKNESS" && (
+      {step === 3 && header.reportType === "PIPELINE_THICKNESS" && (
       <>
       <Card>
         <CardHeader>
@@ -1985,10 +2022,10 @@ export function PipelineReportFormView() {
         </Button>
       </div>
       </>
-      )} {/* end step 2 — thickness */}
+      )} {/* end step 3 — thickness */}
 
-      {/* ═══ STEP 2 (VISUAL): VISUAL OBSERVATIONS TABLE ═══ */}
-      {step === 2 && header.reportType === "PIPELINE_VISUAL" && (
+      {/* ═══ STEP 3 (VISUAL): VISUAL OBSERVATIONS TABLE ═══ */}
+      {step === 3 && header.reportType === "PIPELINE_VISUAL" && (
       <>
       <Card>
         <CardHeader>
@@ -2246,10 +2283,10 @@ export function PipelineReportFormView() {
         </Button>
       </div>
       </>
-      )} {/* end step 2 — visual */}
+      )} {/* end step 3 — visual */}
 
-      {/* ═══ STEP 2 (CONDITION): CONDITION ASSESSMENT FORM ═══ */}
-      {step === 2 && header.reportType === "PIPELINE_CONDITION" && (
+      {/* ═══ STEP 3 (CONDITION): CONDITION ASSESSMENT FORM ═══ */}
+      {step === 3 && header.reportType === "PIPELINE_CONDITION" && (
       <>
       <Card>
         <CardHeader>
@@ -2409,10 +2446,10 @@ export function PipelineReportFormView() {
         </Button>
       </div>
       </>
-      )} {/* end step 2 — condition */}
+      )} {/* end step 3 — condition */}
 
-      {/* ═══ STEP 3: FINDINGS & PHOTOS ═══ */}
-      {step === 3 && (
+      {/* ═══ STEP 4: FINDINGS & PHOTOS ═══ */}
+      {step === 4 && (
       <>
         <Card>
           <CardHeader>
