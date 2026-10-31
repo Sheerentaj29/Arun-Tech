@@ -1351,13 +1351,13 @@ export function PipelineReportFormView() {
               {step > s ? "✓" : s}
             </div>
             <span className={`text-sm font-medium ${step === s ? "text-amber-700" : "text-muted-foreground"}`}>
-              {s === 1 ? "Report Details" : s === 2 ? "Engineering Drawings" : s === 3 ? typeInfo.step2Label : "Findings & Photos"}
+              {s === 1 ? "Report Details" : s === 2 ? "Inspection Findings" : s === 3 ? "Engineering Drawings" : "Measurements & Photos"}
             </span>
             {s < 4 && <span className="text-zinc-300">→</span>}
           </div>
         ))}
         <span className="ml-auto text-xs text-muted-foreground">
-          Step {step} of 4 — {step === 1 ? "Report Details" : step === 2 ? "Engineering Drawings" : step === 3 ? typeInfo.step2Label : "Findings & Photos"}
+          Step {step} of 4 — {step === 1 ? "Report Details" : step === 2 ? "Inspection Findings" : step === 3 ? "Engineering Drawings" : "Measurements & Photos"}
         </span>
       </div>
 

@@ -755,11 +755,96 @@ export async function generatePipelineReportPdf(
   }
 
   // After the first page (header + sign-off), start a new page for
-  // drawings + measurement table + other sections.
+  // the remaining sections.
+  // Declare y here (before the findings sections use it) to avoid the
+  // temporal dead zone. It gets properly initialized by startBodyOnFreshPage
+  // for the measurement table, and set to MARGIN for the findings sections.
+  let y: number = 0;
   addNewPage();
+  // Initialize y for the findings sections (startBodyOnFreshPage is
+  // called later for the measurement table, but the findings sections
+  // need y to be set to the top of the new page).
+  y = MARGIN;
 
   // ═══════════════════════════════════════════════════════════════
-  // DRAWING PAGES — each drawing image (or each page of a PDF drawing)
+  // SECTION ORDER (per latest spec):
+  //   1. Inspection Description
+  //   2. Summary Of Site Observations
+  //   3. Results
+  //   4. Conclusion
+  //   5. Engineering Drawings
+  //   6. Thickness Measurement Table / Inspection Data
+  //   7. Inspection Photographs
+  //   8. Certification (Equipment + Personnel)
+  // ═══════════════════════════════════════════════════════════════
+
+  // ── 1. INSPECTION DESCRIPTION ──
+  if (report.inspectionDescription) {
+    if (y + 60 > pageMaxY) { addNewPage(); y = MARGIN; }
+    y += 10;
+    doc.font(FONT_BOLD).fontSize(9).fillColor("#000");
+    doc.text("Inspection Description", MARGIN, y);
+    y += 14;
+    doc.font(FONT_REGULAR).fontSize(8);
+    const descHeight = doc.heightOfString(report.inspectionDescription, { width: pageW - 2 * MARGIN });
+    if (y + descHeight > pageMaxY) { addNewPage(); y = MARGIN; }
+    doc.text(report.inspectionDescription, MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
+    y += descHeight + 6;
+  }
+
+  // ── 2. SUMMARY OF SITE OBSERVATIONS ──
+  {
+    const text = ((report as any).siteObservationSummary ?? "").trim();
+    if (text) {
+      if (y + 40 > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 8;
+      doc.font(FONT_BOLD).fontSize(9).fillColor("#000");
+      doc.text("Summary Of Site Observations", MARGIN, y);
+      y += 14;
+      doc.font(FONT_REGULAR).fontSize(8);
+      const h = doc.heightOfString(text, { width: pageW - 2 * MARGIN });
+      if (y + h > pageMaxY) { addNewPage(); y = MARGIN; }
+      doc.text(text, MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
+      y += h + 6;
+    }
+  }
+
+  // ── 3. RESULTS ──
+  {
+    const text = ((report as any).results ?? "").trim();
+    if (text) {
+      if (y + 40 > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 8;
+      doc.font(FONT_BOLD).fontSize(9);
+      doc.text("Results", MARGIN, y);
+      y += 14;
+      doc.font(FONT_REGULAR).fontSize(8);
+      const h = doc.heightOfString(text, { width: pageW - 2 * MARGIN });
+      if (y + h > pageMaxY) { addNewPage(); y = MARGIN; }
+      doc.text(text, MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
+      y += h + 6;
+    }
+  }
+
+  // ── 4. CONCLUSION ──
+  {
+    const text = ((report as any).conclusion ?? "").trim();
+    if (text) {
+      if (y + 40 > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 8;
+      doc.font(FONT_BOLD).fontSize(9);
+      doc.text("Conclusion", MARGIN, y);
+      y += 14;
+      doc.font(FONT_REGULAR).fontSize(8);
+      const h = doc.heightOfString(text, { width: pageW - 2 * MARGIN });
+      if (y + h > pageMaxY) { addNewPage(); y = MARGIN; }
+      doc.text(text, MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
+      y += h + 6;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // 5. DRAWING PAGES — each drawing image (or each page of a PDF drawing)
   // gets its own full PDF page, centered, preserving aspect ratio.
   // Drawings appear BEFORE the measurement table.
   // ═══════════════════════════════════════════════════════════════
@@ -839,10 +924,7 @@ export async function generatePipelineReportPdf(
   // ═══════════════════════════════════════════════════════════════
   const tableHeaderH = 36;
   const rowH2 = orientation === "landscape" ? 28 : 22;
-  // `y` is assigned inside startBodyOnFreshPage() before any read, but
-  // TypeScript's flow analysis can't track closure assignments — so we
-  // initialize to 0 to satisfy the type checker.
-  let y: number = 0;
+  // `y` was already declared above (before the findings sections).
 
   // Helper: decide whether to start on a fresh page or continue.
   // Uses pageMaxY (not maxRowY) because these pages don't have a sign-off.
@@ -850,12 +932,11 @@ export async function generatePipelineReportPdf(
     if (linkedDrawings.length > 0) {
       addNewPage();
       y = MARGIN;
-    } else if (cursorY + neededSpace > pageMaxY) {
+    } else if (y + neededSpace > pageMaxY) {
       addNewPage();
       y = MARGIN;
     } else {
-      cursorY += 10;
-      y = cursorY;
+      y += 10;
     }
   };
 
@@ -926,7 +1007,69 @@ export async function generatePipelineReportPdf(
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // CERTIFICATION SECTION — immediately after the measurement table.
+  // 7. PHOTOGRAPHS (gallery) — after the measurement table, before
+  // certification.
+  // Sequential layout: render photos one at a time, tracking the current
+  // column position within the row and the current row Y position.
+  // When a photo + caption doesn't fit in the remaining space, move the
+  // ENTIRE photo (image + caption) to the next page — never split.
+  // ═══════════════════════════════════════════════════════════════
+  if (allPhotos.length > 0) {
+    if (y + 30 > pageMaxY) { addNewPage(); y = MARGIN; }
+    y += 10;
+    doc.font(FONT_BOLD).fontSize(10).fillColor("#000");
+    doc.text("Inspection Photographs", MARGIN, y);
+    y += 20;
+
+    // Fixed thumbnail size — consistent across all photos
+    const photoW = orientation === "landscape" ? 180 : 140;
+    const photoH = orientation === "landscape" ? 120 : 95;
+    const captionH = 16; // space reserved for caption below each photo
+    const cellH = photoH + captionH; // total height per photo cell
+    const gap = 10;
+    const photosPerRow = Math.max(1, Math.floor((pageW - 2 * MARGIN + gap) / (photoW + gap)));
+
+    let currentCol = 0;
+    let currentRowY = y;
+
+    for (let i = 0; i < allPhotos.length; i++) {
+      const photo = allPhotos[i];
+      const px = MARGIN + currentCol * (photoW + gap);
+      const py = currentRowY;
+
+      // Check if this photo + caption fits on the current page.
+      // If not, move to a new page and reset column + row.
+      if (py + cellH > pageMaxY) {
+        addNewPage();
+        currentCol = 0;
+        currentRowY = MARGIN;
+        const newPx = MARGIN;
+        const newPy = currentRowY;
+        drawPhotoCell(doc, photo, newPx, newPy, photoW, photoH, FONT_REGULAR);
+        currentCol++;
+        if (currentCol >= photosPerRow) {
+          currentCol = 0;
+          currentRowY += cellH + gap;
+        }
+        continue;
+      }
+
+      // Draw the photo cell (image + border + caption)
+      drawPhotoCell(doc, photo, px, py, photoW, photoH, FONT_REGULAR);
+
+      currentCol++;
+      if (currentCol >= photosPerRow) {
+        currentCol = 0;
+        currentRowY += cellH + gap;
+      }
+    }
+
+    // Update y to after the last row
+    y = currentRowY + (currentCol > 0 ? cellH + gap : 0);
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // 8. CERTIFICATION SECTION — after inspection photographs.
   // Layout rules:
   //   - "Certification" heading + sub-heading go on the SAME page as
   //     the first certificate (never alone at the bottom of a page).
@@ -1126,131 +1269,6 @@ export async function generatePipelineReportPdf(
 
     // After certificates, set y to pageMaxY so the next section starts on a new page
     y = pageMaxY;
-  }
-
-  // ── INSPECTION DESCRIPTION ──
-  if (report.inspectionDescription) {
-    if (y + 60 > pageMaxY) { addNewPage(); y = MARGIN; }
-    y += 10;
-    doc.font(FONT_BOLD).fontSize(9).fillColor("#000");
-    doc.text("Inspection Description", MARGIN, y);
-    y += 14;
-    doc.font(FONT_REGULAR).fontSize(8);
-    const descHeight = doc.heightOfString(report.inspectionDescription, { width: pageW - 2 * MARGIN });
-    if (y + descHeight > pageMaxY) { addNewPage(); y = MARGIN; }
-    doc.text(report.inspectionDescription, MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
-    y += descHeight + 6;
-  }
-
-  // ── SUMMARY OF SITE OBSERVATIONS ──
-  {
-    const text = ((report as any).siteObservationSummary ?? "").trim();
-    if (text) {
-      if (y + 40 > pageMaxY) { addNewPage(); y = MARGIN; }
-      y += 8;
-      doc.font(FONT_BOLD).fontSize(9).fillColor("#000");
-      doc.text("Summary Of Site Observations", MARGIN, y);
-      y += 14;
-      doc.font(FONT_REGULAR).fontSize(8);
-      const h = doc.heightOfString(text, { width: pageW - 2 * MARGIN });
-      if (y + h > pageMaxY) { addNewPage(); y = MARGIN; }
-      doc.text(text, MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
-      y += h + 6;
-    }
-  }
-
-  // ── RESULTS ──
-  {
-    const text = ((report as any).results ?? "").trim();
-    if (text) {
-      if (y + 40 > pageMaxY) { addNewPage(); y = MARGIN; }
-      y += 8;
-      doc.font(FONT_BOLD).fontSize(9);
-      doc.text("Results", MARGIN, y);
-      y += 14;
-      doc.font(FONT_REGULAR).fontSize(8);
-      const h = doc.heightOfString(text, { width: pageW - 2 * MARGIN });
-      if (y + h > pageMaxY) { addNewPage(); y = MARGIN; }
-      doc.text(text, MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
-      y += h + 6;
-    }
-  }
-
-  // ── CONCLUSION ──
-  {
-    const text = ((report as any).conclusion ?? "").trim();
-    if (text) {
-      if (y + 40 > pageMaxY) { addNewPage(); y = MARGIN; }
-      y += 8;
-      doc.font(FONT_BOLD).fontSize(9);
-      doc.text("Conclusion", MARGIN, y);
-      y += 14;
-      doc.font(FONT_REGULAR).fontSize(8);
-      const h = doc.heightOfString(text, { width: pageW - 2 * MARGIN });
-      if (y + h > pageMaxY) { addNewPage(); y = MARGIN; }
-      doc.text(text, MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
-      y += h + 6;
-    }
-  }
-
-  // ── PHOTOGRAPHS (gallery) ──
-  // Sequential layout: render photos one at a time, tracking the current
-  // column position within the row and the current row Y position.
-  // When a photo + caption doesn't fit in the remaining space, move the
-  // ENTIRE photo (image + caption) to the next page — never split.
-  if (allPhotos.length > 0) {
-    if (y + 30 > pageMaxY) { addNewPage(); y = MARGIN; }
-    y += 10;
-    doc.font(FONT_BOLD).fontSize(10).fillColor("#000");
-    doc.text("Inspection Photographs", MARGIN, y);
-    y += 20;
-
-    // Fixed thumbnail size — consistent across all photos
-    const photoW = orientation === "landscape" ? 180 : 140;
-    const photoH = orientation === "landscape" ? 120 : 95;
-    const captionH = 16; // space reserved for caption below each photo
-    const cellH = photoH + captionH; // total height per photo cell
-    const gap = 10;
-    const photosPerRow = Math.max(1, Math.floor((pageW - 2 * MARGIN + gap) / (photoW + gap)));
-
-    let currentCol = 0;
-    let currentRowY = y;
-
-    for (let i = 0; i < allPhotos.length; i++) {
-      const photo = allPhotos[i];
-      const px = MARGIN + currentCol * (photoW + gap);
-      const py = currentRowY;
-
-      // Check if this photo + caption fits on the current page.
-      // If not, move to a new page and reset column + row.
-      if (py + cellH > pageMaxY) {
-        addNewPage();
-        currentCol = 0;
-        currentRowY = MARGIN;
-        // Recalculate px and py for the new page
-        const newPx = MARGIN;
-        const newPy = currentRowY;
-        drawPhotoCell(doc, photo, newPx, newPy, photoW, photoH, FONT_REGULAR);
-        currentCol++;
-        if (currentCol >= photosPerRow) {
-          currentCol = 0;
-          currentRowY += cellH + gap;
-        }
-        continue;
-      }
-
-      // Draw the photo cell (image + border + caption)
-      drawPhotoCell(doc, photo, px, py, photoW, photoH, FONT_REGULAR);
-
-      currentCol++;
-      if (currentCol >= photosPerRow) {
-        currentCol = 0;
-        currentRowY += cellH + gap;
-      }
-    }
-
-    // Update y to after the last row
-    y = currentRowY + (currentCol > 0 ? cellH + gap : 0);
   }
 
   // ── OVERRIDE NOTE ──
