@@ -5,6 +5,9 @@ import {
   Gauge,
   Eye,
   ShieldCheck,
+  Droplet,
+  Magnet,
+  Zap,
   ChevronRight,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -23,6 +26,18 @@ interface TypeOption {
 
 const OPTIONS: TypeOption[] = [
   {
+    type: "PIPELINE_DPT",
+    title: "DPT / DPPT – Dye Penetrant Testing",
+    subtitle: "Dye penetrant inspection with Accept/Reject results",
+    description:
+      "Record dye penetrant testing results with testing materials " +
+      "(solvent, penetrant, developer), an editable inspection table with " +
+      "auto-serial numbers, Accept/Reject result selection, and custom columns. " +
+      "No engineering drawing upload required for DPT reports.",
+    icon: Droplet,
+    accent: "border-purple-500 bg-purple-50 hover:bg-purple-100",
+  },
+  {
     type: "PIPELINE_THICKNESS",
     title: "Pipeline Thickness Measurement",
     subtitle: "UT thickness measurement at clock positions",
@@ -30,7 +45,7 @@ const OPTIONS: TypeOption[] = [
       "Record ultrasonic thickness readings at the 12/3/6/9 o'clock positions " +
       "for each inspection point. Auto-looks up nominal wall thickness from " +
       "ASME B36.10M / B36.19M, computes observed minimum, and supports custom " +
-      "columns. The PDF prints the standard 11-column measurement table.",
+      "columns. Engineering drawings, photos, and certificates are included.",
     icon: Gauge,
     accent: "border-emerald-500 bg-emerald-50 hover:bg-emerald-100",
   },
@@ -41,9 +56,7 @@ const OPTIONS: TypeOption[] = [
     description:
       "Capture visual condition observations at multiple inspection points along " +
       "the pipeline: external surface, coating/paint, corrosion, leakage, " +
-      "damage, supports/hangers, weld joints, insulation. Each row can be " +
-      "annotated with findings and recommendations. Photos attach to " +
-      "individual observations.",
+      "damage, supports/hangers, weld joints, insulation.",
     icon: Eye,
     accent: "border-blue-500 bg-blue-50 hover:bg-blue-100",
   },
@@ -54,9 +67,7 @@ const OPTIONS: TypeOption[] = [
     description:
       "Document an overall condition assessment: pipeline age, service fluid, " +
       "operating condition, condition rating, corrosion condition, damage " +
-      "assessment, previous inspection reference, current findings, risk " +
-      "priority level, recommendations, and next inspection recommendation. " +
-      "Supporting photos and drawings can be attached.",
+      "assessment, risk priority level, recommendations.",
     icon: ShieldCheck,
     accent: "border-amber-500 bg-amber-50 hover:bg-amber-100",
   },
@@ -80,7 +91,7 @@ export function PipelineReportTypeSelectorView() {
       </div>
 
       <div className="rounded-md border bg-muted/30 p-4">
-        <div className="flex items-center gap-3 text-sm">
+        <div className="flex items-center gap-3 text-sm flex-wrap">
           <Badge variant="outline" className="border-zinc-400 text-zinc-700">
             Step 1
           </Badge>
@@ -97,7 +108,7 @@ export function PipelineReportTypeSelectorView() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         {OPTIONS.map((opt) => {
           const Icon = opt.icon;
           return (
@@ -108,7 +119,7 @@ export function PipelineReportTypeSelectorView() {
             >
               <CardContent className="flex h-full flex-col p-5">
                 <div className="mb-3 flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-md bg-white">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-md bg-white shrink-0">
                     <Icon className="h-6 w-6" />
                   </div>
                   <div>
@@ -143,12 +154,14 @@ export function PipelineReportTypeSelectorView() {
       <Card className="border-zinc-200 bg-zinc-50">
         <CardContent className="p-4 text-xs text-muted-foreground">
           <strong>Common features for all report types:</strong> client / plant / pipeline
-          identification header, optional drawing attachments (PNG / JPG / WEBP / PDF —
-          each image becomes one full page in the PDF, and PDF drawings are rasterized
-          page-by-page), inspection photo gallery with captions, and the existing
+          identification header, inspection photo gallery with captions, and the existing
           approval workflow (Draft → Submitted for Review → Approved / Returned for Revision →
           Changes Pending Review). The selected report type is shown in the report list,
           detail view, admin dashboard, generated PDF, and revision history.
+          <br /><br />
+          <strong>Note:</strong> DPT/DPPT reports do not include engineering drawing uploads.
+          Thickness Measurement reports retain all existing features including drawings,
+          certificates, and the full measurement table.
         </CardContent>
       </Card>
     </div>

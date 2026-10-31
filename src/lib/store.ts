@@ -42,7 +42,7 @@ interface AppUser {
 // screen before opening the form. When null (default), the form opens
 // without a type, which only makes sense when editing an existing report
 // (the type is read from the API response in that case).
-export type PipelineReportType = "PIPELINE_THICKNESS" | "PIPELINE_VISUAL" | "PIPELINE_CONDITION";
+export type PipelineReportType = "PIPELINE_THICKNESS" | "PIPELINE_VISUAL" | "PIPELINE_CONDITION" | "PIPELINE_DPT";
 
 interface AppState {
   view: ViewKey;

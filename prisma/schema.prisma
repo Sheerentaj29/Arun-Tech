@@ -244,6 +244,7 @@ model PipelineInspection {
   // PIPELINE_THICKNESS  → Pipeline Thickness Measurement Report (existing)
   // PIPELINE_VISUAL     → Pipeline Visual Inspection Report
   // PIPELINE_CONDITION  → Pipeline Inspection / Condition Assessment Report
+  // PIPELINE_DPT        → DPT / DPPT Dye Penetrant Testing Report
   // Existing rows get the default (PIPELINE_THICKNESS) so no data is lost.
   reportType               String   @default("PIPELINE_THICKNESS")
   clientId                 String
@@ -343,6 +344,14 @@ model PipelineInspection {
   secondReviewedAt           DateTime? // Date of second review
   approvedByDesignation      String?  // Designation of the approver
 
+  // ─── DPT / DPPT REPORT FIELDS ───
+  // Populated when reportType = PIPELINE_DPT
+  dptDateOfExamination       DateTime? // Date of Examination (editable)
+  dptSolventCleaner          String?  // Solvent / Cleaner material used
+  dptPenetrant               String?  // Penetrant material used
+  dptDeveloper               String?  // Developer material used
+  dptCustomColumns           String?  // JSON: [{id, name, unit}] custom columns for DPT table
+
   isDemo                   Boolean  @default(false)
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
@@ -354,6 +363,7 @@ model PipelineInspection {
   returnedBy  User?       @relation("PipelineInspectionReturnedBy", fields: [returnedById], references: [id], onDelete: SetNull)
   measurements ThicknessMeasurement[]
   visualObservations VisualInspectionObservation[]
+  dptObservations DptObservation[]
   revisions   ReportRevision[]
   reportPhotos ReportPhoto[]
   drawingLinks DrawingInspectionLink[]
@@ -640,4 +650,34 @@ model InspectionCertificate {
 
   @@index([pipelineInspectionId])
   @@index([category])
+}
+
+// =====================================================
+// DPT / DPPT OBSERVATION ROW
+// =====================================================
+// One row per DPT inspection point. Serial numbers are auto-generated
+// (1, 2, 3...) and renumbered when rows are added/deleted.
+// Each row has: description, weld type, result (Accept/Reject),
+// remarks, and custom column values.
+
+model DptObservation {
+  id                    String   @id @default(cuid())
+  pipelineInspectionId  String
+  serialNo              Int      @default(1) // auto-generated sequential number
+  sortOrder             Int      @default(0)
+
+  description           String?  // Description of the inspected area/component
+  weldType              String?  // Weld type (Butt Weld, Fillet Weld, etc.)
+  result                String   @default("Accept") // Accept | Reject
+  remarks               String?  // Additional observations/remarks
+
+  // Custom column values stored as JSON: {"col_id_1": "value", ...}
+  customColumnValues    String?
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  pipelineInspection    PipelineInspection @relation(fields: [pipelineInspectionId], references: [id], onDelete: Cascade)
+
+  @@index([pipelineInspectionId])
 }

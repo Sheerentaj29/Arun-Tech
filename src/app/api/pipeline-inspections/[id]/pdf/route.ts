@@ -89,6 +89,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       reportPhotos: { orderBy: { sortOrder: "asc" } },
       // Visual inspection observations (only populated for PIPELINE_VISUAL reports)
       visualObservations: { orderBy: { sortOrder: "asc" } },
+      // DPT observations (only populated for PIPELINE_DPT reports)
+      dptObservations: { orderBy: { sortOrder: "asc" } },
       // Inspection certificates (equipment + personnel)
       certificates: { orderBy: [{ category: "asc" }, { sortOrder: "asc" }] },
       // Linked engineering drawings with their revisions — we resolve the

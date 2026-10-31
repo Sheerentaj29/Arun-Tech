@@ -89,6 +89,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     include: {
       measurements: true,
       visualObservations: { orderBy: { sortOrder: "asc" } },
+      // DPT observations
+      dptObservations: { orderBy: { sortOrder: "asc" } },
       // Inspection certificates
       certificates: { orderBy: [{ category: "asc" }, { sortOrder: "asc" }] },
       revisions: true,

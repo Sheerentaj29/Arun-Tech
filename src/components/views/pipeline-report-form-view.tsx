@@ -79,6 +79,14 @@ const REPORT_TYPE_INFO: Record<PipelineReportType, {
     step2Label: "Assessment",
     accent: "border-amber-500 text-amber-700",
   },
+  PIPELINE_DPT: {
+    title: "DYE PENETRANT TESTING REPORT",
+    shortLabel: "DPT/DPPT",
+    formHeading: "New DPT / DPPT Dye Penetrant Testing Report",
+    formDescription: "Dye penetrant testing with testing materials, observation table, and Accept/Reject results.",
+    step2Label: "DPT Observations",
+    accent: "border-purple-500 text-purple-700",
+  },
 };
 
 // ---------- TYPES ----------
@@ -162,6 +170,12 @@ interface ReportHeader {
   secondReviewedByName: string;
   secondReviewedByDesignation: string;
   approvedByDesignation: string;
+  // ─── DPT / DPPT FIELDS ───
+  dptDateOfExamination: string;
+  dptSolventCleaner: string;
+  dptPenetrant: string;
+  dptDeveloper: string;
+  dptCustomColumns: string;
   // Condition fields default empty
   pipelineAgeYears: string;
   serviceFluid: string;
@@ -205,6 +219,12 @@ const EMPTY_HEADER: ReportHeader = {
   secondReviewedByName: "",
   secondReviewedByDesignation: "",
   approvedByDesignation: "",
+  // DPT fields default empty
+  dptDateOfExamination: new Date().toISOString().slice(0, 10),
+  dptSolventCleaner: "",
+  dptPenetrant: "",
+  dptDeveloper: "",
+  dptCustomColumns: "[]",
   // Condition fields default empty
   pipelineAgeYears: "",
   serviceFluid: "",
@@ -299,6 +319,19 @@ const EMPTY_VISUAL_OBSERVATION: Omit<VisualObservationRow, "pointNo" | "sortOrde
 
 // Dropdown options for visual inspection fields
 const YES_NO_NA = ["Yes", "No", "Suspected", "N/A"];
+
+// ─── DPT OBSERVATION ROW ───
+interface DptObservationRow {
+  id?: string;
+  serialNo: number;
+  sortOrder: number;
+  description: string;
+  weldType: string;
+  result: "Accept" | "Reject";
+  remarks: string;
+  customColumnValues: string;
+  _isNew?: boolean;
+}
 const CORROSION_LEVELS = ["None", "Light", "Moderate", "Severe", "N/A"];
 const CONDITION_RATINGS = ["Good", "Fair", "Poor", "Critical", "N/A"];
 const RISK_LEVELS = ["Low", "Medium", "High", "Critical"];
@@ -354,6 +387,8 @@ export function PipelineReportFormView() {
   }));
   const [rows, setRows] = useState<MeasurementRow[]>([]);
   const [visualObservations, setVisualObservations] = useState<VisualObservationRow[]>([]);
+  // DPT observations for Step 3 (PIPELINE_DPT reports)
+  const [dptObservations, setDptObservations] = useState<DptObservationRow[]>([]);
   const [clients, setClients] = useState<ClientItem[]>([]);
   const [componentTypes, setComponentTypes] = useState<ComponentTypeItem[]>([]);
   const [standards, setStandards] = useState<PipeStandardItem[]>([]);
@@ -447,6 +482,12 @@ export function PipelineReportFormView() {
           secondReviewedByName: r.secondReviewedByName ?? "",
           secondReviewedByDesignation: r.secondReviewedByDesignation ?? "",
           approvedByDesignation: r.approvedByDesignation ?? "",
+          // DPT fields
+          dptDateOfExamination: r.dptDateOfExamination ? r.dptDateOfExamination.slice(0, 10) : new Date().toISOString().slice(0, 10),
+          dptSolventCleaner: r.dptSolventCleaner ?? "",
+          dptPenetrant: r.dptPenetrant ?? "",
+          dptDeveloper: r.dptDeveloper ?? "",
+          dptCustomColumns: r.dptCustomColumns ?? "[]",
           // Condition fields (only populated for PIPELINE_CONDITION reports)
           pipelineAgeYears: r.pipelineAgeYears != null ? String(r.pipelineAgeYears) : "",
           serviceFluid: r.serviceFluid ?? "",
@@ -565,6 +606,21 @@ export function PipelineReportFormView() {
           })));
         } else {
           setVisualObservations([]);
+        }
+        // Load DPT observations (only present for PIPELINE_DPT reports)
+        if (Array.isArray(r.dptObservations)) {
+          setDptObservations(r.dptObservations.map((o: any) => ({
+            id: o.id,
+            serialNo: o.serialNo,
+            sortOrder: o.sortOrder,
+            description: o.description ?? "",
+            weldType: o.weldType ?? "",
+            result: o.result === "Reject" ? "Reject" : "Accept",
+            remarks: o.remarks ?? "",
+            customColumnValues: o.customColumnValues ?? "{}",
+          })));
+        } else {
+          setDptObservations([]);
         }
       })
       .catch((e) => setError(e.message))
@@ -737,13 +793,10 @@ export function PipelineReportFormView() {
       if (header.reportType === "PIPELINE_CONDITION") {
         const ageNum = parseFloat(header.pipelineAgeYears);
         payload.pipelineAgeYears = !Number.isNaN(ageNum) && ageNum >= 0 ? ageNum : null;
+      } else if (header.reportType === "PIPELINE_DPT") {
+        // DPT custom columns are saved as JSON string
+        payload.dptCustomColumns = header.dptCustomColumns;
       } else {
-        // Don't send condition fields for thickness/visual reports —
-        // the API preserves existing values anyway (it uses `?? existing`).
-        // But for cleanliness, set them to null so they don't appear on
-        // a report that was originally created as the wrong type then
-        // re-saved. (This is defensive only — the form never shows these
-        // fields for thickness/visual reports.)
         payload.pipelineAgeYears = null;
       }
 
@@ -864,6 +917,10 @@ export function PipelineReportFormView() {
     } else if (header.reportType === "PIPELINE_VISUAL") {
       if (visualObservations.length === 0) {
         toast.warning("No visual observations yet. You can proceed, but you'll need to add at least one before submitting.");
+      }
+    } else if (header.reportType === "PIPELINE_DPT") {
+      if (dptObservations.length === 0) {
+        toast.warning("No DPT observations yet. You can proceed, but you'll need to add at least one before submitting.");
       }
     }
     // PIPELINE_CONDITION has no row requirement — fields live on the header.
@@ -1270,6 +1327,86 @@ export function PipelineReportFormView() {
     }
   }
 
+  // ─── DPT OBSERVATION ROW OPERATIONS (PIPELINE_DPT only) ───
+  function addDptObservation() {
+    setDptObservations((arr) => {
+      const nextSerial = arr.length > 0 ? Math.max(...arr.map(o => o.serialNo)) + 1 : 1;
+      return [
+        ...arr,
+        {
+          serialNo: nextSerial,
+          sortOrder: arr.length,
+          description: "",
+          weldType: "",
+          result: "Accept",
+          remarks: "",
+          customColumnValues: "{}",
+          _isNew: true,
+        },
+      ];
+    });
+  }
+
+  function updateDptObservation(idx: number, patch: Partial<DptObservationRow>) {
+    setDptObservations((arr) => {
+      const next = [...arr];
+      next[idx] = { ...next[idx], ...patch };
+      return next;
+    });
+  }
+
+  function deleteDptObservationLocal(idx: number) {
+    setDptObservations((arr) =>
+      arr.filter((_, i) => i !== idx).map((o, i) => ({ ...o, serialNo: i + 1, sortOrder: i })),
+    );
+  }
+
+  async function saveDptObservation(idx: number) {
+    const obs = dptObservations[idx];
+    if (!obs) return;
+    if (!editingPipelineReportId) { toast.error("Save the report header first"); return; }
+    setSaving(true);
+    try {
+      if (obs._isNew || !obs.id) {
+        const created = await apiFetch<{ id: string; serialNo: number }>(
+          `/api/pipeline-inspections/${editingPipelineReportId}/dpt-observations`,
+          { method: "POST", body: JSON.stringify(obs) },
+        );
+        setDptObservations((arr) => arr.map((o, i) => i === idx ? { ...o, id: created.id, serialNo: created.serialNo, _isNew: false } : o));
+        toast.success(`Saved DPT row #${created.serialNo}`);
+      } else {
+        await apiFetch(
+          `/api/pipeline-inspections/${editingPipelineReportId}/dpt-observations/${obs.id}`,
+          { method: "PUT", body: JSON.stringify(obs) },
+        );
+        toast.success(`Updated DPT row #${obs.serialNo}`);
+      }
+    } catch (e) {
+      const err = e as { message?: string };
+      toast.error(err.message ?? "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteDptObservationApi(idx: number) {
+    const obs = dptObservations[idx];
+    if (!obs) return;
+    if (!obs.id || obs._isNew) { deleteDptObservationLocal(idx); return; }
+    if (!editingPipelineReportId) return;
+    try {
+      await apiFetch(
+        `/api/pipeline-inspections/${editingPipelineReportId}/dpt-observations/${obs.id}`,
+        { method: "DELETE" },
+      );
+      deleteDptObservationLocal(idx);
+      toast.success(`Deleted DPT row #${obs.serialNo}`);
+    } catch (e) {
+      const err = e as { message?: string };
+      toast.error(err.message ?? "Delete failed");
+    }
+  }
+
   // ─── SAVE DRAFT (saves header + custom columns without navigating) ───
   async function saveDraft() {
     if (header.reportType === "PIPELINE_THICKNESS") {
@@ -1525,6 +1662,52 @@ export function PipelineReportFormView() {
           </div>
         </CardContent>
       </Card>
+
+      {/* ─── DPT / DPPT Testing Materials (only for DPT reports) ─── */}
+      {header.reportType === "PIPELINE_DPT" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Testing Materials</CardTitle>
+            <CardDescription>
+              Enter the materials used during the dye penetrant inspection.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="space-y-2">
+              <Label>Date of Examination</Label>
+              <Input
+                type="date"
+                value={header.dptDateOfExamination}
+                onChange={(e) => updateHeader("dptDateOfExamination", e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Solvent / Cleaner</Label>
+              <Input
+                value={header.dptSolventCleaner}
+                onChange={(e) => updateHeader("dptSolventCleaner", e.target.value)}
+                placeholder="e.g. ORION 115PR"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Penetrant</Label>
+              <Input
+                value={header.dptPenetrant}
+                onChange={(e) => updateHeader("dptPenetrant", e.target.value)}
+                placeholder="e.g. ORION 115P"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Developer</Label>
+              <Input
+                value={header.dptDeveloper}
+                onChange={(e) => updateHeader("dptDeveloper", e.target.value)}
+                placeholder="e.g. ORION 115D"
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ─── Primary Inspection Photo ─── */}
       <Card>
@@ -2615,6 +2798,144 @@ export function PipelineReportFormView() {
       </div>
       </>
       )} {/* end step 3 — condition */}
+
+      {/* ═══ STEP 3 (DPT): DPT OBSERVATION TABLE ═══ */}
+      {step === 3 && header.reportType === "PIPELINE_DPT" && (
+      <>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base">DPT Inspection Results</CardTitle>
+              <CardDescription>
+                Add one row per inspection point. Serial numbers are auto-generated.
+                Select Accept or Reject for each row. Use Remarks for additional details.
+              </CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={addDptObservation} size="sm">
+                <Plus className="mr-1 h-4 w-4" /> Add Row
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-purple-800 text-white">
+                <tr>
+                  <th className="border border-purple-900 px-2 py-2 text-center" style={{ minWidth: 40 }}>Sl. No</th>
+                  <th className="border border-purple-900 px-2 py-2 text-center" style={{ minWidth: 200 }}>Description</th>
+                  <th className="border border-purple-900 px-2 py-2 text-center" style={{ minWidth: 100 }}>Weld Type</th>
+                  <th className="border border-purple-900 px-2 py-2 text-center" style={{ minWidth: 80 }}>Result</th>
+                  <th className="border border-purple-900 px-2 py-2 text-center" style={{ minWidth: 200 }}>Remarks</th>
+                  <th className="border border-purple-900 px-2 py-2 text-center" style={{ minWidth: 80 }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dptObservations.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="text-center py-6 text-muted-foreground border border-zinc-300">
+                      No DPT observations yet. Click <strong>Add Row</strong> to begin.
+                    </td>
+                  </tr>
+                )}
+                {dptObservations.map((obs, idx) => (
+                  <tr key={idx} className="hover:bg-muted/30">
+                    <td className="border border-zinc-300 p-1 text-center font-mono tabular-nums">{obs.serialNo}</td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input
+                        className="h-8 text-xs"
+                        value={obs.description}
+                        onChange={(e) => updateDptObservation(idx, { description: e.target.value })}
+                        placeholder="Description of inspected area"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input
+                        className="h-8 text-xs"
+                        value={obs.weldType}
+                        onChange={(e) => updateDptObservation(idx, { weldType: e.target.value })}
+                        placeholder="e.g. Butt Weld"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Select
+                        value={obs.result}
+                        onValueChange={(v) => updateDptObservation(idx, { result: v })}
+                      >
+                        <SelectTrigger className={`h-8 text-xs font-bold ${obs.result === "Reject" ? "text-red-700" : "text-emerald-700"}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Accept" className="text-emerald-700">Accept</SelectItem>
+                          <SelectItem value="Reject" className="text-red-700">Reject</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Textarea
+                        rows={1}
+                        className="text-xs min-h-[32px] py-1"
+                        value={obs.remarks}
+                        onChange={(e) => updateDptObservation(idx, { remarks: e.target.value })}
+                        placeholder="Observations, details..."
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <div className="flex flex-col gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 px-2 text-[10px]"
+                          onClick={() => saveDptObservation(idx)}
+                          disabled={saving}
+                          title="Save row"
+                        >
+                          <Save className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+                          onClick={() => deleteDptObservationApi(idx)}
+                          title="Delete row"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="bg-zinc-50">
+        <CardContent className="p-4 text-xs text-muted-foreground space-y-1">
+          <div><strong>DPT Inspection:</strong> each row records one inspection point with Accept/Reject result.</div>
+          <div><strong>Serial numbers:</strong> auto-generated and renumbered when rows are added or deleted.</div>
+          <div><strong>No drawings:</strong> DPT reports do not include engineering drawing uploads.</div>
+        </CardContent>
+      </Card>
+
+      {/* Step 3 navigation */}
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" onClick={goPrevious}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> Previous
+        </Button>
+        <Button variant="ghost" onClick={saveDraft} disabled={saving}>
+          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+          Save Draft
+        </Button>
+        <Button onClick={proceedToNext} disabled={saving}>
+          Proceed to Next <ArrowRight className="ml-2 h-4 w-4" />
+        </Button>
+      </div>
+      </>
+      )} {/* end step 3 — DPT */}
 
       {/* ═══ STEP 4: FINDINGS & PHOTOS ═══ */}
       {step === 4 && (

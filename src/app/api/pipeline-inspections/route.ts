@@ -133,7 +133,7 @@ export async function POST(req: NextRequest) {
       // Accept reportType from the form. Default to PIPELINE_THICKNESS for
       // backward compat (so existing API callers that don't send it still
       // create thickness reports as before).
-      reportType: ["PIPELINE_THICKNESS", "PIPELINE_VISUAL", "PIPELINE_CONDITION"].includes(body.reportType)
+      reportType: ["PIPELINE_THICKNESS", "PIPELINE_VISUAL", "PIPELINE_CONDITION", "PIPELINE_DPT"].includes(body.reportType)
         ? body.reportType
         : "PIPELINE_THICKNESS",
       clientId: body.clientId,
@@ -179,6 +179,12 @@ export async function POST(req: NextRequest) {
       secondReviewedByName: body.secondReviewedByName?.trim() || null,
       secondReviewedByDesignation: body.secondReviewedByDesignation?.trim() || null,
       approvedByDesignation: body.approvedByDesignation?.trim() || null,
+      // ─── DPT / DPPT FIELDS ───
+      dptDateOfExamination: body.dptDateOfExamination ? new Date(body.dptDateOfExamination) : null,
+      dptSolventCleaner: body.dptSolventCleaner?.trim() || null,
+      dptPenetrant: body.dptPenetrant?.trim() || null,
+      dptDeveloper: body.dptDeveloper?.trim() || null,
+      dptCustomColumns: body.dptCustomColumns ?? "[]",
       isDemo: false,
     },
     include: {

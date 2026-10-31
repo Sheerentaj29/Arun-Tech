@@ -15,7 +15,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const { id } = await ctx.params;
   const existing = await db.pipelineInspection.findUnique({
     where: { id },
-    include: { measurements: true, visualObservations: true },
+    include: { measurements: true, visualObservations: true, dptObservations: true },
   });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   //   • PIPELINE_THICKNESS → at least one measurement row
   //   • PIPELINE_VISUAL    → at least one visual observation row
   //   • PIPELINE_CONDITION → at least one condition-assessment field set
-  //     (any of the multi-line text fields counts as "started")
+  //   • PIPELINE_DPT       → at least one DPT observation row
   const reportType = existing.reportType ?? "PIPELINE_THICKNESS";
   if (reportType === "PIPELINE_THICKNESS") {
     if (existing.measurements.length === 0) {
@@ -58,6 +58,13 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     if (existing.visualObservations.length === 0) {
       return NextResponse.json(
         { error: "Cannot submit a visual inspection report with no observation rows. Add at least one observation first." },
+        { status: 400 },
+      );
+    }
+  } else if (reportType === "PIPELINE_DPT") {
+    if (existing.dptObservations.length === 0) {
+      return NextResponse.json(
+        { error: "Cannot submit a DPT report with no observation rows. Add at least one observation first." },
         { status: 400 },
       );
     }

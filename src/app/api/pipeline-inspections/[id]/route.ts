@@ -54,6 +54,10 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       visualObservations: {
         orderBy: { sortOrder: "asc" },
       },
+      // DPT observations (only populated for PIPELINE_DPT reports)
+      dptObservations: {
+        orderBy: { sortOrder: "asc" },
+      },
       // Inspection certificates (equipment + personnel)
       certificates: {
         orderBy: [{ category: "asc" }, { sortOrder: "asc" }],
@@ -195,6 +199,12 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       secondReviewedByDesignation: body.secondReviewedByDesignation !== undefined ? (body.secondReviewedByDesignation?.trim() || null) : existing.secondReviewedByDesignation,
       secondReviewedAt: body.secondReviewedAt !== undefined ? (body.secondReviewedAt ? new Date(body.secondReviewedAt) : null) : existing.secondReviewedAt,
       approvedByDesignation: body.approvedByDesignation !== undefined ? (body.approvedByDesignation?.trim() || null) : existing.approvedByDesignation,
+      // ─── DPT / DPPT FIELDS ───
+      dptDateOfExamination: body.dptDateOfExamination !== undefined ? (body.dptDateOfExamination ? new Date(body.dptDateOfExamination) : null) : existing.dptDateOfExamination,
+      dptSolventCleaner: body.dptSolventCleaner !== undefined ? (body.dptSolventCleaner?.trim() || null) : existing.dptSolventCleaner,
+      dptPenetrant: body.dptPenetrant !== undefined ? (body.dptPenetrant?.trim() || null) : existing.dptPenetrant,
+      dptDeveloper: body.dptDeveloper !== undefined ? (body.dptDeveloper?.trim() || null) : existing.dptDeveloper,
+      dptCustomColumns: body.dptCustomColumns !== undefined ? body.dptCustomColumns : existing.dptCustomColumns,
     },
   });
 

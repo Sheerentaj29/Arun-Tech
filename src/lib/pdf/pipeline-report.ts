@@ -71,17 +71,18 @@ function findServiceLogo(): string | null {
 // ─── Report type metadata ───
 // The title is the only piece used directly by the PDF generator; the
 // shortLabel / accent are used by the UI (not here).
-type ReportType = "PIPELINE_THICKNESS" | "PIPELINE_VISUAL" | "PIPELINE_CONDITION";
+type ReportType = "PIPELINE_THICKNESS" | "PIPELINE_VISUAL" | "PIPELINE_CONDITION" | "PIPELINE_DPT";
 
 const REPORT_TYPE_TITLE: Record<ReportType, string> = {
   PIPELINE_THICKNESS: "PIPELINE THICKNESS MEASUREMENT REPORT",
   PIPELINE_VISUAL:    "PIPELINE VISUAL INSPECTION REPORT",
   PIPELINE_CONDITION: "PIPELINE CONDITION ASSESSMENT REPORT",
+  PIPELINE_DPT:       "DYE PENETRANT TESTING REPORT",
 };
 
 function getReportType(raw: any): ReportType {
   const v = String(raw ?? "PIPELINE_THICKNESS");
-  if (v === "PIPELINE_VISUAL" || v === "PIPELINE_CONDITION") return v;
+  if (v === "PIPELINE_VISUAL" || v === "PIPELINE_CONDITION" || v === "PIPELINE_DPT") return v;
   return "PIPELINE_THICKNESS";
 }
 
@@ -116,6 +117,16 @@ export interface PdfReportInput {
       fileExtension: string;
       mimeType: string;
       sortOrder: number;
+    }>;
+    dptObservations?: Array<{
+      id: string;
+      serialNo: number;
+      sortOrder: number;
+      description: string | null;
+      weldType: string | null;
+      result: string;
+      remarks: string | null;
+      customColumnValues: string | null;
     }>;
   };
   measurements: ThicknessMeasurement[];
@@ -1000,10 +1011,105 @@ export async function generatePipelineReportPdf(
     }
   } else if (reportType === "PIPELINE_CONDITION") {
     // ─── CONDITION ASSESSMENT FIELDS ───
-    // Render as a labeled grid (similar to the header info grid) plus
-    // multi-line text blocks for the longer fields.
     startBodyOnFreshPage(80);
     y = drawConditionAssessment(doc, report as any, y, pageW, pageH, MARGIN, pageMaxY, addNewPage);
+  } else if (reportType === "PIPELINE_DPT") {
+    // ─── DPT / DPPT INSPECTION TABLE ───
+    // Render DPT-specific header (testing materials) + observation table
+    startBodyOnFreshPage(120);
+
+    // DPT testing materials header
+    const dptReport = report as any;
+    if (dptReport.dptDateOfExamination || dptReport.dptSolventCleaner || dptReport.dptPenetrant || dptReport.dptDeveloper) {
+      if (y + 80 > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 10;
+      doc.font(FONT_BOLD).fontSize(10).fillColor("#000");
+      doc.text("Testing Materials", MARGIN, y);
+      y += 16;
+
+      const dptLabelW = 140;
+      const dptValueW = (pageW - 2 * MARGIN - 2 * dptLabelW) / 2;
+      const dptRowH = 20;
+      const dptInfo: Array<[string, string | null]> = [
+        ["Date of Examination", dptReport.dptDateOfExamination ? new Date(dptReport.dptDateOfExamination).toISOString().slice(0, 10) : "—"],
+        ["Solvent / Cleaner", dptReport.dptSolventCleaner],
+        ["Penetrant", dptReport.dptPenetrant],
+        ["Developer", dptReport.dptDeveloper],
+      ];
+      for (let i = 0; i < dptInfo.length; i += 2) {
+        const left = dptInfo[i];
+        const right = dptInfo[i + 1] ?? ["", "—"];
+        if (y + dptRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+        // Left
+        doc.font(FONT_BOLD).fontSize(9);
+        doc.rect(MARGIN, y, dptLabelW, dptRowH).stroke("#888");
+        doc.text(left[0], MARGIN + 4, y + 5, { width: dptLabelW - 8 });
+        doc.font(FONT_REGULAR).fontSize(9);
+        doc.rect(MARGIN + dptLabelW, y, dptValueW, dptRowH).stroke("#888");
+        doc.text(left[1] ?? "—", MARGIN + dptLabelW + 4, y + 5, { width: dptValueW - 8 });
+        // Right
+        const rx = MARGIN + dptLabelW + dptValueW;
+        doc.font(FONT_BOLD).fontSize(9);
+        doc.rect(rx, y, dptLabelW, dptRowH).stroke("#888");
+        doc.text(right[0] ?? "", rx + 4, y + 5, { width: dptLabelW - 8 });
+        doc.font(FONT_REGULAR).fontSize(9);
+        doc.rect(rx + dptLabelW, y, dptValueW, dptRowH).stroke("#888");
+        doc.text(right[1] ?? "—", rx + dptLabelW + 4, y + 5, { width: dptValueW - 8 });
+        y += dptRowH;
+      }
+      y += 8;
+    }
+
+    // DPT observation table
+    const dptObs = dptReport.dptObservations ?? report.dptObservations ?? [];
+    // Parse custom columns
+    let dptCustomCols: Array<{ id: string; name: string; unit: string }> = [];
+    try {
+      const cc = JSON.parse(dptReport.dptCustomColumns ?? "[]");
+      if (Array.isArray(cc)) dptCustomCols = cc;
+    } catch {}
+
+    // Table header
+    const dptHeaderH = 36;
+    const dptRowH = 28;
+    const slColW = 40;
+    const descColW = 200;
+    const weldColW = 80;
+    const resultColW = 60;
+    const remarksColW = 0; // fill remaining
+    const customColW = 60;
+
+    // Calculate column widths
+    const dptFixedW = slColW + descColW + weldColW + resultColW;
+    const dptCustomTotalW = dptCustomCols.length * customColW;
+    const dptRemarksW = Math.max(100, pageW - 2 * MARGIN - dptFixedW - dptCustomTotalW);
+    const dptColWidths = [slColW, descColW, weldColW, resultColW, ...dptCustomCols.map(() => customColW), dptRemarksW];
+    const dptColHeaders = ["Sl.\nNo", "Description", "Weld\nType", "Result", ...dptCustomCols.map(c => c.name + (c.unit ? `\n(${c.unit})` : "")), "Remarks"];
+
+    // Draw header
+    if (y + dptHeaderH + dptRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+    drawDptTableHeader(doc, dptColHeaders, dptColWidths, y, pageW);
+    y += dptHeaderH;
+
+    // Draw rows
+    for (const obs of dptObs) {
+      if (y + dptRowH > pageMaxY) {
+        addNewPage();
+        drawDptTableHeader(doc, dptColHeaders, dptColWidths, MARGIN, pageW);
+        y = MARGIN + dptHeaderH;
+      }
+      drawDptRow(doc, obs, dptColHeaders, dptColWidths, y, dptCustomCols);
+      y += dptRowH;
+    }
+
+    // Placeholder if no observations
+    if (dptObs.length === 0) {
+      doc.font(FONT_REGULAR).fontSize(8).fillColor("#666");
+      doc.rect(MARGIN, y, pageW - 2 * MARGIN, dptRowH).stroke("#bbb");
+      doc.text("No DPT observations recorded.", MARGIN + 4, y + 9, { width: pageW - 2 * MARGIN - 8, align: "center" });
+      doc.fillColor("#000");
+      y += dptRowH;
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -1620,6 +1726,93 @@ function drawConditionAssessment(
   }
 
   return y;
+}
+
+// ─── DPT TABLE HELPERS ───
+
+const DPT_HEADER_BG = "#5b2c6f";
+const DPT_HEADER_FG = "#ffffff";
+
+function drawDptTableHeader(doc: Doc, headers: string[], colWidths: number[], y: number, pageW: number) {
+  const usable = pageW - 2 * MARGIN;
+  doc.rect(MARGIN, y, usable, 36).fill(DPT_HEADER_BG).fillColor(DPT_HEADER_FG);
+  let x = MARGIN;
+  doc.font(FONT_BOLD).fontSize(7).fillColor(DPT_HEADER_FG);
+  for (let i = 0; i < headers.length; i++) {
+    const w = colWidths[i];
+    const lines = headers[i].split("\n");
+    let ly = y + 4;
+    for (const ln of lines) {
+      doc.text(ln, x + 3, ly, { width: w - 6, align: "center" });
+      ly += 9;
+    }
+    doc.rect(x, y, w, 36).stroke("#3a1d4a");
+    x += w;
+  }
+  doc.fillColor("#000");
+}
+
+function drawDptRow(
+  doc: Doc,
+  obs: { serialNo: number; description: string | null; weldType: string | null; result: string; remarks: string | null; customColumnValues: string | null },
+  headers: string[],
+  colWidths: number[],
+  y: number,
+  customCols: Array<{ id: string; name: string; unit: string }>,
+) {
+  const rowH = 28;
+  const usable = doc.page.width - 2 * MARGIN;
+  doc.rect(MARGIN, y, usable, rowH).stroke("#999");
+  let x = MARGIN;
+  const cellPad = 3;
+  doc.font(FONT_REGULAR).fontSize(8).fillColor("#000");
+
+  for (let i = 0; i < headers.length; i++) {
+    const w = colWidths[i];
+    let text = "";
+    if (i === 0) text = String(obs.serialNo);
+    else if (i === 1) text = obs.description ?? "—";
+    else if (i === 2) text = obs.weldType ?? "—";
+    else if (i === 3) {
+      text = obs.result;
+      // Color-code the result
+      if (obs.result === "Reject") {
+        doc.rect(x, y, w, rowH).fill("#fee2e2");
+        doc.fillColor("#991b1b");
+      } else {
+        doc.rect(x, y, w, rowH).fill("#dcfce7");
+        doc.fillColor("#166534");
+      }
+    } else if (i === headers.length - 1) {
+      text = obs.remarks ?? "—";
+    } else {
+      // Custom column
+      const colIdx = i - 4; // offset by the 4 system columns
+      if (colIdx >= 0 && colIdx < customCols.length) {
+        try {
+          const vals = JSON.parse(obs.customColumnValues || "{}");
+          text = vals[customCols[colIdx].id] ?? "—";
+        } catch { text = "—"; }
+      }
+    }
+
+    // Draw border (for non-result columns)
+    if (i !== 3) {
+      doc.rect(x, y, w, rowH).stroke("#bbb");
+      doc.fillColor("#000");
+    }
+
+    const maxW = w - 2 * cellPad;
+    const wrapped = doc.widthOfString(text) > maxW
+      ? text.slice(0, Math.floor((maxW / Math.max(1, doc.widthOfString(text))) * text.length)) + "…"
+      : text;
+    doc.font(i === 3 ? FONT_BOLD : FONT_REGULAR).fontSize(8);
+    doc.text(wrapped, x + cellPad, y + 9, {
+      width: maxW, align: i === 0 || i === 3 ? "center" : "left",
+    });
+    doc.fillColor("#000");
+    x += w;
+  }
 }
 
 // ─── TABLE HELPERS ───
