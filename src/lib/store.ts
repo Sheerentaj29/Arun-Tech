@@ -19,6 +19,7 @@ export type ViewKey =
   | "audit-logs"
   // Pipeline thickness reports
   | "pipeline-reports"
+  | "pipeline-report-type-selector"
   | "pipeline-report-form"
   | "pipeline-report-detail"
   | "pipe-standards"
@@ -37,6 +38,12 @@ interface AppUser {
   dashboardRole: "ADMIN" | "EMPLOYEE";
 }
 
+// Pipeline report type — set when the user picks a type in the selector
+// screen before opening the form. When null (default), the form opens
+// without a type, which only makes sense when editing an existing report
+// (the type is read from the API response in that case).
+export type PipelineReportType = "PIPELINE_THICKNESS" | "PIPELINE_VISUAL" | "PIPELINE_CONDITION";
+
 interface AppState {
   view: ViewKey;
   selectedEquipmentId: string | null;
@@ -44,6 +51,10 @@ interface AppState {
   inspectionClientId: string | null;
   selectedPipelineReportId: string | null;
   editingPipelineReportId: string | null;
+  // When opening the form for a NEW report, this holds the report type
+  // the user picked in the selector screen. Cleared after the form
+  // consumes it (so reopening the form later doesn't reuse a stale type).
+  pendingPipelineReportType: PipelineReportType | null;
   refreshKey: number;
   user: AppUser | null;
   setView: (v: ViewKey) => void;
@@ -53,7 +64,10 @@ interface AppState {
   openNewEquipment: () => void;
   openEditEquipment: (id: string) => void;
   openPipelineReport: (id: string) => void;
+  /** Show the report type selector (then the user picks a type → openNewPipelineReportWithType). */
   openNewPipelineReport: () => void;
+  /** Open the form for a new report of the given type. */
+  openNewPipelineReportWithType: (type: PipelineReportType) => void;
   openEditPipelineReport: (id: string) => void;
   setEditingPipelineReportId: (id: string) => void;
   setUser: (u: AppUser | null) => void;
@@ -67,6 +81,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   inspectionClientId: null,
   selectedPipelineReportId: null,
   editingPipelineReportId: null,
+  pendingPipelineReportType: null,
   refreshKey: 0,
   user: null,
   setView: (v) => set({ view: v }),
@@ -82,8 +97,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   openNewEquipment: () => set({ view: "equipment-form", editingEquipmentId: null }),
   openEditEquipment: (id) => set({ view: "equipment-form", editingEquipmentId: id }),
   openPipelineReport: (id) => set({ view: "pipeline-report-detail", selectedPipelineReportId: id }),
-  openNewPipelineReport: () => set({ view: "pipeline-report-form", editingPipelineReportId: null }),
-  openEditPipelineReport: (id) => set({ view: "pipeline-report-form", editingPipelineReportId: id }),
+  // Default: show the report type selector screen.
+  openNewPipelineReport: () =>
+    set({ view: "pipeline-report-type-selector", editingPipelineReportId: null, pendingPipelineReportType: null }),
+  // After the user picks a type, set it and switch to the form view.
+  openNewPipelineReportWithType: (type) =>
+    set({ view: "pipeline-report-form", editingPipelineReportId: null, pendingPipelineReportType: type }),
+  openEditPipelineReport: (id) =>
+    set({ view: "pipeline-report-form", editingPipelineReportId: id, pendingPipelineReportType: null }),
   setEditingPipelineReportId: (id) => set({ editingPipelineReportId: id }),
   setUser: (u) =>
     set((s) => ({

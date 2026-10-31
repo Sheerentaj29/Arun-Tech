@@ -40,9 +40,45 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useAppStore } from "@/lib/store";
+import { useAppStore, type PipelineReportType } from "@/lib/store";
 import { apiFetch } from "@/lib/api-client";
 import { toast } from "sonner";
+
+// ---------- REPORT TYPE METADATA ----------
+
+const REPORT_TYPE_INFO: Record<PipelineReportType, {
+  title: string;            // PDF title
+  shortLabel: string;       // sidebar / list badge
+  formHeading: string;      // shown at top of form
+  formDescription: string;
+  step2Label: string;       // middle step name
+  accent: string;           // badge color class
+}> = {
+  PIPELINE_THICKNESS: {
+    title: "PIPELINE THICKNESS MEASUREMENT REPORT",
+    shortLabel: "Thickness",
+    formHeading: "New Pipeline Thickness Report",
+    formDescription: "UT thickness measurement at clock positions (12/3/6/9 o'clock).",
+    step2Label: "Measurements",
+    accent: "border-emerald-500 text-emerald-700",
+  },
+  PIPELINE_VISUAL: {
+    title: "PIPELINE VISUAL INSPECTION REPORT",
+    shortLabel: "Visual",
+    formHeading: "New Pipeline Visual Inspection Report",
+    formDescription: "External surface, coating, corrosion, leakage observations at multiple points.",
+    step2Label: "Observations",
+    accent: "border-blue-500 text-blue-700",
+  },
+  PIPELINE_CONDITION: {
+    title: "PIPELINE CONDITION ASSESSMENT REPORT",
+    shortLabel: "Condition",
+    formHeading: "New Pipeline Condition Assessment Report",
+    formDescription: "Overall condition rating, risk priority, recommendations, next inspection.",
+    step2Label: "Assessment",
+    accent: "border-amber-500 text-amber-700",
+  },
+};
 
 // ---------- TYPES ----------
 
@@ -94,6 +130,11 @@ interface MeasurementRow {
 
 interface ReportHeader {
   reportNumber: string;
+  // reportType is fixed at creation time. For new reports it's set from
+  // `pendingPipelineReportType` in the store. For existing reports it's
+  // loaded from the API. It's included in the header object so saveHeader
+  // sends it on POST (the API uses it on create; ignored on PUT).
+  reportType: PipelineReportType;
   clientId: string;
   plantId: string;
   inspectionArea: string;
@@ -108,10 +149,24 @@ interface ReportHeader {
   comments: string;
   inspectionDescription: string;
   customColumns: string; // JSON array of {id, name, unit}
+  // ─── PIPELINE CONDITION fields (only used when reportType = PIPELINE_CONDITION;
+  // ignored otherwise) ───
+  pipelineAgeYears: string;       // free-text input → parsed to number on save
+  serviceFluid: string;
+  operatingCondition: string;
+  overallConditionRating: string;
+  corrosionCondition: string;
+  damageAssessment: string;
+  previousInspectionRef: string;
+  currentInspectionFindings: string;
+  riskPriorityLevel: string;
+  recommendations: string;
+  nextInspectionRecommendation: string;
 }
 
 const EMPTY_HEADER: ReportHeader = {
   reportNumber: "",
+  reportType: "PIPELINE_THICKNESS", // overwritten from store on first render
   clientId: "",
   plantId: "",
   inspectionArea: "",
@@ -126,6 +181,18 @@ const EMPTY_HEADER: ReportHeader = {
   comments: "",
   inspectionDescription: "",
   customColumns: "[]",
+  // Condition fields default empty
+  pipelineAgeYears: "",
+  serviceFluid: "",
+  operatingCondition: "",
+  overallConditionRating: "",
+  corrosionCondition: "",
+  damageAssessment: "",
+  previousInspectionRef: "",
+  currentInspectionFindings: "",
+  riskPriorityLevel: "",
+  recommendations: "",
+  nextInspectionRecommendation: "",
 };
 
 // Custom column definition (user-added beyond the 11 system columns)
@@ -168,6 +235,50 @@ interface DrawingAttachment {
   errorMessage?: string;
 }
 
+// ─── VISUAL INSPECTION OBSERVATION ROW ───
+// One row per inspection point. Used only when reportType = PIPELINE_VISUAL.
+interface VisualObservationRow {
+  id?: string;
+  pointNo: string;
+  sortOrder: number;
+  location: string;
+  pipelineCondition: string;
+  externalSurfaceCondition: string;
+  coatingPaintCondition: string;
+  corrosionObserved: string;
+  leakageObserved: string;
+  damageOrDeformation: string;
+  supportsHangersCondition: string;
+  weldJointCondition: string;
+  insulationCondition: string;
+  findings: string;
+  recommendations: string;
+  inspectorComments: string;
+  _isNew?: boolean;
+}
+
+const EMPTY_VISUAL_OBSERVATION: Omit<VisualObservationRow, "pointNo" | "sortOrder"> = {
+  location: "",
+  pipelineCondition: "",
+  externalSurfaceCondition: "",
+  coatingPaintCondition: "",
+  corrosionObserved: "",
+  leakageObserved: "",
+  damageOrDeformation: "",
+  supportsHangersCondition: "",
+  weldJointCondition: "",
+  insulationCondition: "",
+  findings: "",
+  recommendations: "",
+  inspectorComments: "",
+};
+
+// Dropdown options for visual inspection fields
+const YES_NO_NA = ["Yes", "No", "Suspected", "N/A"];
+const CORROSION_LEVELS = ["None", "Light", "Moderate", "Severe", "N/A"];
+const CONDITION_RATINGS = ["Good", "Fair", "Poor", "Critical", "N/A"];
+const RISK_LEVELS = ["Low", "Medium", "High", "Critical"];
+
 // System columns that cannot be deleted
 const SYSTEM_COLUMN_KEYS = [
   "diaInch", "schedule", "nominal", "component", "pointNo",
@@ -197,14 +308,28 @@ const STATUS_OPTIONS: Array<{ value: "Measured" | "NotMeasured" | "NotApplicable
 ];
 
 export function PipelineReportFormView() {
-  const { user, editingPipelineReportId, setEditingPipelineReportId, setView, openPipelineReport, refresh } = useAppStore();
+  const {
+    user,
+    editingPipelineReportId,
+    setEditingPipelineReportId,
+    setView,
+    openPipelineReport,
+    refresh,
+    pendingPipelineReportType,
+  } = useAppStore();
   const isEdit = !!editingPipelineReportId;
   // Any authenticated user can create reports — they become the inspector.
   // The detail-page permission check enforces role-based editing on existing reports.
   const canEdit = !!user;
 
-  const [header, setHeader] = useState<ReportHeader>(EMPTY_HEADER);
+  const [header, setHeader] = useState<ReportHeader>(() => ({
+    ...EMPTY_HEADER,
+    // For new reports: use the type the user picked in the selector screen.
+    // For existing reports: overwritten by the API response in the edit-load effect.
+    reportType: pendingPipelineReportType ?? "PIPELINE_THICKNESS",
+  }));
   const [rows, setRows] = useState<MeasurementRow[]>([]);
+  const [visualObservations, setVisualObservations] = useState<VisualObservationRow[]>([]);
   const [clients, setClients] = useState<ClientItem[]>([]);
   const [componentTypes, setComponentTypes] = useState<ComponentTypeItem[]>([]);
   const [standards, setStandards] = useState<PipeStandardItem[]>([]);
@@ -268,6 +393,9 @@ export function PipelineReportFormView() {
       .then((r) => {
         setHeader({
           reportNumber: r.reportNumber,
+          // reportType is fixed at creation time. Read it from the API
+          // response (defaults to PIPELINE_THICKNESS for legacy rows).
+          reportType: (r.reportType as PipelineReportType) ?? "PIPELINE_THICKNESS",
           clientId: r.clientId,
           plantId: r.plantId,
           inspectionArea: r.inspectionArea ?? "",
@@ -282,6 +410,18 @@ export function PipelineReportFormView() {
           comments: r.comments ?? "",
           inspectionDescription: r.inspectionDescription ?? "",
           customColumns: r.customColumns ?? "[]",
+          // Condition fields (only populated for PIPELINE_CONDITION reports)
+          pipelineAgeYears: r.pipelineAgeYears != null ? String(r.pipelineAgeYears) : "",
+          serviceFluid: r.serviceFluid ?? "",
+          operatingCondition: r.operatingCondition ?? "",
+          overallConditionRating: r.overallConditionRating ?? "",
+          corrosionCondition: r.corrosionCondition ?? "",
+          damageAssessment: r.damageAssessment ?? "",
+          previousInspectionRef: r.previousInspectionRef ?? "",
+          currentInspectionFindings: r.currentInspectionFindings ?? "",
+          riskPriorityLevel: r.riskPriorityLevel ?? "",
+          recommendations: r.recommendations ?? "",
+          nextInspectionRecommendation: r.nextInspectionRecommendation ?? "",
         });
         setReportStatus(r.status);
         // Load drawing attachments from the linked drawings on the report
@@ -366,6 +506,29 @@ export function PipelineReportFormView() {
             customColumnValues: m.customColumnValues ?? "{}",
           })),
         );
+        // Load visual inspection observations (only present for PIPELINE_VISUAL reports)
+        if (Array.isArray(r.visualObservations)) {
+          setVisualObservations(r.visualObservations.map((o: any) => ({
+            id: o.id,
+            pointNo: o.pointNo,
+            sortOrder: o.sortOrder,
+            location: o.location ?? "",
+            pipelineCondition: o.pipelineCondition ?? "",
+            externalSurfaceCondition: o.externalSurfaceCondition ?? "",
+            coatingPaintCondition: o.coatingPaintCondition ?? "",
+            corrosionObserved: o.corrosionObserved ?? "",
+            leakageObserved: o.leakageObserved ?? "",
+            damageOrDeformation: o.damageOrDeformation ?? "",
+            supportsHangersCondition: o.supportsHangersCondition ?? "",
+            weldJointCondition: o.weldJointCondition ?? "",
+            insulationCondition: o.insulationCondition ?? "",
+            findings: o.findings ?? "",
+            recommendations: o.recommendations ?? "",
+            inspectorComments: o.inspectorComments ?? "",
+          })));
+        } else {
+          setVisualObservations([]);
+        }
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -529,21 +692,39 @@ export function PipelineReportFormView() {
     }
     setSaving(true);
     try {
+      // Build the payload. For PIPELINE_CONDITION reports, parse the
+      // pipelineAgeYears text input into a number (or null if empty /
+      // non-numeric). The PUT/POST endpoints expect a number for this
+      // field; the rest of the condition fields are strings.
+      const payload: Record<string, unknown> = { ...header };
+      if (header.reportType === "PIPELINE_CONDITION") {
+        const ageNum = parseFloat(header.pipelineAgeYears);
+        payload.pipelineAgeYears = !Number.isNaN(ageNum) && ageNum >= 0 ? ageNum : null;
+      } else {
+        // Don't send condition fields for thickness/visual reports —
+        // the API preserves existing values anyway (it uses `?? existing`).
+        // But for cleanliness, set them to null so they don't appear on
+        // a report that was originally created as the wrong type then
+        // re-saved. (This is defensive only — the form never shows these
+        // fields for thickness/visual reports.)
+        payload.pipelineAgeYears = null;
+      }
+
       if (isEdit && editingPipelineReportId) {
         await apiFetch(`/api/pipeline-inspections/${editingPipelineReportId}`, {
           method: "PUT",
-          body: JSON.stringify(header),
+          body: JSON.stringify(payload),
         });
         toast.success("Header saved");
       } else {
         const created = await apiFetch<{ id: string; reportNumber: string }>(
           "/api/pipeline-inspections",
-          { method: "POST", body: JSON.stringify(header) },
+          { method: "POST", body: JSON.stringify(payload) },
         );
         toast.success(`Created ${created.reportNumber}`);
         refresh();
         // Set the editing ID WITHOUT navigating away — keeps the user
-        // on the form so they can continue with Step 2 (measurements).
+        // on the form so they can continue with Step 2.
         setEditingPipelineReportId(created.id);
       }
     } catch (e) {
@@ -636,11 +817,19 @@ export function PipelineReportFormView() {
   }
 
   function validateStep2(): boolean {
-    // Step 2 doesn't require measurements to proceed — the user can add
-    // them later. But we warn if there are no rows.
-    if (rows.length === 0) {
-      toast.warning("No measurement rows yet. You can proceed, but you'll need to add at least one before submitting.");
+    // Step 2 doesn't require rows/fields to be filled in to proceed —
+    // the user can add them later. But we warn if there are no rows
+    // for thickness or visual reports.
+    if (header.reportType === "PIPELINE_THICKNESS") {
+      if (rows.length === 0) {
+        toast.warning("No measurement rows yet. You can proceed, but you'll need to add at least one before submitting.");
+      }
+    } else if (header.reportType === "PIPELINE_VISUAL") {
+      if (visualObservations.length === 0) {
+        toast.warning("No visual observations yet. You can proceed, but you'll need to add at least one before submitting.");
+      }
     }
+    // PIPELINE_CONDITION has no row requirement — fields live on the header.
     return true;
   }
 
@@ -653,12 +842,19 @@ export function PipelineReportFormView() {
       // ALWAYS save the header — for new reports, this creates the
       // report and sets editingPipelineReportId. For existing reports,
       // it updates the header. Must await so the ID is available
-      // before the user reaches Step 2 (measurement rows need it).
+      // before the user reaches Step 2 (measurement rows / observations
+      // / condition fields need it).
       await saveHeader();
       setStep(2);
     } else if (step === 2) {
       validateStep2();
-      setHeader((h) => ({ ...h, customColumns: JSON.stringify(customColumns) }));
+      // For PIPELINE_THICKNESS reports, persist the custom columns JSON
+      // onto the header before saving. Other report types don't use
+      // custom columns, but saving the header still picks up any
+      // condition field edits the user made on Step 2.
+      if (header.reportType === "PIPELINE_THICKNESS") {
+        setHeader((h) => ({ ...h, customColumns: JSON.stringify(customColumns) }));
+      }
       await saveHeader();
       setStep(3);
     }
@@ -945,9 +1141,92 @@ export function PipelineReportFormView() {
     }
   }
 
+  // ─── VISUAL OBSERVATION ROW OPERATIONS (PIPELINE_VISUAL only) ───
+  function addVisualObservation() {
+    setVisualObservations((arr) => [
+      ...arr,
+      {
+        ...EMPTY_VISUAL_OBSERVATION,
+        pointNo: `V-${arr.length + 1}`,
+        sortOrder: arr.length,
+        _isNew: true,
+      },
+    ]);
+  }
+
+  function updateVisualObservation(idx: number, patch: Partial<VisualObservationRow>) {
+    setVisualObservations((arr) => {
+      const next = [...arr];
+      next[idx] = { ...next[idx], ...patch };
+      return next;
+    });
+  }
+
+  function deleteVisualObservationLocal(idx: number) {
+    setVisualObservations((arr) =>
+      arr.filter((_, i) => i !== idx).map((o, i) => ({ ...o, sortOrder: i })),
+    );
+  }
+
+  async function saveVisualObservation(idx: number) {
+    const obs = visualObservations[idx];
+    if (!obs) return;
+    if (!editingPipelineReportId) {
+      toast.error("Save the report header first");
+      return;
+    }
+    setSaving(true);
+    try {
+      if (obs._isNew || !obs.id) {
+        const created = await apiFetch<{ id: string }>(
+          `/api/pipeline-inspections/${editingPipelineReportId}/visual-observations`,
+          { method: "POST", body: JSON.stringify(obs) },
+        );
+        setVisualObservations((arr) =>
+          arr.map((o, i) => (i === idx ? { ...o, id: created.id, _isNew: false } : o)),
+        );
+        toast.success(`Saved ${obs.pointNo}`);
+      } else {
+        await apiFetch(
+          `/api/pipeline-inspections/${editingPipelineReportId}/visual-observations/${obs.id}`,
+          { method: "PUT", body: JSON.stringify(obs) },
+        );
+        toast.success(`Updated ${obs.pointNo}`);
+      }
+    } catch (e) {
+      const err = e as { message?: string };
+      toast.error(err.message ?? "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteVisualObservationApi(idx: number) {
+    const obs = visualObservations[idx];
+    if (!obs) return;
+    if (!obs.id || obs._isNew) {
+      deleteVisualObservationLocal(idx);
+      return;
+    }
+    if (!editingPipelineReportId) return;
+    try {
+      await apiFetch(
+        `/api/pipeline-inspections/${editingPipelineReportId}/visual-observations/${obs.id}`,
+        { method: "DELETE" },
+      );
+      deleteVisualObservationLocal(idx);
+      toast.success(`Deleted ${obs.pointNo}`);
+    } catch (e) {
+      const err = e as { message?: string };
+      toast.error(err.message ?? "Delete failed");
+    }
+  }
+
   // ─── SAVE DRAFT (saves header + custom columns without navigating) ───
   async function saveDraft() {
-    setHeader((h) => ({ ...h, customColumns: JSON.stringify(customColumns) }));
+    if (header.reportType === "PIPELINE_THICKNESS") {
+      setHeader((h) => ({ ...h, customColumns: JSON.stringify(customColumns) }));
+    }
     if (isEdit) {
       await saveHeader();
     } else {
@@ -988,17 +1267,27 @@ export function PipelineReportFormView() {
     }
   }
 
+  // Type-specific labels
+  const typeInfo = REPORT_TYPE_INFO[header.reportType];
+
   return (
     <div className="space-y-4">
       <div>
         <Button variant="ghost" size="sm" onClick={() => setView("pipeline-reports")}>
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to list
         </Button>
-        <h1 className="mt-2 text-2xl font-bold tracking-tight">
-          {isEdit ? `Edit Report ${header.reportNumber}` : "New Pipeline Thickness Report"}
-        </h1>
+        <div className="mt-2 flex items-center gap-2">
+          <h1 className="text-2xl font-bold tracking-tight">
+            {isEdit ? `Edit Report ${header.reportNumber}` : typeInfo.formHeading}
+          </h1>
+          <Badge variant="outline" className={typeInfo.accent}>
+            {typeInfo.shortLabel}
+          </Badge>
+        </div>
         <p className="text-sm text-muted-foreground">
-          {isEdit ? "Edit the report details, measurements, and findings." : "Create a new pipeline thickness report in 3 steps."}
+          {isEdit
+            ? `Editing ${typeInfo.title.toLowerCase()} — ${typeInfo.formDescription}`
+            : typeInfo.formDescription}
         </p>
       </div>
 
@@ -1014,28 +1303,31 @@ export function PipelineReportFormView() {
               {step > s ? "✓" : s}
             </div>
             <span className={`text-sm font-medium ${step === s ? "text-amber-700" : "text-muted-foreground"}`}>
-              {s === 1 ? "Pipeline Details" : s === 2 ? "Measurements" : "Findings & Photos"}
+              {s === 1 ? "Pipeline Details" : s === 2 ? typeInfo.step2Label : "Findings & Photos"}
             </span>
             {s < 3 && <span className="text-zinc-300">→</span>}
           </div>
         ))}
         <span className="ml-auto text-xs text-muted-foreground">
-          Step {step} of 3 — {step === 1 ? "Pipeline Details" : step === 2 ? "Measurements" : "Findings & Photos"}
+          Step {step} of 3 — {step === 1 ? "Pipeline Details" : step === 2 ? typeInfo.step2Label : "Findings & Photos"}
         </span>
       </div>
 
-      <Alert className="border-amber-200 bg-amber-50">
-        <ShieldAlert className="h-4 w-4 text-amber-700" />
-        <AlertTitle className="text-amber-900">Reference data notice</AlertTitle>
-        <AlertDescription className="text-amber-900">
-          Nominal thickness values come from publicly published ASME B36.10M / B36.19M
-          reference tables. They are marked UNVERIFIED until an administrator
-          confirms them against the licensed / official standard edition. The
-          nominal thickness is a dimensional reference value, distinct from
-          the measured remaining wall thickness, and is not, by itself, an
-          inspection pass / fail criterion.
-        </AlertDescription>
-      </Alert>
+      {/* Reference-data notice: only relevant for thickness reports */}
+      {header.reportType === "PIPELINE_THICKNESS" && (
+        <Alert className="border-amber-200 bg-amber-50">
+          <ShieldAlert className="h-4 w-4 text-amber-700" />
+          <AlertTitle className="text-amber-900">Reference data notice</AlertTitle>
+          <AlertDescription className="text-amber-900">
+            Nominal thickness values come from publicly published ASME B36.10M / B36.19M
+            reference tables. They are marked UNVERIFIED until an administrator
+            confirms them against the licensed / official standard edition. The
+            nominal thickness is a dimensional reference value, distinct from
+            the measured remaining wall thickness, and is not, by itself, an
+            inspection pass / fail criterion.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* ═══ STEP 1: HEADER ═══ */}
       {step === 1 && (
@@ -1379,8 +1671,12 @@ export function PipelineReportFormView() {
       </>
       )} {/* end step 1 */}
 
-      {/* ═══ STEP 2: MEASUREMENT TABLE ═══ */}
-      {step === 2 && (
+      {/* ═══ STEP 2: MIDDLE STEP — type-specific ═══
+          • PIPELINE_THICKNESS → measurement table (11 columns + custom)
+          • PIPELINE_VISUAL    → visual inspection observations (rows)
+          • PIPELINE_CONDITION → condition assessment form (single-instance fields)
+      */}
+      {step === 2 && header.reportType === "PIPELINE_THICKNESS" && (
       <>
       <Card>
         <CardHeader>
@@ -1675,6 +1971,267 @@ export function PipelineReportFormView() {
         </CardContent>
       </Card>
 
+      {/* Step 2 navigation (shared across all three report types) */}
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" onClick={goPrevious}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> Previous
+        </Button>
+        <Button variant="ghost" onClick={saveDraft} disabled={saving}>
+          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+          Save Draft
+        </Button>
+        <Button onClick={proceedToNext} disabled={saving}>
+          Proceed to Next <ArrowRight className="ml-2 h-4 w-4" />
+        </Button>
+      </div>
+      </>
+      )} {/* end step 2 — thickness */}
+
+      {/* ═══ STEP 2 (VISUAL): VISUAL OBSERVATIONS TABLE ═══ */}
+      {step === 2 && header.reportType === "PIPELINE_VISUAL" && (
+      <>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base">Visual Inspection Observations</CardTitle>
+              <CardDescription>
+                Add one row per inspection point along the pipeline. Each row
+                captures the visual condition at that point. Click <strong>Save</strong>
+                on each row to persist it before navigating away.
+              </CardDescription>
+            </div>
+            <Button onClick={addVisualObservation} size="sm">
+              <Plus className="mr-1 h-4 w-4" /> Add Observation
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-blue-800 text-white">
+                <tr>
+                  <th className="border border-blue-900 px-2 py-2 text-center align-middle" style={{ minWidth: 50 }}>Pt No</th>
+                  <th className="border border-blue-900 px-2 py-2 text-center align-middle" style={{ minWidth: 110 }}>Location</th>
+                  <th className="border border-blue-900 px-2 py-2 text-center align-middle" style={{ minWidth: 90 }}>Pipeline Condition</th>
+                  <th className="border border-blue-900 px-2 py-2 text-center align-middle" style={{ minWidth: 90 }}>External Surface</th>
+                  <th className="border border-blue-900 px-2 py-2 text-center align-middle" style={{ minWidth: 90 }}>Coating / Paint</th>
+                  <th className="border border-blue-900 px-2 py-2 text-center align-middle" style={{ minWidth: 90 }}>Corrosion</th>
+                  <th className="border border-blue-900 px-2 py-2 text-center align-middle" style={{ minWidth: 80 }}>Leakage</th>
+                  <th className="border border-blue-900 px-2 py-2 text-center align-middle" style={{ minWidth: 100 }}>Damage / Deformation</th>
+                  <th className="border border-blue-900 px-2 py-2 text-center align-middle" style={{ minWidth: 90 }}>Supports / Hangers</th>
+                  <th className="border border-blue-900 px-2 py-2 text-center align-middle" style={{ minWidth: 90 }}>Weld Joint</th>
+                  <th className="border border-blue-900 px-2 py-2 text-center align-middle" style={{ minWidth: 90 }}>Insulation</th>
+                  <th className="border border-blue-900 px-2 py-2 text-center align-middle" style={{ minWidth: 160 }}>Findings</th>
+                  <th className="border border-blue-900 px-2 py-2 text-center align-middle" style={{ minWidth: 160 }}>Recommendations</th>
+                  <th className="border border-blue-900 px-2 py-2 text-center align-middle" style={{ minWidth: 160 }}>Inspector Comments</th>
+                  <th className="border border-blue-900 px-2 py-2 text-center align-middle" style={{ minWidth: 80 }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visualObservations.length === 0 && (
+                  <tr>
+                    <td colSpan={15} className="text-center py-6 text-muted-foreground border border-zinc-300">
+                      No observations yet. Click <strong>Add Observation</strong> to begin.
+                    </td>
+                  </tr>
+                )}
+                {visualObservations.map((obs, idx) => (
+                  <tr key={idx} className="hover:bg-muted/30">
+                    <td className="border border-zinc-300 p-1">
+                      <Input
+                        className="h-8 text-xs text-center font-mono"
+                        value={obs.pointNo}
+                        onChange={(e) => updateVisualObservation(idx, { pointNo: e.target.value })}
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input
+                        className="h-8 text-xs"
+                        value={obs.location}
+                        onChange={(e) => updateVisualObservation(idx, { location: e.target.value })}
+                        placeholder="e.g. Top rack, Bay 3"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Select
+                        value={obs.pipelineCondition || "N/A"}
+                        onValueChange={(v) => updateVisualObservation(idx, { pipelineCondition: v === "N/A" ? "" : v })}
+                      >
+                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {CONDITION_RATINGS.map((c) => (
+                            <SelectItem key={c} value={c}>{c}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Select
+                        value={obs.externalSurfaceCondition || "N/A"}
+                        onValueChange={(v) => updateVisualObservation(idx, { externalSurfaceCondition: v === "N/A" ? "" : v })}
+                      >
+                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {CONDITION_RATINGS.map((c) => (
+                            <SelectItem key={c} value={c}>{c}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Select
+                        value={obs.coatingPaintCondition || "N/A"}
+                        onValueChange={(v) => updateVisualObservation(idx, { coatingPaintCondition: v === "N/A" ? "" : v })}
+                      >
+                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {CONDITION_RATINGS.map((c) => (
+                            <SelectItem key={c} value={c}>{c}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Select
+                        value={obs.corrosionObserved || "N/A"}
+                        onValueChange={(v) => updateVisualObservation(idx, { corrosionObserved: v === "N/A" ? "" : v })}
+                      >
+                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {CORROSION_LEVELS.map((c) => (
+                            <SelectItem key={c} value={c}>{c}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Select
+                        value={obs.leakageObserved || "N/A"}
+                        onValueChange={(v) => updateVisualObservation(idx, { leakageObserved: v === "N/A" ? "" : v })}
+                      >
+                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {YES_NO_NA.map((c) => (
+                            <SelectItem key={c} value={c}>{c}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input
+                        className="h-8 text-xs"
+                        value={obs.damageOrDeformation}
+                        onChange={(e) => updateVisualObservation(idx, { damageOrDeformation: e.target.value })}
+                        placeholder="e.g. None / Dent at 2m"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Select
+                        value={obs.supportsHangersCondition || "N/A"}
+                        onValueChange={(v) => updateVisualObservation(idx, { supportsHangersCondition: v === "N/A" ? "" : v })}
+                      >
+                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {CONDITION_RATINGS.map((c) => (
+                            <SelectItem key={c} value={c}>{c}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Select
+                        value={obs.weldJointCondition || "N/A"}
+                        onValueChange={(v) => updateVisualObservation(idx, { weldJointCondition: v === "N/A" ? "" : v })}
+                      >
+                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {CONDITION_RATINGS.map((c) => (
+                            <SelectItem key={c} value={c}>{c}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Select
+                        value={obs.insulationCondition || "N/A"}
+                        onValueChange={(v) => updateVisualObservation(idx, { insulationCondition: v === "N/A" ? "" : v })}
+                      >
+                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {CONDITION_RATINGS.map((c) => (
+                            <SelectItem key={c} value={c}>{c}</SelectItem>
+                          ))}
+                          <SelectItem value="Not Applicable">Not Applicable (no insulation)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Textarea
+                        rows={1}
+                        className="text-xs min-h-[32px] py-1"
+                        value={obs.findings}
+                        onChange={(e) => updateVisualObservation(idx, { findings: e.target.value })}
+                        placeholder="Observations at this point"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Textarea
+                        rows={1}
+                        className="text-xs min-h-[32px] py-1"
+                        value={obs.recommendations}
+                        onChange={(e) => updateVisualObservation(idx, { recommendations: e.target.value })}
+                        placeholder="Recommended actions"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Textarea
+                        rows={1}
+                        className="text-xs min-h-[32px] py-1"
+                        value={obs.inspectorComments}
+                        onChange={(e) => updateVisualObservation(idx, { inspectorComments: e.target.value })}
+                        placeholder="Inspector notes"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <div className="flex flex-col gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 px-2 text-[10px]"
+                          onClick={() => saveVisualObservation(idx)}
+                          disabled={saving}
+                          title="Save observation"
+                        >
+                          <Save className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+                          onClick={() => deleteVisualObservationApi(idx)}
+                          title="Delete observation"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="bg-zinc-50">
+        <CardContent className="p-4 text-xs text-muted-foreground space-y-1">
+          <div><strong>Visual inspection:</strong> each row captures the visual condition at one inspection point along the pipeline.</div>
+          <div><strong>Photo attachment:</strong> use Step 3 (Findings &amp; Photos) to upload inspection photographs — they appear in the PDF photo gallery.</div>
+          <div><strong>Dropdowns:</strong> condition ratings are Good / Fair / Poor / Critical / N/A; corrosion is None / Light / Moderate / Severe / N/A.</div>
+        </CardContent>
+      </Card>
+
       {/* Step 2 navigation */}
       <div className="flex items-center gap-2">
         <Button variant="ghost" onClick={goPrevious}>
@@ -1689,7 +2246,170 @@ export function PipelineReportFormView() {
         </Button>
       </div>
       </>
-      )} {/* end step 2 */}
+      )} {/* end step 2 — visual */}
+
+      {/* ═══ STEP 2 (CONDITION): CONDITION ASSESSMENT FORM ═══ */}
+      {step === 2 && header.reportType === "PIPELINE_CONDITION" && (
+      <>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Pipeline Condition Assessment</CardTitle>
+          <CardDescription>
+            Capture the overall condition of the pipeline section, risk / priority
+            level, and recommendations. Click <strong>Save Draft</strong> to persist
+            changes — these fields are saved to the report header.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="space-y-2">
+            <Label>Pipeline Age (years, if available)</Label>
+            <Input
+              type="number"
+              step="any"
+              value={header.pipelineAgeYears}
+              onChange={(e) => updateHeader("pipelineAgeYears", e.target.value)}
+              placeholder="e.g. 12"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Service / Fluid</Label>
+            <Input
+              value={header.serviceFluid}
+              onChange={(e) => updateHeader("serviceFluid", e.target.value)}
+              placeholder="e.g. Cooling Water, Natural Gas, Steam"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Operating Condition</Label>
+            <Select
+              value={header.operatingCondition || "—"}
+              onValueChange={(v) => updateHeader("operatingCondition", v === "—" ? "" : v)}
+            >
+              <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="—">—</SelectItem>
+                <SelectItem value="Normal">Normal</SelectItem>
+                <SelectItem value="Elevated Temperature">Elevated Temperature</SelectItem>
+                <SelectItem value="High Pressure">High Pressure</SelectItem>
+                <SelectItem value="Cyclic">Cyclic</SelectItem>
+                <SelectItem value="Intermittent">Intermittent</SelectItem>
+                <SelectItem value="Decommissioned">Decommissioned</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Overall Condition Rating</Label>
+            <Select
+              value={header.overallConditionRating || "N/A"}
+              onValueChange={(v) => updateHeader("overallConditionRating", v === "N/A" ? "" : v)}
+            >
+              <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="N/A">N/A</SelectItem>
+                <SelectItem value="Excellent">Excellent</SelectItem>
+                <SelectItem value="Good">Good</SelectItem>
+                <SelectItem value="Fair">Fair</SelectItem>
+                <SelectItem value="Poor">Poor</SelectItem>
+                <SelectItem value="Critical">Critical</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Risk / Priority Level</Label>
+            <Select
+              value={header.riskPriorityLevel || "—"}
+              onValueChange={(v) => updateHeader("riskPriorityLevel", v === "—" ? "" : v)}
+            >
+              <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="—">—</SelectItem>
+                <SelectItem value="Low">Low</SelectItem>
+                <SelectItem value="Medium">Medium</SelectItem>
+                <SelectItem value="High">High</SelectItem>
+                <SelectItem value="Critical">Critical</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Previous Inspection Reference</Label>
+            <Input
+              value={header.previousInspectionRef}
+              onChange={(e) => updateHeader("previousInspectionRef", e.target.value)}
+              placeholder="e.g. UT-COR-ENN-001 (2024)"
+              className="font-mono"
+            />
+          </div>
+          <div className="space-y-2 sm:col-span-2 lg:col-span-3">
+            <Label>Corrosion Condition</Label>
+            <Textarea
+              rows={2}
+              value={header.corrosionCondition}
+              onChange={(e) => updateHeader("corrosionCondition", e.target.value)}
+              placeholder="Describe observed corrosion type, extent, location..."
+            />
+          </div>
+          <div className="space-y-2 sm:col-span-2 lg:col-span-3">
+            <Label>Damage Assessment</Label>
+            <Textarea
+              rows={2}
+              value={header.damageAssessment}
+              onChange={(e) => updateHeader("damageAssessment", e.target.value)}
+              placeholder="Describe observed damage (mechanical, weld, support, etc.)..."
+            />
+          </div>
+          <div className="space-y-2 sm:col-span-2 lg:col-span-3">
+            <Label>Current Inspection Findings</Label>
+            <Textarea
+              rows={4}
+              value={header.currentInspectionFindings}
+              onChange={(e) => updateHeader("currentInspectionFindings", e.target.value)}
+              placeholder="Detailed findings from the current inspection..."
+            />
+          </div>
+          <div className="space-y-2 sm:col-span-2 lg:col-span-3">
+            <Label>Recommendations</Label>
+            <Textarea
+              rows={4}
+              value={header.recommendations}
+              onChange={(e) => updateHeader("recommendations", e.target.value)}
+              placeholder="Recommended actions, repairs, replacement, monitoring..."
+            />
+          </div>
+          <div className="space-y-2 sm:col-span-2 lg:col-span-3">
+            <Label>Next Inspection Recommendation</Label>
+            <Textarea
+              rows={2}
+              value={header.nextInspectionRecommendation}
+              onChange={(e) => updateHeader("nextInspectionRecommendation", e.target.value)}
+              placeholder="e.g. Re-inspect in 12 months with UT thickness survey"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="bg-zinc-50">
+        <CardContent className="p-4 text-xs text-muted-foreground space-y-1">
+          <div><strong>Condition assessment:</strong> single-instance fields describing the overall pipeline condition.</div>
+          <div><strong>Photos &amp; drawings:</strong> attach supporting evidence via Step 1 (drawings) and Step 3 (photos).</div>
+          <div><strong>Save:</strong> click <strong>Save Draft</strong> to persist changes. The fields are saved to the report header.</div>
+        </CardContent>
+      </Card>
+
+      {/* Step 2 navigation */}
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" onClick={goPrevious}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> Previous
+        </Button>
+        <Button variant="ghost" onClick={saveDraft} disabled={saving}>
+          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+          Save Draft
+        </Button>
+        <Button onClick={proceedToNext} disabled={saving}>
+          Proceed to Next <ArrowRight className="ml-2 h-4 w-4" />
+        </Button>
+      </div>
+      </>
+      )} {/* end step 2 — condition */}
 
       {/* ═══ STEP 3: FINDINGS & PHOTOS ═══ */}
       {step === 3 && (

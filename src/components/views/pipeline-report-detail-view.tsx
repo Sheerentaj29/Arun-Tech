@@ -43,6 +43,7 @@ import { toast } from "sonner";
 interface FullReport {
   id: string;
   reportNumber: string;
+  reportType: "PIPELINE_THICKNESS" | "PIPELINE_VISUAL" | "PIPELINE_CONDITION";
   clientId: string;
   plantId: string;
   inspectionArea: string | null;
@@ -52,6 +53,18 @@ interface FullReport {
   materialOfConstruction: string | null;
   applicableStandard: string | null;
   standardEdition: string | null;
+  // ─── PIPELINE CONDITION fields ───
+  pipelineAgeYears?: number | null;
+  serviceFluid?: string | null;
+  operatingCondition?: string | null;
+  overallConditionRating?: string | null;
+  corrosionCondition?: string | null;
+  damageAssessment?: string | null;
+  previousInspectionRef?: string | null;
+  currentInspectionFindings?: string | null;
+  riskPriorityLevel?: string | null;
+  recommendations?: string | null;
+  nextInspectionRecommendation?: string | null;
   inspectionDate: string;
   status: string;
   revisionNumber: number;
@@ -59,6 +72,7 @@ interface FullReport {
   inspectorName: string;
   findingsSummary: string | null;
   comments: string | null;
+  inspectionDescription?: string | null;
   photos: string | null;
   overrideReason: string | null;
   overrideAppliedAt: string | null;
@@ -97,6 +111,24 @@ interface FullReport {
       schedule: string; wallThicknessMm: number; isVerified: boolean;
     } | null;
   }>;
+  visualObservations?: Array<{
+    id: string;
+    pointNo: string;
+    sortOrder: number;
+    location: string | null;
+    pipelineCondition: string | null;
+    externalSurfaceCondition: string | null;
+    coatingPaintCondition: string | null;
+    corrosionObserved: string | null;
+    leakageObserved: string | null;
+    damageOrDeformation: string | null;
+    supportsHangersCondition: string | null;
+    weldJointCondition: string | null;
+    insulationCondition: string | null;
+    findings: string | null;
+    recommendations: string | null;
+    inspectorComments: string | null;
+  }>;
   revisions: Array<{
     id: string;
     revisionNumber: number;
@@ -133,6 +165,24 @@ const REVISION_STATUS_COLOR: Record<string, string> = {
   Approved: "border-emerald-500 text-emerald-700",
   "Changes Pending Review": "border-amber-500 text-amber-700",
   Superseded: "border-zinc-400 text-zinc-500",
+};
+
+const REPORT_TYPE_LABEL: Record<string, { label: string; title: string; color: string }> = {
+  PIPELINE_THICKNESS: {
+    label: "Thickness",
+    title: "PIPELINE THICKNESS MEASUREMENT REPORT",
+    color: "border-emerald-500 text-emerald-700",
+  },
+  PIPELINE_VISUAL: {
+    label: "Visual",
+    title: "PIPELINE VISUAL INSPECTION REPORT",
+    color: "border-blue-500 text-blue-700",
+  },
+  PIPELINE_CONDITION: {
+    label: "Condition",
+    title: "PIPELINE CONDITION ASSESSMENT REPORT",
+    color: "border-amber-500 text-amber-700",
+  },
 };
 
 export function PipelineReportDetailView() {
@@ -355,6 +405,15 @@ export function PipelineReportDetailView() {
 
       {/* Status banner */}
       <div className="flex flex-wrap items-center gap-3">
+        {/* Report type badge — derived from reportType */}
+        {(() => {
+          const typeInfo = REPORT_TYPE_LABEL[report.reportType] ?? REPORT_TYPE_LABEL.PIPELINE_THICKNESS;
+          return (
+            <Badge variant="outline" className={`text-[11px] ${typeInfo.color}`}>
+              {typeInfo.label}
+            </Badge>
+          );
+        })()}
         <Badge variant="outline" className={STATUS_COLOR[report.status] ?? ""}>
           {report.status}
         </Badge>
@@ -402,7 +461,7 @@ export function PipelineReportDetailView() {
         {/* Header */}
         <div className="mb-6">
           <h1 className="text-center text-lg font-bold tracking-tight">
-            PIPELINE THICKNESS MEASUREMENT REPORT
+            {(REPORT_TYPE_LABEL[report.reportType] ?? REPORT_TYPE_LABEL.PIPELINE_THICKNESS).title}
           </h1>
           <p className="text-center text-xs text-zinc-700">
             Report No: <span className="font-mono">{report.reportNumber}</span>

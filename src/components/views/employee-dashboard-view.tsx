@@ -32,34 +32,43 @@ interface EmployeeSummary {
   draftList: Array<{
     id: string;
     reportNumber: string;
+    reportType: "PIPELINE_THICKNESS" | "PIPELINE_VISUAL" | "PIPELINE_CONDITION";
     pipelineDescription: string | null;
     updatedAt: string;
     client: { id: string; name: string };
     plant: { id: string; name: string; location: string | null };
-    _count: { measurements: number };
+    _count: { measurements: number; visualObservations: number };
   }>;
   returnedList: Array<{
     id: string;
     reportNumber: string;
+    reportType: "PIPELINE_THICKNESS" | "PIPELINE_VISUAL" | "PIPELINE_CONDITION";
     pipelineDescription: string | null;
     reviewComments: string | null;
     returnedAt: string | null;
     returnedBy: { id: string; name: string } | null;
     client: { id: string; name: string };
     plant: { id: string; name: string; location: string | null };
-    _count: { measurements: number };
+    _count: { measurements: number; visualObservations: number };
   }>;
   approvedList: Array<{
     id: string;
     reportNumber: string;
+    reportType: "PIPELINE_THICKNESS" | "PIPELINE_VISUAL" | "PIPELINE_CONDITION";
     pipelineDescription: string | null;
     approvedAt: string | null;
     revisionNumber: number;
     approver: { id: string; name: string } | null;
     client: { id: string; name: string };
-    _count: { measurements: number; revisions: number };
+    _count: { measurements: number; revisions: number; visualObservations: number };
   }>;
 }
+
+const REPORT_TYPE_BADGE: Record<string, { label: string; color: string }> = {
+  PIPELINE_THICKNESS: { label: "Thickness", color: "border-emerald-500 text-emerald-700" },
+  PIPELINE_VISUAL:    { label: "Visual",    color: "border-blue-500 text-blue-700" },
+  PIPELINE_CONDITION: { label: "Condition", color: "border-amber-500 text-amber-700" },
+};
 
 export function EmployeeDashboardView() {
   const { openPipelineReport, openNewPipelineReport, refreshKey } = useAppStore();
@@ -150,7 +159,9 @@ export function EmployeeDashboardView() {
                 No returned reports. You're all caught up.
               </p>
             )}
-            {summary.returnedList.map((r) => (
+            {summary.returnedList.map((r) => {
+              const ti = REPORT_TYPE_BADGE[r.reportType] ?? REPORT_TYPE_BADGE.PIPELINE_THICKNESS;
+              return (
               <button
                 key={r.id}
                 onClick={() => openPipelineReport(r.id)}
@@ -163,6 +174,7 @@ export function EmployeeDashboardView() {
                       <Badge variant="outline" className="border-red-500 text-red-700">
                         Returned
                       </Badge>
+                      <Badge variant="outline" className={`text-[10px] ${ti.color}`}>{ti.label}</Badge>
                     </div>
                     <div className="mt-0.5 text-xs text-muted-foreground truncate">
                       {r.client.name} · {r.plant.name}
@@ -180,7 +192,8 @@ export function EmployeeDashboardView() {
                   <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                 </div>
               </button>
-            ))}
+              );
+            })}
           </CardContent>
         </Card>
 
@@ -200,7 +213,9 @@ export function EmployeeDashboardView() {
                 No drafts. Click "New Report" to start one.
               </p>
             )}
-            {summary.draftList.map((r) => (
+            {summary.draftList.map((r) => {
+              const ti = REPORT_TYPE_BADGE[r.reportType] ?? REPORT_TYPE_BADGE.PIPELINE_THICKNESS;
+              return (
               <button
                 key={r.id}
                 onClick={() => openPipelineReport(r.id)}
@@ -211,6 +226,7 @@ export function EmployeeDashboardView() {
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-sm font-semibold">{r.reportNumber}</span>
                       <Badge variant="outline" className="border-zinc-400 text-zinc-600">Draft</Badge>
+                      <Badge variant="outline" className={`text-[10px] ${ti.color}`}>{ti.label}</Badge>
                     </div>
                     <div className="mt-0.5 text-xs text-muted-foreground truncate">
                       {r.client.name} · {r.plant.name}
@@ -220,10 +236,16 @@ export function EmployeeDashboardView() {
                   <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                 </div>
                 <div className="mt-1 text-[11px] text-muted-foreground">
-                  {r._count.measurements} measurement point(s) · updated {new Date(r.updatedAt).toLocaleDateString()}
+                  {r.reportType === "PIPELINE_THICKNESS"
+                    ? `${r._count.measurements} measurement point(s)`
+                    : r.reportType === "PIPELINE_VISUAL"
+                      ? `${r._count.visualObservations} observation(s)`
+                      : "Condition assessment"}
+                  {" · updated " + new Date(r.updatedAt).toLocaleDateString()}
                 </div>
               </button>
-            ))}
+              );
+            })}
           </CardContent>
         </Card>
       </div>
@@ -246,7 +268,9 @@ export function EmployeeDashboardView() {
             </p>
           )}
           <div className="space-y-2">
-            {summary.approvedList.map((r) => (
+            {summary.approvedList.map((r) => {
+              const ti = REPORT_TYPE_BADGE[r.reportType] ?? REPORT_TYPE_BADGE.PIPELINE_THICKNESS;
+              return (
               <button
                 key={r.id}
                 onClick={() => openPipelineReport(r.id)}
@@ -259,6 +283,7 @@ export function EmployeeDashboardView() {
                       <Badge variant="outline" className="border-emerald-500 text-emerald-700">
                         Approved
                       </Badge>
+                      <Badge variant="outline" className={`text-[10px] ${ti.color}`}>{ti.label}</Badge>
                       {r.revisionNumber > 1 && (
                         <Badge variant="outline" className="text-[10px]">Rev {r.revisionNumber}</Badge>
                       )}
@@ -271,7 +296,8 @@ export function EmployeeDashboardView() {
                   </div>
                 </div>
               </button>
-            ))}
+              );
+            })}
           </div>
         </CardContent>
       </Card>

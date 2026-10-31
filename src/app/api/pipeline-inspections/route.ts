@@ -67,7 +67,13 @@ export async function GET(req: NextRequest) {
         inspector: { select: { id: true, name: true } },
         approver: { select: { id: true, name: true } },
         returnedBy: { select: { id: true, name: true } },
-        _count: { select: { measurements: true, revisions: true } },
+        _count: {
+          select: {
+            measurements: true,
+            revisions: true,
+            visualObservations: true,
+          },
+        },
       },
     }),
     db.pipelineInspection.count({ where }),
@@ -124,6 +130,12 @@ export async function POST(req: NextRequest) {
   const created = await db.pipelineInspection.create({
     data: {
       reportNumber: body.reportNumber.trim(),
+      // Accept reportType from the form. Default to PIPELINE_THICKNESS for
+      // backward compat (so existing API callers that don't send it still
+      // create thickness reports as before).
+      reportType: ["PIPELINE_THICKNESS", "PIPELINE_VISUAL", "PIPELINE_CONDITION"].includes(body.reportType)
+        ? body.reportType
+        : "PIPELINE_THICKNESS",
       clientId: body.clientId,
       plantId: body.plantId,
       inspectionArea: body.inspectionArea?.trim() || null,
@@ -142,6 +154,19 @@ export async function POST(req: NextRequest) {
       inspectionDescription: body.inspectionDescription ?? null,
       customColumns: body.customColumns ?? "[]",
       photos: body.photos ?? null,
+      // ─── PIPELINE CONDITION fields (only set when reportType = PIPELINE_CONDITION;
+      // ignored for thickness/visual reports) ───
+      pipelineAgeYears: typeof body.pipelineAgeYears === "number" ? body.pipelineAgeYears : null,
+      serviceFluid: body.serviceFluid?.trim() || null,
+      operatingCondition: body.operatingCondition?.trim() || null,
+      overallConditionRating: body.overallConditionRating?.trim() || null,
+      corrosionCondition: body.corrosionCondition?.trim() || null,
+      damageAssessment: body.damageAssessment?.trim() || null,
+      previousInspectionRef: body.previousInspectionRef?.trim() || null,
+      currentInspectionFindings: body.currentInspectionFindings?.trim() || null,
+      riskPriorityLevel: body.riskPriorityLevel?.trim() || null,
+      recommendations: body.recommendations?.trim() || null,
+      nextInspectionRecommendation: body.nextInspectionRecommendation?.trim() || null,
       isDemo: false,
     },
     include: {

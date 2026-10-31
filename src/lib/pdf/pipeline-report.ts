@@ -28,6 +28,7 @@ import type { Writable } from "stream";
 import type {
   PipelineInspection,
   ThicknessMeasurement,
+  VisualInspectionObservation,
   Client,
   Plant,
   User,
@@ -41,6 +42,23 @@ import { join } from "path";
 import { mkdtempSync, readdirSync, unlinkSync, rmdirSync } from "fs";
 
 const execFileAsync = promisify(execFile);
+
+// ─── Report type metadata ───
+// The title is the only piece used directly by the PDF generator; the
+// shortLabel / accent are used by the UI (not here).
+type ReportType = "PIPELINE_THICKNESS" | "PIPELINE_VISUAL" | "PIPELINE_CONDITION";
+
+const REPORT_TYPE_TITLE: Record<ReportType, string> = {
+  PIPELINE_THICKNESS: "PIPELINE THICKNESS MEASUREMENT REPORT",
+  PIPELINE_VISUAL:    "PIPELINE VISUAL INSPECTION REPORT",
+  PIPELINE_CONDITION: "PIPELINE CONDITION ASSESSMENT REPORT",
+};
+
+function getReportType(raw: any): ReportType {
+  const v = String(raw ?? "PIPELINE_THICKNESS");
+  if (v === "PIPELINE_VISUAL" || v === "PIPELINE_CONDITION") return v;
+  return "PIPELINE_THICKNESS";
+}
 
 export interface LinkedDrawing {
   id: string;
@@ -63,6 +81,9 @@ export interface PdfReportInput {
     inspector: Pick<User, "id" | "name" | "email">;
     approver: Pick<User, "id" | "name" | "email"> | null;
     reportPhotos?: ReportPhoto[];
+    // Visual inspection observations — populated when reportType = PIPELINE_VISUAL.
+    // The Prisma include returns these as `report.visualObservations`.
+    visualObservations?: VisualInspectionObservation[];
   };
   measurements: ThicknessMeasurement[];
   photos?: ReportPhoto[];
@@ -286,13 +307,18 @@ export async function generatePipelineReportPdf(
   const pageW = pageSize[0];
   const pageH = pageSize[1];
 
+  // Determine the report type → drives the title and the body content
+  // (thickness table vs visual observations table vs condition assessment fields).
+  const reportType = getReportType((input.report as any).reportType);
+  const titleText = REPORT_TYPE_TITLE[reportType];
+
   const doc = new PDFDocument({
     size: pageSize,           // ← [w, h] array, NO `layout` flag (it would re-swap)
     margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
     info: {
-      Title: `Pipeline Thickness Measurement Report ${input.report.reportNumber}`,
+      Title: `${titleText} ${input.report.reportNumber}`,
       Author: input.report.inspectorName,
-      Subject: input.report.pipelineDescription ?? "UT Thickness Measurement",
+      Subject: input.report.pipelineDescription ?? "Pipeline Inspection",
       Producer: "Inspection Report Automation System",
     },
   });
@@ -300,6 +326,8 @@ export async function generatePipelineReportPdf(
 
   const report = input.report;
   const measurements = input.measurements;
+  const visualObservations =
+    input.report.visualObservations ?? (report as any).visualObservations ?? [];
   const allPhotos = input.photos ?? input.report.reportPhotos ?? [];
   const customCols = getCustomColumns(report);
   const linkedDrawings = input.linkedDrawings ?? (report as any).linkedDrawings ?? [];
@@ -367,7 +395,6 @@ export async function generatePipelineReportPdf(
   // ── TITLE ──
   const titleFontSize = orientation === "landscape" ? 14 : 12;
   doc.font("Helvetica-Bold").fontSize(titleFontSize).fillColor("#000");
-  const titleText = "PIPELINE THICKNESS MEASUREMENT REPORT";
   const titleHeight = doc.heightOfString(titleText, { width: usableW, align: "center" });
   doc.text(titleText, MARGIN, cursorY, { width: usableW, align: "center" });
   cursorY += titleHeight + 8;  // explicit 8pt gap below title
@@ -553,39 +580,99 @@ export async function generatePipelineReportPdf(
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // MEASUREMENT TABLE
-  // If drawings were emitted, the table starts on a fresh page.
+  // BODY CONTENT — type-specific
+  //   • PIPELINE_THICKNESS → measurement table (11 columns + custom)
+  //   • PIPELINE_VISUAL    → visual observations table
+  //   • PIPELINE_CONDITION → condition assessment fields (labeled grid)
+  //
+  // If drawings were emitted, the body starts on a fresh page.
   // Otherwise, continue on the same page if there's room, else a new page.
   // ═══════════════════════════════════════════════════════════════
   const tableHeaderH = 36;
   const rowH2 = orientation === "landscape" ? 28 : 22;
-  let y: number;
+  // `y` is assigned inside startBodyOnFreshPage() before any read, but
+  // TypeScript's flow analysis can't track closure assignments — so we
+  // initialize to 0 to satisfy the type checker.
+  let y: number = 0;
 
-  if (linkedDrawings.length > 0) {
-    addNewPage();
-    drawTableHeader(doc, allCols, colWidths, MARGIN, pageW);
-    y = MARGIN + tableHeaderH;
-  } else {
-    if (cursorY + tableHeaderH + rowH2 > maxRowY) {
+  // Helper: decide whether to start on a fresh page or continue
+  const startBodyOnFreshPage = (neededSpace: number) => {
+    if (linkedDrawings.length > 0) {
       addNewPage();
-      drawTableHeader(doc, allCols, colWidths, MARGIN, pageW);
-      y = MARGIN + tableHeaderH;
+      y = MARGIN;
+    } else if (cursorY + neededSpace > maxRowY) {
+      addNewPage();
+      y = MARGIN;
     } else {
       cursorY += 10;
-      drawTableHeader(doc, allCols, colWidths, cursorY, pageW);
-      y = cursorY + tableHeaderH;
+      y = cursorY;
     }
-  }
+  };
 
-  // Table rows
-  for (const m of measurements) {
-    if (y + rowH2 > maxRowY) {
-      addNewPage();
-      drawTableHeader(doc, allCols, colWidths, MARGIN, pageW);
-      y = MARGIN + tableHeaderH;
+  if (reportType === "PIPELINE_THICKNESS") {
+    // ─── MEASUREMENT TABLE ───
+    startBodyOnFreshPage(tableHeaderH + rowH2);
+    drawTableHeader(doc, allCols, colWidths, y, pageW);
+    y += tableHeaderH;
+    for (const m of measurements) {
+      if (y + rowH2 > maxRowY) {
+        addNewPage();
+        drawTableHeader(doc, allCols, colWidths, MARGIN, pageW);
+        y = MARGIN + tableHeaderH;
+      }
+      drawMeasurementRow(doc, m, allCols, colWidths, y, report, customCols);
+      y += rowH2;
     }
-    drawMeasurementRow(doc, m, allCols, colWidths, y, report, customCols);
-    y += rowH2;
+  } else if (reportType === "PIPELINE_VISUAL") {
+    // ─── VISUAL OBSERVATIONS TABLE ───
+    // Render a multi-column table with one row per observation point.
+    // Landscape orientation is strongly recommended for this table
+    // (it has 13 columns).
+    const visCols: Column[] = [
+      { key: "vPtNo",        header: "Pt No",              width: 40 },
+      { key: "vLocation",    header: "Location",            width: 80 },
+      { key: "vPipeCond",    header: "Pipeline\nCondition", width: 60 },
+      { key: "vExtSurf",     header: "External\nSurface",   width: 60 },
+      { key: "vCoatPaint",   header: "Coating /\nPaint",    width: 60 },
+      { key: "vCorrosion",   header: "Corrosion",            width: 55 },
+      { key: "vLeakage",     header: "Leakage",              width: 50 },
+      { key: "vDamage",      header: "Damage /\nDeformation", width: 70 },
+      { key: "vSupports",    header: "Supports /\nHangers",  width: 60 },
+      { key: "vWeld",        header: "Weld\nJoint",          width: 55 },
+      { key: "vInsulation",  header: "Insulation",           width: 55 },
+      { key: "vFindings",    header: "Findings",             width: 0 },
+      { key: "vRecs",        header: "Recommendations",      width: 0 },
+      { key: "vComments",    header: "Inspector\nComments",  width: 0 },
+    ];
+    const visColWidths = calcColumnWidths(visCols, pageW);
+    startBodyOnFreshPage(tableHeaderH + rowH2);
+    drawVisualTableHeader(doc, visCols, visColWidths, y, pageW);
+    y += tableHeaderH;
+    for (const o of visualObservations) {
+      if (y + rowH2 > maxRowY) {
+        addNewPage();
+        drawVisualTableHeader(doc, visCols, visColWidths, MARGIN, pageW);
+        y = MARGIN + tableHeaderH;
+      }
+      drawVisualObservationRow(doc, o, visCols, visColWidths, y);
+      y += rowH2;
+    }
+    // If no observations, emit a placeholder row
+    if (visualObservations.length === 0) {
+      doc.font("Helvetica").fontSize(8).fillColor("#666");
+      doc.rect(MARGIN, y, pageW - 2 * MARGIN, rowH2).stroke("#bbb");
+      doc.text("No visual observations recorded.", MARGIN + 4, y + 9, {
+        width: pageW - 2 * MARGIN - 8, align: "center",
+      });
+      doc.fillColor("#000");
+      y += rowH2;
+    }
+  } else if (reportType === "PIPELINE_CONDITION") {
+    // ─── CONDITION ASSESSMENT FIELDS ───
+    // Render as a labeled grid (similar to the header info grid) plus
+    // multi-line text blocks for the longer fields.
+    startBodyOnFreshPage(80);
+    y = drawConditionAssessment(doc, report as any, y, pageW, pageH, MARGIN, maxRowY, addNewPage);
   }
 
   // ── INSPECTION DESCRIPTION ──
@@ -842,6 +929,188 @@ function drawDrawingPlaceholder(
     width: availW - 40, align: "center",
   });
   doc.fillColor("#000");
+}
+
+// ─── VISUAL OBSERVATION TABLE HELPERS ───
+// These mirror drawTableHeader / drawMeasurementRow but for the visual
+// inspection observation rows. The header uses a blue accent instead of
+// green to visually distinguish the report type.
+
+const VISUAL_HEADER_BG = "#1e4d8b";
+const VISUAL_HEADER_FG = "#ffffff";
+
+function drawVisualTableHeader(doc: Doc, columns: Column[], colWidths: number[], y: number, pageW: number) {
+  const usable = pageW - 2 * MARGIN;
+  doc.rect(MARGIN, y, usable, 36).fill(VISUAL_HEADER_BG).fillColor(VISUAL_HEADER_FG);
+  let x = MARGIN;
+  doc.font("Helvetica-Bold").fontSize(7).fillColor(VISUAL_HEADER_FG);
+  for (let i = 0; i < columns.length; i++) {
+    const c = columns[i];
+    const w = colWidths[i];
+    const lines = c.header.split("\n");
+    let ly = y + 4;
+    for (const ln of lines) {
+      doc.text(ln, x + 3, ly, { width: w - 6, align: "center" });
+      ly += 9;
+    }
+    doc.rect(x, y, w, 36).stroke("#0e2d5b");
+    x += w;
+  }
+  doc.fillColor("#000");
+}
+
+function drawVisualObservationRow(
+  doc: Doc,
+  o: VisualInspectionObservation,
+  columns: Column[],
+  colWidths: number[],
+  y: number,
+) {
+  const rowH = 28;
+  const usable = doc.page.width - 2 * MARGIN;
+  doc.rect(MARGIN, y, usable, rowH).stroke("#999");
+  let x = MARGIN;
+  const cellPad = 3;
+  doc.font("Helvetica").fontSize(7).fillColor("#000");
+
+  for (let i = 0; i < columns.length; i++) {
+    const c = columns[i];
+    const w = colWidths[i];
+    let text = "";
+    switch (c.key) {
+      case "vPtNo":       text = o.pointNo; break;
+      case "vLocation":   text = o.location ?? ""; break;
+      case "vPipeCond":   text = o.pipelineCondition ?? ""; break;
+      case "vExtSurf":    text = o.externalSurfaceCondition ?? ""; break;
+      case "vCoatPaint":  text = o.coatingPaintCondition ?? ""; break;
+      case "vCorrosion":  text = o.corrosionObserved ?? ""; break;
+      case "vLeakage":    text = o.leakageObserved ?? ""; break;
+      case "vDamage":     text = o.damageOrDeformation ?? ""; break;
+      case "vSupports":   text = o.supportsHangersCondition ?? ""; break;
+      case "vWeld":       text = o.weldJointCondition ?? ""; break;
+      case "vInsulation": text = o.insulationCondition ?? ""; break;
+      case "vFindings":   text = o.findings ?? ""; break;
+      case "vRecs":       text = o.recommendations ?? ""; break;
+      case "vComments":   text = o.inspectorComments ?? ""; break;
+    }
+    doc.rect(x, y, w, rowH).stroke("#bbb");
+    const maxW = w - 2 * cellPad;
+    // Truncate with ellipsis if too long
+    const wrapped = doc.widthOfString(text) > maxW
+      ? text.slice(0, Math.floor((maxW / Math.max(1, doc.widthOfString(text))) * text.length)) + "…"
+      : text;
+    doc.text(wrapped, x + cellPad, y + 9, {
+      width: maxW, align: "left",
+    });
+    x += w;
+  }
+}
+
+// ─── CONDITION ASSESSMENT HELPER ───
+// Renders the condition assessment fields as a labeled grid (single-line
+// fields) followed by multi-line text blocks for the longer fields.
+// Returns the new y cursor after drawing all fields.
+
+function drawConditionAssessment(
+  doc: Doc,
+  report: any,
+  startY: number,
+  pageW: number,
+  _pageH: number,
+  margin: number,
+  maxRowY: number,
+  addNewPage: () => void,
+): number {
+  let y = startY;
+
+  // Section heading
+  if (y + 20 > maxRowY) { addNewPage(); y = margin; }
+  doc.font("Helvetica-Bold").fontSize(11).fillColor("#000");
+  doc.text("Condition Assessment", margin, y, { width: pageW - 2 * margin, align: "left" });
+  y += 22;
+
+  // Single-line fields rendered as a 2-column label/value grid
+  const singleLineFields: Array<[string, string | null | undefined]> = [
+    ["Pipeline Age (years)", report.pipelineAgeYears != null ? String(report.pipelineAgeYears) : "—"],
+    ["Service / Fluid", report.serviceFluid],
+    ["Operating Condition", report.operatingCondition],
+    ["Overall Condition Rating", report.overallConditionRating],
+    ["Risk / Priority Level", report.riskPriorityLevel],
+    ["Previous Inspection Reference", report.previousInspectionRef],
+  ];
+
+  const labelW = 180;
+  const valueW = (pageW - 2 * margin - 2 * labelW) / 2;
+  const minRowH = 16;
+  const fontSizeInfo = 9;
+  const cellPad = 4;
+
+  for (let i = 0; i < singleLineFields.length; i += 2) {
+    const left = singleLineFields[i];
+    const right = singleLineFields[i + 1] ?? ["", "—"];
+
+    doc.font("Helvetica-Bold").fontSize(fontSizeInfo);
+    const leftLabelH = doc.heightOfString(left[0] ?? "", { width: labelW - 2 * cellPad });
+    const rightLabelH = doc.heightOfString(right[0] ?? "", { width: labelW - 2 * cellPad });
+    doc.font("Helvetica").fontSize(fontSizeInfo);
+    const leftValStr = left[1] ?? "—";
+    const rightValStr = right[1] ?? "—";
+    const leftValH = doc.heightOfString(leftValStr, { width: valueW - 2 * cellPad });
+    const rightValH = doc.heightOfString(rightValStr, { width: valueW - 2 * cellPad });
+    const rowH = Math.max(minRowH, Math.max(leftLabelH, leftValH, rightLabelH, rightValH) + cellPad * 2);
+
+    if (y + rowH > maxRowY) { addNewPage(); y = margin; }
+
+    // Left label
+    doc.font("Helvetica-Bold").fontSize(fontSizeInfo).fillColor("#000");
+    doc.rect(margin, y, labelW, rowH).stroke("#888");
+    doc.text(left[0] ?? "", margin + cellPad, y + cellPad, { width: labelW - 2 * cellPad, align: "left" });
+    // Left value
+    doc.font("Helvetica").fontSize(fontSizeInfo);
+    doc.rect(margin + labelW, y, valueW, rowH).stroke("#888");
+    doc.text(leftValStr, margin + labelW + cellPad, y + cellPad, { width: valueW - 2 * cellPad, align: "left" });
+
+    // Right label
+    const rightX = margin + labelW + valueW;
+    doc.font("Helvetica-Bold").fontSize(fontSizeInfo);
+    doc.rect(rightX, y, labelW, rowH).stroke("#888");
+    doc.text(right[0] ?? "", rightX + cellPad, y + cellPad, { width: labelW - 2 * cellPad, align: "left" });
+    // Right value
+    doc.font("Helvetica").fontSize(fontSizeInfo);
+    doc.rect(rightX + labelW, y, valueW, rowH).stroke("#888");
+    doc.text(rightValStr, rightX + labelW + cellPad, y + cellPad, { width: valueW - 2 * cellPad, align: "left" });
+
+    y += rowH;
+  }
+
+  // Multi-line text blocks
+  const multiLineFields: Array<[string, string | null | undefined]> = [
+    ["Corrosion Condition", report.corrosionCondition],
+    ["Damage Assessment", report.damageAssessment],
+    ["Current Inspection Findings", report.currentInspectionFindings],
+    ["Recommendations", report.recommendations],
+    ["Next Inspection Recommendation", report.nextInspectionRecommendation],
+  ];
+
+  for (const [label, value] of multiLineFields) {
+    const text = (value ?? "").trim();
+    if (!text) continue;  // skip empty fields entirely
+    doc.font("Helvetica").fontSize(8);
+    const textH = doc.heightOfString(text, { width: pageW - 2 * margin - 8 });
+    const blockH = 18 + textH + 8;  // label + gap + text + bottom pad
+    if (y + blockH > maxRowY) { addNewPage(); y = margin; }
+    // Label
+    doc.font("Helvetica-Bold").fontSize(9).fillColor("#000");
+    doc.text(label, margin, y);
+    y += 14;
+    // Bordered text box
+    doc.rect(margin, y, pageW - 2 * margin, textH + 8).stroke("#bbb");
+    doc.font("Helvetica").fontSize(8);
+    doc.text(text, margin + 4, y + 4, { width: pageW - 2 * margin - 8, align: "left" });
+    y += textH + 8 + 8;
+  }
+
+  return y;
 }
 
 // ─── TABLE HELPERS ───

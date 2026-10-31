@@ -240,6 +240,12 @@ model ComponentType {
 model PipelineInspection {
   id                       String   @id @default(cuid())
   reportNumber             String   // human-readable report number, e.g. "UT-COR-ENN-001"
+  // ─── Report type selector ───
+  // PIPELINE_THICKNESS  → Pipeline Thickness Measurement Report (existing)
+  // PIPELINE_VISUAL     → Pipeline Visual Inspection Report
+  // PIPELINE_CONDITION  → Pipeline Inspection / Condition Assessment Report
+  // Existing rows get the default (PIPELINE_THICKNESS) so no data is lost.
+  reportType               String   @default("PIPELINE_THICKNESS")
   clientId                 String
   plantId                  String
   inspectionArea           String?  // free text / searchable
@@ -297,6 +303,22 @@ model PipelineInspection {
   pdfPath                  String?
   signedPdfPath            String?
 
+  // ─── PIPELINE CONDITION ASSESSMENT fields ───
+  // Single-instance per report (no child rows needed). Populated when
+  // reportType = PIPELINE_CONDITION. Stored as nullable scalars so the
+  // existing thickness-measurement workflow is not affected.
+  pipelineAgeYears         Float?   // Pipeline Age, if available
+  serviceFluid             String?  // Service / Fluid
+  operatingCondition       String?  // Operating Condition (Normal / Elevated / Cyclic / etc.)
+  overallConditionRating   String?  // Overall Condition Rating (Excellent / Good / Fair / Poor)
+  corrosionCondition       String?  // Corrosion Condition (free text)
+  damageAssessment         String?  // Damage Assessment (free text)
+  previousInspectionRef    String?  // Previous Inspection Reference (report no / date)
+  currentInspectionFindings String? // Current Inspection Findings (free text, multi-line)
+  riskPriorityLevel        String?  // Risk / Priority Level (Low / Medium / High / Critical)
+  recommendations          String?  // Recommendations (free text, multi-line)
+  nextInspectionRecommendation String? // Next Inspection Recommendation
+
   isDemo                   Boolean  @default(false)
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
@@ -307,6 +329,7 @@ model PipelineInspection {
   approver    User?       @relation("PipelineInspectionApprover", fields: [approvedById], references: [id], onDelete: SetNull)
   returnedBy  User?       @relation("PipelineInspectionReturnedBy", fields: [returnedById], references: [id], onDelete: SetNull)
   measurements ThicknessMeasurement[]
+  visualObservations VisualInspectionObservation[]
   revisions   ReportRevision[]
   reportPhotos ReportPhoto[]
   drawingLinks DrawingInspectionLink[]
@@ -316,6 +339,7 @@ model PipelineInspection {
   @@index([plantId])
   @@index([inspectorId])
   @@index([status])
+  @@index([reportType])
 }
 
 // =====================================================
@@ -376,6 +400,43 @@ model ThicknessMeasurement {
 
   @@index([pipelineInspectionId])
   @@index([pipeSizeInch, pipeSchedule])
+}
+
+// =====================================================
+// VISUAL INSPECTION OBSERVATION ROW
+// =====================================================
+// One row per inspection point for the Pipeline Visual Inspection Report.
+// Each row captures the visual condition at a distinct point/location along
+// the pipeline. Photos are linked via the existing ReportPhoto model and
+// can be associated with a specific observation via photoObsId below.
+
+model VisualInspectionObservation {
+  id                          String   @id @default(cuid())
+  pipelineInspectionId        String
+  pointNo                     String   // e.g. "V-1", "PIP-001"
+  sortOrder                   Int      @default(0)
+  location                    String?  // Inspection Point / Location (free text)
+
+  // Visual inspection fields
+  pipelineCondition           String?  // Pipeline Condition (Good / Fair / Poor / etc.)
+  externalSurfaceCondition    String?  // External Surface Condition
+  coatingPaintCondition       String?  // Coating / Paint Condition
+  corrosionObserved           String?  // Corrosion Observed (None / Light / Moderate / Severe)
+  leakageObserved             String?  // Leakage Observed (Yes / No / Suspected)
+  damageOrDeformation         String?  // Damage or Deformation
+  supportsHangersCondition    String?  // Supports and Hangers Condition
+  weldJointCondition          String?  // Weld Joint Condition
+  insulationCondition         String?  // Insulation Condition (if applicable)
+  findings                    String?  // Findings (free text)
+  recommendations             String?  // Recommendations (free text)
+  inspectorComments           String?  // Inspector Comments (free text)
+
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  pipelineInspection          PipelineInspection @relation(fields: [pipelineInspectionId], references: [id], onDelete: Cascade)
+
+  @@index([pipelineInspectionId])
 }
 
 // =====================================================

@@ -55,7 +55,13 @@ export async function GET(req: NextRequest) {
       client: { select: { id: true, name: true } },
       plant: { select: { id: true, name: true, location: true } },
       inspector: { select: { id: true, name: true, email: true } },
-      _count: { select: { measurements: true, revisions: true } },
+      _count: {
+        select: {
+          measurements: true,
+          revisions: true,
+          visualObservations: true,
+        },
+      },
     },
   });
 

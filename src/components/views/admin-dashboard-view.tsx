@@ -34,22 +34,24 @@ interface AdminSummary {
   pendingApprovalsList: Array<{
     id: string;
     reportNumber: string;
+    reportType: "PIPELINE_THICKNESS" | "PIPELINE_VISUAL" | "PIPELINE_CONDITION";
     status: string;
     pipelineDescription: string | null;
     updatedAt: string;
     inspector: { id: string; name: string; email: string };
     client: { id: string; name: string };
     plant: { id: string; name: string; location: string | null };
-    _count: { measurements: number; revisions: number };
+    _count: { measurements: number; revisions: number; visualObservations: number };
   }>;
   recentApproved: Array<{
     id: string;
     reportNumber: string;
+    reportType: "PIPELINE_THICKNESS" | "PIPELINE_VISUAL" | "PIPELINE_CONDITION";
     approvedAt: string | null;
     inspector: { id: string; name: string };
     approver: { id: string; name: string } | null;
     client: { id: string; name: string };
-    _count: { measurements: number; revisions: number };
+    _count: { measurements: number; revisions: number; visualObservations: number };
   }>;
   recentActivity: Array<{
     id: string;
@@ -60,6 +62,12 @@ interface AdminSummary {
     createdAt: string;
   }>;
 }
+
+const REPORT_TYPE_BADGE: Record<string, { label: string; color: string }> = {
+  PIPELINE_THICKNESS: { label: "Thickness", color: "border-emerald-500 text-emerald-700" },
+  PIPELINE_VISUAL:    { label: "Visual",    color: "border-blue-500 text-blue-700" },
+  PIPELINE_CONDITION: { label: "Condition", color: "border-amber-500 text-amber-700" },
+};
 
 const ACTION_COLOR: Record<string, string> = {
   CREATE: "border-emerald-500 text-emerald-700",
@@ -162,7 +170,9 @@ export function AdminDashboardView() {
                 No reports awaiting review. All caught up.
               </p>
             )}
-            {summary.pendingApprovalsList.map((r) => (
+            {summary.pendingApprovalsList.map((r) => {
+              const ti = REPORT_TYPE_BADGE[r.reportType] ?? REPORT_TYPE_BADGE.PIPELINE_THICKNESS;
+              return (
               <button
                 key={r.id}
                 onClick={() => openPipelineReport(r.id)}
@@ -170,8 +180,9 @@ export function AdminDashboardView() {
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-mono text-sm font-semibold">{r.reportNumber}</span>
+                      <Badge variant="outline" className={`text-[10px] ${ti.color}`}>{ti.label}</Badge>
                       <Badge
                         variant="outline"
                         className={
@@ -190,15 +201,17 @@ export function AdminDashboardView() {
                   </div>
                   <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                 </div>
-                <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
+                <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground flex-wrap">
                   <span className="flex items-center gap-1">
                     <UserIcon className="h-3 w-3" /> {r.inspector.name}
                   </span>
-                  <span>{r._count.measurements} points</span>
+                  {r.reportType === "PIPELINE_THICKNESS" && <span>{r._count.measurements} points</span>}
+                  {r.reportType === "PIPELINE_VISUAL" && <span>{r._count.visualObservations} observations</span>}
                   {r._count.revisions > 0 && <span>rev {r._count.revisions}</span>}
                 </div>
               </button>
-            ))}
+              );
+            })}
           </CardContent>
         </Card>
 
@@ -260,7 +273,9 @@ export function AdminDashboardView() {
             <p className="text-sm text-muted-foreground py-3 text-center">No approved reports yet.</p>
           )}
           <div className="space-y-2">
-            {summary.recentApproved.map((r) => (
+            {summary.recentApproved.map((r) => {
+              const ti = REPORT_TYPE_BADGE[r.reportType] ?? REPORT_TYPE_BADGE.PIPELINE_THICKNESS;
+              return (
               <button
                 key={r.id}
                 onClick={() => openPipelineReport(r.id)}
@@ -268,11 +283,12 @@ export function AdminDashboardView() {
               >
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-mono text-sm font-semibold">{r.reportNumber}</span>
                       <Badge variant="outline" className="border-emerald-500 text-emerald-700">
                         Approved
                       </Badge>
+                      <Badge variant="outline" className={`text-[10px] ${ti.color}`}>{ti.label}</Badge>
                     </div>
                     <div className="text-xs text-muted-foreground">{r.client.name}</div>
                   </div>
@@ -283,7 +299,8 @@ export function AdminDashboardView() {
                   </div>
                 </div>
               </button>
-            ))}
+              );
+            })}
           </div>
         </CardContent>
       </Card>

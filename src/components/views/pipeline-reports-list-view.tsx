@@ -40,6 +40,7 @@ import { toast } from "sonner";
 interface PipelineReportListItem {
   id: string;
   reportNumber: string;
+  reportType: "PIPELINE_THICKNESS" | "PIPELINE_VISUAL" | "PIPELINE_CONDITION";
   inspectionDate: string;
   status: "Draft" | "Submitted" | "Approved" | "Rejected" | "Superseded";
   revisionNumber: number;
@@ -52,7 +53,7 @@ interface PipelineReportListItem {
   plant: { id: string; name: string; location: string | null };
   inspector: { id: string; name: string };
   approver: { id: string; name: string } | null;
-  _count: { measurements: number; revisions: number };
+  _count: { measurements: number; revisions: number; visualObservations: number };
 }
 
 interface ClientItem {
@@ -71,6 +72,12 @@ const STATUS_COLOR: Record<string, string> = {
   Submitted: "border-blue-500 text-blue-700",
   Rejected: "border-red-500 text-red-700",
   Superseded: "border-zinc-400 text-zinc-500",
+};
+
+const REPORT_TYPE_LABEL: Record<string, { label: string; color: string }> = {
+  PIPELINE_THICKNESS: { label: "Thickness", color: "border-emerald-500 text-emerald-700" },
+  PIPELINE_VISUAL:    { label: "Visual",    color: "border-blue-500 text-blue-700" },
+  PIPELINE_CONDITION: { label: "Condition", color: "border-amber-500 text-amber-700" },
 };
 
 export function PipelineReportsListView() {
@@ -117,12 +124,12 @@ export function PipelineReportsListView() {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <Gauge className="h-6 w-6 text-amber-600" /> Pipeline Thickness Reports
+            <Gauge className="h-6 w-6 text-amber-600" /> Pipeline Inspection Reports
           </h1>
           <p className="text-sm text-muted-foreground">
-            UT thickness measurement reports on pipeline sections, generated
-            to match the standard engineering report layout (A4 landscape, fixed
-            column order, ASME B36.10M / B36.19M nominal thickness lookup).
+            Pipeline inspection reports — thickness measurement, visual inspection,
+            and condition assessment. Click <strong>New Pipeline Report</strong> to
+            pick a report type and start a new inspection.
           </p>
         </div>
         {canCreate && (
@@ -195,6 +202,7 @@ export function PipelineReportsListView() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Report #</TableHead>
+                    <TableHead>Type</TableHead>
                     <TableHead>Client</TableHead>
                     <TableHead>Plant / Location</TableHead>
                     <TableHead>Pipeline</TableHead>
@@ -207,7 +215,15 @@ export function PipelineReportsListView() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {items.map((r) => (
+                  {items.map((r) => {
+                    const typeInfo = REPORT_TYPE_LABEL[r.reportType] ?? REPORT_TYPE_LABEL.PIPELINE_THICKNESS;
+                    // Points counter: thickness uses measurements, visual uses visualObservations,
+                    // condition has no rows (shows "—")
+                    const pointsCount =
+                      r.reportType === "PIPELINE_THICKNESS" ? r._count.measurements :
+                      r.reportType === "PIPELINE_VISUAL" ? r._count.visualObservations :
+                      null;
+                    return (
                     <TableRow
                       key={r.id}
                       className="cursor-pointer hover:bg-muted/50"
@@ -218,6 +234,11 @@ export function PipelineReportsListView() {
                         {r.isDemo && (
                           <Badge variant="outline" className="ml-1 text-[10px]">DEMO</Badge>
                         )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={`text-[10px] ${typeInfo.color}`}>
+                          {typeInfo.label}
+                        </Badge>
                       </TableCell>
                       <TableCell className="text-xs">{r.client.name}</TableCell>
                       <TableCell className="text-xs">
@@ -244,7 +265,9 @@ export function PipelineReportsListView() {
                           {r.inspector.name}
                         </div>
                       </TableCell>
-                      <TableCell className="text-center tabular-nums">{r._count.measurements}</TableCell>
+                      <TableCell className="text-center tabular-nums">
+                        {pointsCount === null ? "—" : pointsCount}
+                      </TableCell>
                       <TableCell>
                         <Badge variant="outline" className={STATUS_COLOR[r.status] ?? ""}>
                           {r.status}
@@ -259,7 +282,8 @@ export function PipelineReportsListView() {
                         <ChevronRight className="h-4 w-4 text-muted-foreground" />
                       </TableCell>
                     </TableRow>
-                  ))}
+                  );
+                  })}
                 </TableBody>
               </Table>
             </div>

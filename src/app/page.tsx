@@ -20,6 +20,7 @@ import { ImportView } from "@/components/views/import-view";
 import { InspectionsView } from "@/components/views/inspections-view";
 import { AuditLogView } from "@/components/views/audit-log-view";
 import { PipelineReportsListView } from "@/components/views/pipeline-reports-list-view";
+import { PipelineReportTypeSelectorView } from "@/components/views/pipeline-report-type-selector-view";
 import { PipelineReportFormView } from "@/components/views/pipeline-report-form-view";
 import { PipelineReportDetailView } from "@/components/views/pipeline-report-detail-view";
 import { PipeStandardsView } from "@/components/views/pipe-standards-view";
@@ -103,6 +104,7 @@ export default function Home() {
           {view === "audit-logs" && <AuditLogView />}
           {/* Pipeline thickness reports */}
           {view === "pipeline-reports" && <PipelineReportsListView />}
+          {view === "pipeline-report-type-selector" && <PipelineReportTypeSelectorView />}
           {view === "pipeline-report-form" && <PipelineReportFormView />}
           {view === "pipeline-report-detail" && <PipelineReportDetailView />}
           {view === "pipe-standards" && <PipeStandardsView />}

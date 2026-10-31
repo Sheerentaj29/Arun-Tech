@@ -15,7 +15,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const { id } = await ctx.params;
   const existing = await db.pipelineInspection.findUnique({
     where: { id },
-    include: { measurements: true },
+    include: { measurements: true, visualObservations: true },
   });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -41,12 +41,42 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     );
   }
 
-  // Require at least one measurement row before submitting
-  if (existing.measurements.length === 0) {
-    return NextResponse.json(
-      { error: "Cannot submit a report with no measurement rows. Add at least one measurement first." },
-      { status: 400 },
-    );
+  // Require at least one row of the appropriate type before submitting:
+  //   • PIPELINE_THICKNESS → at least one measurement row
+  //   • PIPELINE_VISUAL    → at least one visual observation row
+  //   • PIPELINE_CONDITION → at least one condition-assessment field set
+  //     (any of the multi-line text fields counts as "started")
+  const reportType = existing.reportType ?? "PIPELINE_THICKNESS";
+  if (reportType === "PIPELINE_THICKNESS") {
+    if (existing.measurements.length === 0) {
+      return NextResponse.json(
+        { error: "Cannot submit a thickness report with no measurement rows. Add at least one measurement first." },
+        { status: 400 },
+      );
+    }
+  } else if (reportType === "PIPELINE_VISUAL") {
+    if (existing.visualObservations.length === 0) {
+      return NextResponse.json(
+        { error: "Cannot submit a visual inspection report with no observation rows. Add at least one observation first." },
+        { status: 400 },
+      );
+    }
+  } else if (reportType === "PIPELINE_CONDITION") {
+    // Condition reports don't have child rows — require at least one of the
+    // main free-text fields to be filled in.
+    const hasAnyContent = [
+      existing.corrosionCondition,
+      existing.damageAssessment,
+      existing.currentInspectionFindings,
+      existing.recommendations,
+      existing.nextInspectionRecommendation,
+    ].some((v) => v && v.trim().length > 0);
+    if (!hasAnyContent) {
+      return NextResponse.json(
+        { error: "Cannot submit a condition assessment report with no findings. Fill in at least one of: corrosion condition, damage assessment, current inspection findings, recommendations, or next inspection recommendation." },
+        { status: 400 },
+      );
+    }
   }
 
   const body = await req.json().catch(() => ({}));

@@ -88,6 +88,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     where: { id },
     include: {
       measurements: true,
+      visualObservations: { orderBy: { sortOrder: "asc" } },
       revisions: true,
       inspector: true,
       approver: true,
@@ -176,6 +177,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   // Build the snapshot JSON (deterministic — computed before the transaction)
   const snapshotData = JSON.stringify({
+    reportType: existing.reportType,
     header: {
       reportNumber: existing.reportNumber,
       inspectionArea: existing.inspectionArea,
@@ -187,7 +189,20 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       standardEdition: existing.standardEdition,
       findingsSummary: existing.findingsSummary,
       comments: existing.comments,
+      inspectionDescription: existing.inspectionDescription,
       photos: existing.photos,
+      // Condition assessment fields (only populated for PIPELINE_CONDITION reports)
+      pipelineAgeYears: existing.pipelineAgeYears,
+      serviceFluid: existing.serviceFluid,
+      operatingCondition: existing.operatingCondition,
+      overallConditionRating: existing.overallConditionRating,
+      corrosionCondition: existing.corrosionCondition,
+      damageAssessment: existing.damageAssessment,
+      previousInspectionRef: existing.previousInspectionRef,
+      currentInspectionFindings: existing.currentInspectionFindings,
+      riskPriorityLevel: existing.riskPriorityLevel,
+      recommendations: existing.recommendations,
+      nextInspectionRecommendation: existing.nextInspectionRecommendation,
     },
     measurements: existing.measurements.map((m) => ({
       pointNo: m.pointNo,
@@ -201,6 +216,22 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       westMm: m.westMm, westStatus: m.westStatus,
       observedMinimumMm: m.observedMinimumMm,
       findingsComments: m.findingsComments,
+    })),
+    visualObservations: existing.visualObservations.map((o) => ({
+      pointNo: o.pointNo,
+      location: o.location,
+      pipelineCondition: o.pipelineCondition,
+      externalSurfaceCondition: o.externalSurfaceCondition,
+      coatingPaintCondition: o.coatingPaintCondition,
+      corrosionObserved: o.corrosionObserved,
+      leakageObserved: o.leakageObserved,
+      damageOrDeformation: o.damageOrDeformation,
+      supportsHangersCondition: o.supportsHangersCondition,
+      weldJointCondition: o.weldJointCondition,
+      insulationCondition: o.insulationCondition,
+      findings: o.findings,
+      recommendations: o.recommendations,
+      inspectorComments: o.inspectorComments,
     })),
     approvedAt: new Date().toISOString(),
     approvedBy: session.name,

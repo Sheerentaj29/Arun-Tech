@@ -41,7 +41,8 @@ export async function GET(req: NextRequest) {
     db.pipelineInspection.count({ where: { ...where, status: "Changes Pending Review" } }),
   ]);
 
-  // Draft reports — employee can pick up editing
+  // Draft reports — employee can pick up editing. Include reportType so
+  // the dashboard can show which kind of report it is.
   const draftList = await db.pipelineInspection.findMany({
     where: { ...where, status: "Draft" },
     orderBy: { updatedAt: "desc" },
@@ -49,7 +50,7 @@ export async function GET(req: NextRequest) {
     include: {
       client: { select: { id: true, name: true } },
       plant: { select: { id: true, name: true, location: true } },
-      _count: { select: { measurements: true } },
+      _count: { select: { measurements: true, visualObservations: true } },
     },
   });
 
@@ -62,7 +63,7 @@ export async function GET(req: NextRequest) {
       client: { select: { id: true, name: true } },
       plant: { select: { id: true, name: true, location: true } },
       returnedBy: { select: { id: true, name: true } },
-      _count: { select: { measurements: true } },
+      _count: { select: { measurements: true, visualObservations: true } },
     },
   });
 
@@ -75,7 +76,7 @@ export async function GET(req: NextRequest) {
       client: { select: { id: true, name: true } },
       plant: { select: { id: true, name: true, location: true } },
       approver: { select: { id: true, name: true } },
-      _count: { select: { measurements: true, revisions: true } },
+      _count: { select: { measurements: true, revisions: true, visualObservations: true } },
     },
   });
 

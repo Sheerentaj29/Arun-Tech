@@ -50,6 +50,10 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
           },
         },
       },
+      // Visual inspection observations (only populated for PIPELINE_VISUAL reports)
+      visualObservations: {
+        orderBy: { sortOrder: "asc" },
+      },
     },
   });
   if (!report) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -135,6 +139,11 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
     where: { id },
     data: {
       reportNumber: newReportNumber,
+      // NOTE: reportType is intentionally NOT updatable via PUT.
+      // Once a report is created with a specific type, the type is fixed
+      // — the form fields, PDF template, and revision history all depend
+      // on it. To change the type, the user must delete the report and
+      // create a new one of the correct type.
       clientId: newClientId,
       plantId: body.plantId ?? existing.plantId,
       inspectionArea: body.inspectionArea ?? existing.inspectionArea,
@@ -150,6 +159,25 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       inspectionDescription: body.inspectionDescription ?? existing.inspectionDescription,
       customColumns: body.customColumns ?? existing.customColumns,
       photos: body.photos ?? existing.photos,
+      // ─── PIPELINE CONDITION fields (updated only when the form sends them;
+      // the thickness/visual forms don't send these keys so the existing
+      // values are preserved) ───
+      pipelineAgeYears:
+        typeof body.pipelineAgeYears === "number"
+          ? body.pipelineAgeYears
+          : body.pipelineAgeYears === null
+            ? null
+            : existing.pipelineAgeYears,
+      serviceFluid: body.serviceFluid !== undefined ? (body.serviceFluid?.trim() || null) : existing.serviceFluid,
+      operatingCondition: body.operatingCondition !== undefined ? (body.operatingCondition?.trim() || null) : existing.operatingCondition,
+      overallConditionRating: body.overallConditionRating !== undefined ? (body.overallConditionRating?.trim() || null) : existing.overallConditionRating,
+      corrosionCondition: body.corrosionCondition !== undefined ? (body.corrosionCondition?.trim() || null) : existing.corrosionCondition,
+      damageAssessment: body.damageAssessment !== undefined ? (body.damageAssessment?.trim() || null) : existing.damageAssessment,
+      previousInspectionRef: body.previousInspectionRef !== undefined ? (body.previousInspectionRef?.trim() || null) : existing.previousInspectionRef,
+      currentInspectionFindings: body.currentInspectionFindings !== undefined ? (body.currentInspectionFindings?.trim() || null) : existing.currentInspectionFindings,
+      riskPriorityLevel: body.riskPriorityLevel !== undefined ? (body.riskPriorityLevel?.trim() || null) : existing.riskPriorityLevel,
+      recommendations: body.recommendations !== undefined ? (body.recommendations?.trim() || null) : existing.recommendations,
+      nextInspectionRecommendation: body.nextInspectionRecommendation !== undefined ? (body.nextInspectionRecommendation?.trim() || null) : existing.nextInspectionRecommendation,
     },
   });
 
