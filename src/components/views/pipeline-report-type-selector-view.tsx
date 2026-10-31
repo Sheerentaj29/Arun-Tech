@@ -3,8 +3,6 @@
 import {
   ArrowLeft,
   Gauge,
-  Eye,
-  ShieldCheck,
   Droplet,
   Magnet,
   Zap,
@@ -22,6 +20,10 @@ interface TypeOption {
   description: string;
   icon: React.ElementType;
   accent: string;
+  /** When true, the option is shown but not yet fully implemented. The user
+   * can still pick it (a basic shell report is created) but the form will
+   * show a "Coming soon" notice. */
+  comingSoon?: boolean;
 }
 
 const OPTIONS: TypeOption[] = [
@@ -30,12 +32,44 @@ const OPTIONS: TypeOption[] = [
     title: "DPT / DPPT – Dye Penetrant Testing",
     subtitle: "Dye penetrant inspection with Accept/Reject results",
     description:
-      "Record dye penetrant testing results with testing materials " +
-      "(solvent, penetrant, developer), an editable inspection table with " +
-      "auto-serial numbers, Accept/Reject result selection, and custom columns. " +
-      "No engineering drawing upload required for DPT reports.",
+      "Record dye penetrant testing with a complete Dye Penetrant Procedure " +
+      "section (Testing Standard, Acceptance Criteria, Surface Preparation, " +
+      "Penetrant Type / Process / Method, Development / Interpretation Times, " +
+      "Lighting, Post Cleaning), Consumable Details (Solvent, Penetrant, " +
+      "Developer), and an editable inspection table with auto-serial numbers, " +
+      "custom columns, and Accept / Reject results. No engineering drawing " +
+      "upload required for DPT reports.",
     icon: Droplet,
     accent: "border-purple-500 bg-purple-50 hover:bg-purple-100",
+  },
+  {
+    type: "PIPELINE_MPT",
+    title: "MPT – Magnetic Particle Testing",
+    subtitle: "Magnetic particle inspection (coming soon)",
+    description:
+      "Magnetic Particle Testing report for surface and near-surface flaw " +
+      "detection in ferromagnetic materials. The detailed MPT workflow — " +
+      "including magnetising equipment, particle medium, inspection " +
+      "parameters, and observation table — will be available shortly. " +
+      "You can create a placeholder report now and complete the inspection " +
+      "details later.",
+    icon: Magnet,
+    accent: "border-orange-500 bg-orange-50 hover:bg-orange-100",
+    comingSoon: true,
+  },
+  {
+    type: "PIPELINE_WELD_SCAN",
+    title: "Weld Scan",
+    subtitle: "Weld scan inspection (coming soon)",
+    description:
+      "Weld Scan report for systematic weld inspection along a pipeline or " +
+      "vessel. The detailed Weld Scan workflow — including scan parameters, " +
+      "weld map references, and observation table — will be available " +
+      "shortly. You can create a placeholder report now and complete the " +
+      "inspection details later.",
+    icon: Zap,
+    accent: "border-cyan-500 bg-cyan-50 hover:bg-cyan-100",
+    comingSoon: true,
   },
   {
     type: "PIPELINE_THICKNESS",
@@ -48,28 +82,6 @@ const OPTIONS: TypeOption[] = [
       "columns. Engineering drawings, photos, and certificates are included.",
     icon: Gauge,
     accent: "border-emerald-500 bg-emerald-50 hover:bg-emerald-100",
-  },
-  {
-    type: "PIPELINE_VISUAL",
-    title: "Pipeline Visual Inspection",
-    subtitle: "External surface / coating / corrosion observations",
-    description:
-      "Capture visual condition observations at multiple inspection points along " +
-      "the pipeline: external surface, coating/paint, corrosion, leakage, " +
-      "damage, supports/hangers, weld joints, insulation.",
-    icon: Eye,
-    accent: "border-blue-500 bg-blue-50 hover:bg-blue-100",
-  },
-  {
-    type: "PIPELINE_CONDITION",
-    title: "Pipeline Condition Assessment",
-    subtitle: "Overall condition rating + risk priority + recommendations",
-    description:
-      "Document an overall condition assessment: pipeline age, service fluid, " +
-      "operating condition, condition rating, corrosion condition, damage " +
-      "assessment, risk priority level, recommendations.",
-    icon: ShieldCheck,
-    accent: "border-amber-500 bg-amber-50 hover:bg-amber-100",
   },
 ];
 
@@ -132,7 +144,14 @@ export function PipelineReportTypeSelectorView() {
                 <p className="text-xs text-muted-foreground leading-relaxed flex-1">
                   {opt.description}
                 </p>
-                <div className="mt-4 flex items-center justify-end">
+                <div className="mt-4 flex items-center justify-between">
+                  {opt.comingSoon ? (
+                    <Badge variant="outline" className="border-amber-400 text-amber-700 text-[10px]">
+                      Coming soon
+                    </Badge>
+                  ) : (
+                    <span />
+                  )}
                   <Button
                     size="sm"
                     variant="ghost"
@@ -159,9 +178,10 @@ export function PipelineReportTypeSelectorView() {
           Changes Pending Review). The selected report type is shown in the report list,
           detail view, admin dashboard, generated PDF, and revision history.
           <br /><br />
-          <strong>Note:</strong> DPT/DPPT reports do not include engineering drawing uploads.
-          Thickness Measurement reports retain all existing features including drawings,
-          certificates, and the full measurement table.
+          <strong>Note:</strong> DPT/DPPT reports include a complete Dye Penetrant
+          Procedure section with Consumable Details and do <strong>not</strong> include
+          engineering drawing uploads. Thickness Measurement reports retain all
+          existing features including drawings, certificates, and the full measurement table.
         </CardContent>
       </Card>
     </div>

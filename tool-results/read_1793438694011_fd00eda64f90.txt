@@ -1,0 +1,502 @@
+  2000→                        ) : null}
+  2001→                      </div>
+  2002→                      {drawing.uploadStatus === "error" && (
+  2003→                        <div className="mt-1 text-[10px] text-red-700" title={drawing.errorMessage}>
+  2004→                          Upload failed
+  2005→                        </div>
+  2006→                      )}
+  2007→                      {drawing.uploadStatus === "uploaded" && drawing.drawingNumber && (
+  2008→                        <div className="mt-1 text-[10px] text-emerald-700 font-mono truncate">
+  2009→                          {drawing.drawingNumber}
+  2010→                        </div>
+  2011→                      )}
+  2012→                    </div>
+  2013→                  </div>
+  2014→                );
+  2015→              })}
+  2016→              {/* Add more tile */}
+  2017→              <label className="cursor-pointer">
+  2018→                <input
+  2019→                  type="file"
+  2020→                  accept=".png,.jpg,.jpeg,.webp,.pdf,image/png,image/jpeg,image/webp,application/pdf"
+  2021→                  multiple
+  2022→                  className="hidden"
+  2023→                  onChange={(e) => {
+  2024→                    if (e.target.files) handleDrawingUpload(e.target.files);
+  2025→                    e.target.value = "";
+  2026→                  }}
+  2027→                />
+  2028→                <div className="border-2 border-dashed border-zinc-300 rounded-md aspect-square flex flex-col items-center justify-center text-muted-foreground hover:border-amber-400 hover:text-amber-700 transition-colors">
+  2029→                  <Plus className="h-6 w-6" />
+  2030→                  <span className="text-xs mt-1">Add more</span>
+  2031→                </div>
+  2032→              </label>
+  2033→            </div>
+  2034→          )}
+  2035→        </CardContent>
+  2036→      </Card>
+  2037→
+  2038→      <Card className="bg-zinc-50">
+  2039→        <CardContent className="p-4 text-xs text-muted-foreground">
+  2040→          <strong>PDF page order:</strong> Report header → Engineering Drawings (one page
+  2041→          per image / per PDF page) → Measurement table → Findings → Photos → Sign-off.
+  2042→          No blank pages are inserted between the drawings and the table.
+  2043→        </CardContent>
+  2044→      </Card>
+  2045→
+  2046→      {/* Step 2 navigation */}
+  2047→      <div className="flex items-center gap-2">
+  2048→        <Button variant="ghost" onClick={goPrevious}>
+  2049→          <ArrowLeft className="mr-2 h-4 w-4" /> Previous
+  2050→        </Button>
+  2051→        <Button variant="ghost" onClick={saveDraft} disabled={saving}>
+  2052→          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+  2053→          Save Draft
+  2054→        </Button>
+  2055→        <Button onClick={proceedToNext} disabled={saving}>
+  2056→          Proceed to Next <ArrowRight className="ml-2 h-4 w-4" />
+  2057→        </Button>
+  2058→      </div>
+  2059→      </>
+  2060→      )} {/* end step 2 — engineering drawings */}
+  2061→
+  2062→      {/* ═══ STEP 3: MIDDLE STEP — type-specific ═══
+  2063→          • PIPELINE_THICKNESS → measurement table (11 columns + custom)
+  2064→          • PIPELINE_VISUAL    → visual inspection observations (rows)
+  2065→          • PIPELINE_CONDITION → condition assessment form (single-instance fields)
+  2066→      */}
+  2067→      {step === 3 && header.reportType === "PIPELINE_THICKNESS" && (
+  2068→      <>
+  2069→      <Card>
+  2070→        <CardHeader>
+  2071→          <div className="flex items-center justify-between">
+  2072→            <div>
+  2073→              <CardTitle className="text-base">Thickness Measurement Table</CardTitle>
+  2074→              <CardDescription>
+  2075→                11 columns in fixed order. The first two columns are
+  2076→                dropdown-selected; the third is auto-computed from standards;
+  2077→                the four clock-position measurements are entered manually; the
+  2078→                observed minimum is calculated excluding any missing values.
+  2079→              </CardDescription>
+  2080→            </div>
+  2081→            <div className="flex gap-2">
+  2082→              <Button onClick={addRow} size="sm">
+  2083→                <Plus className="mr-1 h-4 w-4" /> Add Row
+  2084→              </Button>
+  2085→              <Button onClick={deleteSelectedRows} size="sm" variant="outline" className="text-red-600"
+  2086→                disabled={selectedRowIdxs.size === 0}>
+  2087→                <Trash2 className="mr-1 h-4 w-4" /> Delete Selected ({selectedRowIdxs.size})
+  2088→              </Button>
+  2089→              <Button onClick={addCustomColumn} size="sm" variant="outline">
+  2090→                <Columns3 className="mr-1 h-4 w-4" /> Add Column
+  2091→              </Button>
+  2092→            </div>
+  2093→          </div>
+  2094→        </CardHeader>
+  2095→        <CardContent className="p-0">
+  2096→          <div className="overflow-x-auto">
+  2097→            <table className="w-full text-xs">
+  2098→              <thead className="bg-emerald-800 text-white">
+  2099→                <tr>
+  2100→                  <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 40 }}>
+  2101→                    <input type="checkbox" checked={selectedRowIdxs.size === rows.length && rows.length > 0} onChange={toggleSelectAllRows} className="cursor-pointer" />
+  2102→                  </th>
+  2103→                  <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 50 }}>Dia mm<br />(inch)</th>
+  2104→                  <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 60 }}>Pipe<br />Schedule</th>
+  2105→                  <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 55 }}>Nominal<br />Thickness<br />(mm)</th>
+  2106→                  <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 70 }}>Component<br />Type</th>
+  2107→                  <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 50 }}>Point<br />No</th>
+  2108→                  <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 70 }}>
+  2109→                    <div className="flex flex-col items-center">
+  2110→                      <span>12 o'clock</span>
+  2111→                      <span>North (mm)</span>
+  2112→                    </div>
+  2113→                  </th>
+  2114→                  <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 70 }}>
+  2115→                    <div className="flex flex-col items-center">
+  2116→                      <span>3 o'clock</span>
+  2117→                      <span>East (mm)</span>
+  2118→                    </div>
+  2119→                  </th>
+  2120→                  <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 70 }}>
+  2121→                    <div className="flex flex-col items-center">
+  2122→                      <span>6 o'clock</span>
+  2123→                      <span>South (mm)</span>
+  2124→                    </div>
+  2125→                  </th>
+  2126→                  <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 70 }}>
+  2127→                    <div className="flex flex-col items-center">
+  2128→                      <span>9 o'clock</span>
+  2129→                      <span>West (mm)</span>
+  2130→                    </div>
+  2131→                  </th>
+  2132→                  <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 75 }}>
+  2133→                    Observed<br />Minimum<br />Thickness<br />(mm)
+  2134→                  </th>
+  2135→                  <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 200 }}>Findings / Comments</th>
+  2136→                  {customColumns.map((cc) => (
+  2137→                    <th key={cc.id} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 80 }}>
+  2138→                      <div className="flex items-center gap-1">
+  2139→                        <span>{cc.name}</span>
+  2140→                        {cc.unit && <span className="text-[9px] opacity-70">({cc.unit})</span>}
+  2141→                        <button onClick={() => deleteCustomColumn(cc.id)} className="ml-1 text-red-300 hover:text-red-100" title={`Delete "${cc.name}" column`}>
+  2142→                          <X className="h-3 w-3" />
+  2143→                        </button>
+  2144→                      </div>
+  2145→                    </th>
+  2146→                  ))}
+  2147→                  <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 80 }}>Actions</th>
+  2148→                </tr>
+  2149→              </thead>
+  2150→              <tbody>
+  2151→                {rows.length === 0 && (
+  2152→                  <tr>
+  2153→                    <td colSpan={12} className="text-center py-6 text-muted-foreground border border-zinc-300">
+  2154→                      No measurement rows yet. Click <strong>Add Row</strong> to begin.
+  2155→                    </td>
+  2156→                  </tr>
+  2157→                )}
+  2158→                {rows.map((row, idx) => {
+  2159→                  const nominalMissing = row.nominalThicknessMm === null;
+  2160→                  return (
+  2161→                    <tr key={idx} className="hover:bg-muted/30">
+  2162→                      {/* Row selection checkbox */}
+  2163→                      <td className="border border-zinc-300 p-1 text-center">
+  2164→                        <input
+  2165→                          type="checkbox"
+  2166→                          checked={selectedRowIdxs.has(idx)}
+  2167→                          onChange={() => toggleRowSelection(idx)}
+  2168→                          className="cursor-pointer"
+  2169→                        />
+  2170→                      </td>
+  2171→                      {/* Col 1: Dia mm (inch) — dropdown */}
+  2172→                      <td className="border border-zinc-300 p-1 text-center">
+  2173→                        <Select
+  2174→                          value={row.pipeSizeInch}
+  2175→                          onValueChange={(v) => updateRow(idx, { pipeSizeInch: v })}
+  2176→                        >
+  2177→                          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+  2178→                          <SelectContent>
+  2179→                            {sizes.map((s) => (
+  2180→                              <SelectItem key={s} value={s}>{s}</SelectItem>
+  2181→                            ))}
+  2182→                          </SelectContent>
+  2183→                        </Select>
+  2184→                      </td>
+  2185→                      {/* Col 2: Pipe Schedule — dropdown */}
+  2186→                      <td className="border border-zinc-300 p-1 text-center">
+  2187→                        <Select
+  2188→                          value={row.pipeSchedule}
+  2189→                          onValueChange={(v) => updateRow(idx, { pipeSchedule: v })}
+  2190→                        >
+  2191→                          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+  2192→                          <SelectContent>
+  2193→                            {schedulesForRow(row.pipeSizeInch).map((s) => (
+  2194→                              <SelectItem key={s} value={s}>{s}</SelectItem>
+  2195→                            ))}
+  2196→                          </SelectContent>
+  2197→                        </Select>
+  2198→                      </td>
+  2199→                      {/* Col 3: Nominal Thickness — auto-computed */}
+  2200→                      <td className="border border-zinc-300 p-1 text-center tabular-nums">
+  2201→                        {nominalMissing ? (
+  2202→                          <Badge variant="outline" className="border-red-500 text-red-700 text-[10px]">
+  2203→                            UNSUPPORTED
+  2204→                          </Badge>
+  2205→                        ) : (
+  2206→                          <span>{row.nominalThicknessMm?.toFixed(2)}</span>
+  2207→                        )}
+  2208→                      </td>
+  2209→                      {/* Col 4: Component Type */}
+  2210→                      <td className="border border-zinc-300 p-1 text-center">
+  2211→                        <Select
+  2212→                          value={row.componentTypeCode}
+  2213→                          onValueChange={(v) => {
+  2214→                            const ct = componentTypes.find((c) => c.code === v);
+  2215→                            updateRow(idx, {
+  2216→                              componentTypeCode: v,
+  2217→                              componentTypeId: ct?.id ?? null,
+  2218→                            });
+  2219→                          }}
+  2220→                        >
+  2221→                          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+  2222→                          <SelectContent>
+  2223→                            {componentTypes.map((c) => (
+  2224→                              <SelectItem key={c.id} value={c.code}>{c.label}</SelectItem>
+  2225→                            ))}
+  2226→                          </SelectContent>
+  2227→                        </Select>
+  2228→                      </td>
+  2229→                      {/* Col 5: Point No */}
+  2230→                      <td className="border border-zinc-300 p-1 text-center">
+  2231→                        <Input
+  2232→                          className="h-8 text-xs text-center font-mono"
+  2233→                          value={row.pointNo}
+  2234→                          onChange={(e) => updateRow(idx, { pointNo: e.target.value })}
+  2235→                        />
+  2236→                      </td>
+  2237→                      {/* Col 6-9: clock-position measurements */}
+  2238→                      {(["north", "east", "south", "west"] as const).map((dir) => {
+  2239→                        const mmKey = `${dir}Mm` as keyof MeasurementRow;
+  2240→                        const stKey = `${dir}Status` as keyof MeasurementRow;
+  2241→                        return (
+  2242→                          <td key={dir} className="border border-zinc-300 p-1">
+  2243→                            <div className="flex flex-col gap-1">
+  2244→                              <Input
+  2245→                                type="number"
+  2246→                                step="any"
+  2247→                                className={`h-8 text-xs text-center ${row[stKey] === "Measured" ? "" : "bg-zinc-100"}`}
+  2248→                                value={row[mmKey] as string}
+  2249→                                onChange={(e) => updateRow(idx, { [mmKey]: e.target.value } as Partial<MeasurementRow>)}
+  2250→                                disabled={row[stKey] !== "Measured"}
+  2251→                              />
+  2252→                              <Select
+  2253→                                value={row[stKey] as string}
+  2254→                                onValueChange={(v) => updateRow(idx, { [stKey]: v } as Partial<MeasurementRow>)}
+  2255→                              >
+  2256→                                <SelectTrigger className="h-6 text-[10px] py-0">
+  2257→                                  <SelectValue />
+  2258→                                </SelectTrigger>
+  2259→                                <SelectContent>
+  2260→                                  {STATUS_OPTIONS.map((s) => (
+  2261→                                    <SelectItem key={s.value} value={s.value} className="text-xs">
+  2262→                                      {s.label}
+  2263→                                    </SelectItem>
+  2264→                                  ))}
+  2265→                                </SelectContent>
+  2266→                              </Select>
+  2267→                            </div>
+  2268→                          </td>
+  2269→                        );
+  2270→                      })}
+  2271→                      {/* Col 10: Observed Minimum */}
+  2272→                      <td className="border border-zinc-300 p-1 text-center tabular-nums font-semibold bg-emerald-50">
+  2273→                        {row.observedMinimumMm !== null ? row.observedMinimumMm.toFixed(2) : "—"}
+  2274→                      </td>
+  2275→                      {/* Col 11: Findings / Comments */}
+  2276→                      <td className="border border-zinc-300 p-1">
+  2277→                        <Textarea
+  2278→                          rows={1}
+  2279→                          className="text-xs min-h-[32px] py-1"
+  2280→                          value={row.findingsComments}
+  2281→                          onChange={(e) => updateRow(idx, { findingsComments: e.target.value })}
+  2282→                          placeholder="Observations at this point"
+  2283→                        />
+  2284→                      </td>
+  2285→                      {/* Custom columns */}
+  2286→                      {customColumns.map((cc) => (
+  2287→                        <td key={cc.id} className="border border-zinc-300 p-1 text-center">
+  2288→                          <Input
+  2289→                            type="text"
+  2290→                            className="h-8 text-xs text-center"
+  2291→                            value={getCustomColumnValue(row, cc.id)}
+  2292→                            onChange={(e) => setCustomColumnValue(idx, cc.id, e.target.value)}
+  2293→                            placeholder={cc.unit || "—"}
+  2294→                          />
+  2295→                        </td>
+  2296→                      ))}
+  2297→                      <td className="border border-zinc-300 p-1">
+  2298→                        <div className="flex flex-col gap-1">
+  2299→                          <div className="flex gap-0.5">
+  2300→                            <Button
+  2301→                              size="sm"
+  2302→                              variant="ghost"
+  2303→                              className="h-6 w-6 p-0"
+  2304→                              onClick={() => moveRow(idx, -1)}
+  2305→                              disabled={idx === 0}
+  2306→                              title="Move up"
+  2307→                            >
+  2308→                              <ArrowUp className="h-3 w-3" />
+  2309→                            </Button>
+  2310→                            <Button
+  2311→                              size="sm"
+  2312→                              variant="ghost"
+  2313→                              className="h-6 w-6 p-0"
+  2314→                              onClick={() => moveRow(idx, 1)}
+  2315→                              disabled={idx === rows.length - 1}
+  2316→                              title="Move down"
+  2317→                            >
+  2318→                              <ArrowDown className="h-3 w-3" />
+  2319→                            </Button>
+  2320→                          </div>
+  2321→                          <div className="flex gap-0.5">
+  2322→                            <Button
+  2323→                              size="sm"
+  2324→                              variant="ghost"
+  2325→                              className="h-6 px-2 text-[10px]"
+  2326→                              onClick={() => saveRow(idx)}
+  2327→                              disabled={saving}
+  2328→                              title="Save row"
+  2329→                            >
+  2330→                              <Save className="h-3 w-3" />
+  2331→                            </Button>
+  2332→                            <Button
+  2333→                              size="sm"
+  2334→                              variant="ghost"
+  2335→                              className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+  2336→                              onClick={() => deleteRowApi(idx)}
+  2337→                              title="Delete row"
+  2338→                            >
+  2339→                              <Trash2 className="h-3 w-3" />
+  2340→                            </Button>
+  2341→                          </div>
+  2342→                        </div>
+  2343→                      </td>
+  2344→                    </tr>
+  2345→                  );
+  2346→                })}
+  2347→              </tbody>
+  2348→            </table>
+  2349→          </div>
+  2350→        </CardContent>
+  2351→      </Card>
+  2352→
+  2353→      <Card className="bg-zinc-50">
+  2354→        <CardContent className="p-4 text-xs text-muted-foreground space-y-1">
+  2355→          <div><strong>Column order:</strong> Dia mm (inch) | Pipe Schedule | Nominal Thickness (mm) | Component Type | Point No | 12 o'clock / North (mm) | 3 o'clock / East (mm) | 6 o'clock / South (mm) | 9 o'clock / West (mm) | Observed Minimum Thickness (mm) | Findings / Comments{customColumns.length > 0 ? " | " + customColumns.map(c => c.name).join(" | ") : ""}</div>
+  2356→          <div><strong>Nominal Thickness</strong> is auto-populated from ASME B36.10M / B36.19M reference data. Unsupported combinations display an UNSUPPORTED badge.</div>
+  2357→          <div><strong>Observed Minimum</strong> is computed from valid (Measured) readings only. Missing / NotMeasured / NotApplicable values are excluded and never converted to zero.</div>
+  2358→          <div><strong>Custom columns</strong> can be added/deleted via the "Add Column" button. System columns (Dia, Schedule, Nominal, etc.) cannot be deleted.</div>
+  2359→        </CardContent>
+  2360→      </Card>
+  2361→
+  2362→      {/* Step 2 navigation (shared across all three report types) */}
+  2363→      <div className="flex items-center gap-2">
+  2364→        <Button variant="ghost" onClick={goPrevious}>
+  2365→          <ArrowLeft className="mr-2 h-4 w-4" /> Previous
+  2366→        </Button>
+  2367→        <Button variant="ghost" onClick={saveDraft} disabled={saving}>
+  2368→          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+  2369→          Save Draft
+  2370→        </Button>
+  2371→        <Button onClick={proceedToNext} disabled={saving}>
+  2372→          Proceed to Next <ArrowRight className="ml-2 h-4 w-4" />
+  2373→        </Button>
+  2374→      </div>
+  2375→      </>
+  2376→      )} {/* end step 3 — thickness */}
+  2377→
+  2378→      {/* ═══ STEP 3 (VISUAL): VISUAL OBSERVATIONS TABLE ═══ */}
+  2379→      {step === 3 && header.reportType === "PIPELINE_VISUAL" && (
+  2380→      <>
+  2381→      <Card>
+  2382→        <CardHeader>
+  2383→          <div className="flex items-center justify-between">
+  2384→            <div>
+  2385→              <CardTitle className="text-base">Visual Inspection Observations</CardTitle>
+  2386→              <CardDescription>
+  2387→                Add one row per inspection point along the pipeline. Each row
+  2388→                captures the visual condition at that point. Click <strong>Save</strong>
+  2389→                on each row to persist it before navigating away.
+  2390→              </CardDescription>
+  2391→            </div>
+  2392→            <Button onClick={addVisualObservation} size="sm">
+  2393→              <Plus className="mr-1 h-4 w-4" /> Add Observation
+  2394→            </Button>
+  2395→          </div>
+  2396→        </CardHeader>
+  2397→        <CardContent className="p-0">
+  2398→          <div className="overflow-x-auto">
+  2399→            <table className="w-full text-xs">
+  2400→              <thead className="bg-blue-800 text-white">
+  2401→                <tr>
+  2402→                  <th className="border border-blue-900 px-2 py-2 text-center align-middle" style={{ minWidth: 50 }}>Pt No</th>
+  2403→                  <th className="border border-blue-900 px-2 py-2 text-center align-middle" style={{ minWidth: 110 }}>Location</th>
+  2404→                  <th className="border border-blue-900 px-2 py-2 text-center align-middle" style={{ minWidth: 90 }}>Pipeline Condition</th>
+  2405→                  <th className="border border-blue-900 px-2 py-2 text-center align-middle" style={{ minWidth: 90 }}>External Surface</th>
+  2406→                  <th className="border border-blue-900 px-2 py-2 text-center align-middle" style={{ minWidth: 90 }}>Coating / Paint</th>
+  2407→                  <th className="border border-blue-900 px-2 py-2 text-center align-middle" style={{ minWidth: 90 }}>Corrosion</th>
+  2408→                  <th className="border border-blue-900 px-2 py-2 text-center align-middle" style={{ minWidth: 80 }}>Leakage</th>
+  2409→                  <th className="border border-blue-900 px-2 py-2 text-center align-middle" style={{ minWidth: 100 }}>Damage / Deformation</th>
+  2410→                  <th className="border border-blue-900 px-2 py-2 text-center align-middle" style={{ minWidth: 90 }}>Supports / Hangers</th>
+  2411→                  <th className="border border-blue-900 px-2 py-2 text-center align-middle" style={{ minWidth: 90 }}>Weld Joint</th>
+  2412→                  <th className="border border-blue-900 px-2 py-2 text-center align-middle" style={{ minWidth: 90 }}>Insulation</th>
+  2413→                  <th className="border border-blue-900 px-2 py-2 text-center align-middle" style={{ minWidth: 160 }}>Findings</th>
+  2414→                  <th className="border border-blue-900 px-2 py-2 text-center align-middle" style={{ minWidth: 160 }}>Recommendations</th>
+  2415→                  <th className="border border-blue-900 px-2 py-2 text-center align-middle" style={{ minWidth: 160 }}>Inspector Comments</th>
+  2416→                  <th className="border border-blue-900 px-2 py-2 text-center align-middle" style={{ minWidth: 80 }}>Actions</th>
+  2417→                </tr>
+  2418→              </thead>
+  2419→              <tbody>
+  2420→                {visualObservations.length === 0 && (
+  2421→                  <tr>
+  2422→                    <td colSpan={15} className="text-center py-6 text-muted-foreground border border-zinc-300">
+  2423→                      No observations yet. Click <strong>Add Observation</strong> to begin.
+  2424→                    </td>
+  2425→                  </tr>
+  2426→                )}
+  2427→                {visualObservations.map((obs, idx) => (
+  2428→                  <tr key={idx} className="hover:bg-muted/30">
+  2429→                    <td className="border border-zinc-300 p-1">
+  2430→                      <Input
+  2431→                        className="h-8 text-xs text-center font-mono"
+  2432→                        value={obs.pointNo}
+  2433→                        onChange={(e) => updateVisualObservation(idx, { pointNo: e.target.value })}
+  2434→                      />
+  2435→                    </td>
+  2436→                    <td className="border border-zinc-300 p-1">
+  2437→                      <Input
+  2438→                        className="h-8 text-xs"
+  2439→                        value={obs.location}
+  2440→                        onChange={(e) => updateVisualObservation(idx, { location: e.target.value })}
+  2441→                        placeholder="e.g. Top rack, Bay 3"
+  2442→                      />
+  2443→                    </td>
+  2444→                    <td className="border border-zinc-300 p-1">
+  2445→                      <Select
+  2446→                        value={obs.pipelineCondition || "N/A"}
+  2447→                        onValueChange={(v) => updateVisualObservation(idx, { pipelineCondition: v === "N/A" ? "" : v })}
+  2448→                      >
+  2449→                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+  2450→                        <SelectContent>
+  2451→                          {CONDITION_RATINGS.map((c) => (
+  2452→                            <SelectItem key={c} value={c}>{c}</SelectItem>
+  2453→                          ))}
+  2454→                        </SelectContent>
+  2455→                      </Select>
+  2456→                    </td>
+  2457→                    <td className="border border-zinc-300 p-1">
+  2458→                      <Select
+  2459→                        value={obs.externalSurfaceCondition || "N/A"}
+  2460→                        onValueChange={(v) => updateVisualObservation(idx, { externalSurfaceCondition: v === "N/A" ? "" : v })}
+  2461→                      >
+  2462→                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+  2463→                        <SelectContent>
+  2464→                          {CONDITION_RATINGS.map((c) => (
+  2465→                            <SelectItem key={c} value={c}>{c}</SelectItem>
+  2466→                          ))}
+  2467→                        </SelectContent>
+  2468→                      </Select>
+  2469→                    </td>
+  2470→                    <td className="border border-zinc-300 p-1">
+  2471→                      <Select
+  2472→                        value={obs.coatingPaintCondition || "N/A"}
+  2473→                        onValueChange={(v) => updateVisualObservation(idx, { coatingPaintCondition: v === "N/A" ? "" : v })}
+  2474→                      >
+  2475→                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+  2476→                        <SelectContent>
+  2477→                          {CONDITION_RATINGS.map((c) => (
+  2478→                            <SelectItem key={c} value={c}>{c}</SelectItem>
+  2479→                          ))}
+  2480→                        </SelectContent>
+  2481→                      </Select>
+  2482→                    </td>
+  2483→                    <td className="border border-zinc-300 p-1">
+  2484→                      <Select
+  2485→                        value={obs.corrosionObserved || "N/A"}
+  2486→                        onValueChange={(v) => updateVisualObservation(idx, { corrosionObserved: v === "N/A" ? "" : v })}
+  2487→                      >
+  2488→                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+  2489→                        <SelectContent>
+  2490→                          {CORROSION_LEVELS.map((c) => (
+  2491→                            <SelectItem key={c} value={c}>{c}</SelectItem>
+  2492→                          ))}
+  2493→                        </SelectContent>
+  2494→                      </Select>
+  2495→                    </td>
+  2496→                    <td className="border border-zinc-300 p-1">
+  2497→                      <Select
+  2498→                        value={obs.leakageObserved || "N/A"}
+  2499→                        onValueChange={(v) => updateVisualObservation(idx, { leakageObserved: v === "N/A" ? "" : v })}
+
+[showing lines 2000-2499 of 3328; use offset=2500 with limit to continue reading]

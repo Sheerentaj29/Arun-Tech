@@ -205,6 +205,26 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       dptPenetrant: body.dptPenetrant !== undefined ? (body.dptPenetrant?.trim() || null) : existing.dptPenetrant,
       dptDeveloper: body.dptDeveloper !== undefined ? (body.dptDeveloper?.trim() || null) : existing.dptDeveloper,
       dptCustomColumns: body.dptCustomColumns !== undefined ? body.dptCustomColumns : existing.dptCustomColumns,
+      // ─── DYE PENETRANT PROCEDURE FIELDS (16 typeable fields) ───
+      // All fields are optional strings. When the form sends them (even
+      // as empty strings), we trim and persist; null preserves the
+      // existing value if the field wasn't sent.
+      dptTestingStandard: body.dptTestingStandard !== undefined ? (body.dptTestingStandard?.trim() || null) : existing.dptTestingStandard,
+      dptAcceptanceCriteria: body.dptAcceptanceCriteria !== undefined ? (body.dptAcceptanceCriteria?.trim() || null) : existing.dptAcceptanceCriteria,
+      dptSurfacePreparation: body.dptSurfacePreparation !== undefined ? (body.dptSurfacePreparation?.trim() || null) : existing.dptSurfacePreparation,
+      dptSurfaceTemperature: body.dptSurfaceTemperature !== undefined ? (body.dptSurfaceTemperature?.trim() || null) : existing.dptSurfaceTemperature,
+      dptPenetrantType: body.dptPenetrantType !== undefined ? (body.dptPenetrantType?.trim() || null) : existing.dptPenetrantType,
+      dptPenetrantProcess: body.dptPenetrantProcess !== undefined ? (body.dptPenetrantProcess?.trim() || null) : existing.dptPenetrantProcess,
+      dptMethodOfPreCleaning: body.dptMethodOfPreCleaning !== undefined ? (body.dptMethodOfPreCleaning?.trim() || null) : existing.dptMethodOfPreCleaning,
+      dptDryingTimeAfterPreCleaning: body.dptDryingTimeAfterPreCleaning !== undefined ? (body.dptDryingTimeAfterPreCleaning?.trim() || null) : existing.dptDryingTimeAfterPreCleaning,
+      dptMethodOfApplyingPenetrant: body.dptMethodOfApplyingPenetrant !== undefined ? (body.dptMethodOfApplyingPenetrant?.trim() || null) : existing.dptMethodOfApplyingPenetrant,
+      dptPenetratingTime: body.dptPenetratingTime !== undefined ? (body.dptPenetratingTime?.trim() || null) : existing.dptPenetratingTime,
+      dptMethodOfRemovingExcessPenetrant: body.dptMethodOfRemovingExcessPenetrant !== undefined ? (body.dptMethodOfRemovingExcessPenetrant?.trim() || null) : existing.dptMethodOfRemovingExcessPenetrant,
+      dptMethodOfApplyingDeveloper: body.dptMethodOfApplyingDeveloper !== undefined ? (body.dptMethodOfApplyingDeveloper?.trim() || null) : existing.dptMethodOfApplyingDeveloper,
+      dptDevelopmentTime: body.dptDevelopmentTime !== undefined ? (body.dptDevelopmentTime?.trim() || null) : existing.dptDevelopmentTime,
+      dptInterpretationTime: body.dptInterpretationTime !== undefined ? (body.dptInterpretationTime?.trim() || null) : existing.dptInterpretationTime,
+      dptLightingEquipment: body.dptLightingEquipment !== undefined ? (body.dptLightingEquipment?.trim() || null) : existing.dptLightingEquipment,
+      dptPostCleaning: body.dptPostCleaning !== undefined ? (body.dptPostCleaning?.trim() || null) : existing.dptPostCleaning,
     },
   });
 

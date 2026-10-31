@@ -347,10 +347,31 @@ model PipelineInspection {
   // ─── DPT / DPPT REPORT FIELDS ───
   // Populated when reportType = PIPELINE_DPT
   dptDateOfExamination       DateTime? // Date of Examination (editable)
-  dptSolventCleaner          String?  // Solvent / Cleaner material used
-  dptPenetrant               String?  // Penetrant material used
-  dptDeveloper               String?  // Developer material used
+  dptSolventCleaner          String?  // Solvent / Cleaner material used (Consumable Details)
+  dptPenetrant               String?  // Penetrant material used (Consumable Details)
+  dptDeveloper               String?  // Developer material used (Consumable Details)
   dptCustomColumns           String?  // JSON: [{id, name, unit}] custom columns for DPT table
+
+  // ─── DYE PENETRANT PROCEDURE FIELDS ───
+  // Populated when reportType = PIPELINE_DPT. Two-column "DYE PENETRANT
+  // PROCEDURE" section in the PDF, with the field name on the left and
+  // the editable value on the right. All values are typeable/editable.
+  dptTestingStandard                String? // Testing Standard
+  dptAcceptanceCriteria             String? // Acceptance Criteria
+  dptSurfacePreparation             String? // Surface Preparation
+  dptSurfaceTemperature             String? // Surface Temperature
+  dptPenetrantType                  String? // Penetrant Type
+  dptPenetrantProcess               String? // Penetrant Process
+  dptMethodOfPreCleaning            String? // Method of Pre-cleaning
+  dptDryingTimeAfterPreCleaning     String? // Drying Time After Pre-cleaning
+  dptMethodOfApplyingPenetrant      String? // Method of Applying Penetrant
+  dptPenetratingTime                String? // Penetrating Time
+  dptMethodOfRemovingExcessPenetrant String? // Method of Removing Excess Penetrant
+  dptMethodOfApplyingDeveloper      String? // Method of Applying Developer
+  dptDevelopmentTime                String? // Development Time
+  dptInterpretationTime             String? // Interpretation Time
+  dptLightingEquipment              String? // Lighting Equipment
+  dptPostCleaning                   String? // Post Cleaning
 
   isDemo                   Boolean  @default(false)
   createdAt                DateTime @default(now())

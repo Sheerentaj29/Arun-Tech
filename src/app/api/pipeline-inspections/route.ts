@@ -72,6 +72,7 @@ export async function GET(req: NextRequest) {
             measurements: true,
             revisions: true,
             visualObservations: true,
+            dptObservations: true,
           },
         },
       },
@@ -132,8 +133,18 @@ export async function POST(req: NextRequest) {
       reportNumber: body.reportNumber.trim(),
       // Accept reportType from the form. Default to PIPELINE_THICKNESS for
       // backward compat (so existing API callers that don't send it still
-      // create thickness reports as before).
-      reportType: ["PIPELINE_THICKNESS", "PIPELINE_VISUAL", "PIPELINE_CONDITION", "PIPELINE_DPT"].includes(body.reportType)
+      // create thickness reports as before). Accept the four active types
+      // (PIPELINE_THICKNESS, PIPELINE_DPT, PIPELINE_MPT, PIPELINE_WELD_SCAN)
+      // plus the two legacy types (PIPELINE_VISUAL, PIPELINE_CONDITION)
+      // so existing reports of those types can still be created if needed.
+      reportType: [
+        "PIPELINE_THICKNESS",
+        "PIPELINE_DPT",
+        "PIPELINE_MPT",
+        "PIPELINE_WELD_SCAN",
+        "PIPELINE_VISUAL",
+        "PIPELINE_CONDITION",
+      ].includes(body.reportType)
         ? body.reportType
         : "PIPELINE_THICKNESS",
       clientId: body.clientId,
@@ -185,6 +196,23 @@ export async function POST(req: NextRequest) {
       dptPenetrant: body.dptPenetrant?.trim() || null,
       dptDeveloper: body.dptDeveloper?.trim() || null,
       dptCustomColumns: body.dptCustomColumns ?? "[]",
+      // ─── DYE PENETRANT PROCEDURE FIELDS (16 typeable fields) ───
+      dptTestingStandard: body.dptTestingStandard?.trim() || null,
+      dptAcceptanceCriteria: body.dptAcceptanceCriteria?.trim() || null,
+      dptSurfacePreparation: body.dptSurfacePreparation?.trim() || null,
+      dptSurfaceTemperature: body.dptSurfaceTemperature?.trim() || null,
+      dptPenetrantType: body.dptPenetrantType?.trim() || null,
+      dptPenetrantProcess: body.dptPenetrantProcess?.trim() || null,
+      dptMethodOfPreCleaning: body.dptMethodOfPreCleaning?.trim() || null,
+      dptDryingTimeAfterPreCleaning: body.dptDryingTimeAfterPreCleaning?.trim() || null,
+      dptMethodOfApplyingPenetrant: body.dptMethodOfApplyingPenetrant?.trim() || null,
+      dptPenetratingTime: body.dptPenetratingTime?.trim() || null,
+      dptMethodOfRemovingExcessPenetrant: body.dptMethodOfRemovingExcessPenetrant?.trim() || null,
+      dptMethodOfApplyingDeveloper: body.dptMethodOfApplyingDeveloper?.trim() || null,
+      dptDevelopmentTime: body.dptDevelopmentTime?.trim() || null,
+      dptInterpretationTime: body.dptInterpretationTime?.trim() || null,
+      dptLightingEquipment: body.dptLightingEquipment?.trim() || null,
+      dptPostCleaning: body.dptPostCleaning?.trim() || null,
       isDemo: false,
     },
     include: {

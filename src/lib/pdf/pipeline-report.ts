@@ -71,20 +71,44 @@ function findServiceLogo(): string | null {
 // ─── Report type metadata ───
 // The title is the only piece used directly by the PDF generator; the
 // shortLabel / accent are used by the UI (not here).
-type ReportType = "PIPELINE_THICKNESS" | "PIPELINE_VISUAL" | "PIPELINE_CONDITION" | "PIPELINE_DPT";
+type ReportType =
+  | "PIPELINE_THICKNESS"
+  | "PIPELINE_VISUAL"
+  | "PIPELINE_CONDITION"
+  | "PIPELINE_DPT"
+  | "PIPELINE_MPT"
+  | "PIPELINE_WELD_SCAN";
 
 const REPORT_TYPE_TITLE: Record<ReportType, string> = {
   PIPELINE_THICKNESS: "PIPELINE THICKNESS MEASUREMENT REPORT",
   PIPELINE_VISUAL:    "PIPELINE VISUAL INSPECTION REPORT",
   PIPELINE_CONDITION: "PIPELINE CONDITION ASSESSMENT REPORT",
   PIPELINE_DPT:       "DYE PENETRANT TESTING REPORT",
+  PIPELINE_MPT:       "MAGNETIC PARTICLE TESTING REPORT",
+  PIPELINE_WELD_SCAN: "WELD SCAN REPORT",
 };
 
 function getReportType(raw: any): ReportType {
   const v = String(raw ?? "PIPELINE_THICKNESS");
-  if (v === "PIPELINE_VISUAL" || v === "PIPELINE_CONDITION" || v === "PIPELINE_DPT") return v;
+  if (
+    v === "PIPELINE_VISUAL" ||
+    v === "PIPELINE_CONDITION" ||
+    v === "PIPELINE_DPT" ||
+    v === "PIPELINE_MPT" ||
+    v === "PIPELINE_WELD_SCAN"
+  ) return v;
   return "PIPELINE_THICKNESS";
 }
+
+// Report types that DO NOT include engineering drawing uploads. For these
+// types the PDF skips the drawing-pages section entirely and goes straight
+// from the cover/findings to the inspection table.
+const NO_DRAWINGS_REPORT_TYPES: ReportType[] = [
+  "PIPELINE_DPT",
+  "PIPELINE_MPT",
+  "PIPELINE_WELD_SCAN",
+  "PIPELINE_CONDITION",
+];
 
 export interface LinkedDrawing {
   id: string;
@@ -858,69 +882,78 @@ export async function generatePipelineReportPdf(
   // 5. DRAWING PAGES — each drawing image (or each page of a PDF drawing)
   // gets its own full PDF page, centered, preserving aspect ratio.
   // Drawings appear BEFORE the measurement table.
+  //
+  // IMPORTANT: DPT / DPPT, MPT, Weld Scan, and Condition Assessment
+  // reports DO NOT include engineering drawing uploads. For those report
+  // types the linkedDrawings array is ignored entirely (the form hides
+  // the drawing upload step too), so the PDF jumps straight from the
+  // cover / findings to the inspection table.
   // ═══════════════════════════════════════════════════════════════
-  for (const drawing of linkedDrawings) {
-    const ext = (drawing.fileExtension || "").toLowerCase();
-    const filePath = drawing.filePath;
+  const includeDrawings = !NO_DRAWINGS_REPORT_TYPES.includes(reportType);
+  if (includeDrawings) {
+    for (const drawing of linkedDrawings) {
+      const ext = (drawing.fileExtension || "").toLowerCase();
+      const filePath = drawing.filePath;
 
-    if (!filePath || !existsSync(filePath)) {
-      // Missing file — still emit a placeholder page so the structure
-      // is visible
-      addNewPage();
-      drawDrawingPlaceholder(
-        doc, drawing,
-        `[File missing on disk: ${drawing.fileName}]\n\nThe drawing file could not be found.`,
-        pageW, pageH,
-      );
-      continue;
-    }
-
-    if (ext === ".pdf") {
-      // Rasterize each page of the PDF drawing
-      const pageBuffers = await rasterizePdfPages(filePath);
-      if (pageBuffers.length === 0) {
+      if (!filePath || !existsSync(filePath)) {
+        // Missing file — still emit a placeholder page so the structure
+        // is visible
         addNewPage();
         drawDrawingPlaceholder(
           doc, drawing,
-          `[Could not rasterize PDF: ${drawing.fileName}]\n\n` +
-          `The PDF could not be converted to images. The file may be corrupted ` +
-          `or the conversion tool is unavailable.`,
+          `[File missing on disk: ${drawing.fileName}]\n\nThe drawing file could not be found.`,
           pageW, pageH,
         );
         continue;
       }
-      // One output page per source PDF page
-      for (let p = 0; p < pageBuffers.length; p++) {
+
+      if (ext === ".pdf") {
+        // Rasterize each page of the PDF drawing
+        const pageBuffers = await rasterizePdfPages(filePath);
+        if (pageBuffers.length === 0) {
+          addNewPage();
+          drawDrawingPlaceholder(
+            doc, drawing,
+            `[Could not rasterize PDF: ${drawing.fileName}]\n\n` +
+            `The PDF could not be converted to images. The file may be corrupted ` +
+            `or the conversion tool is unavailable.`,
+            pageW, pageH,
+          );
+          continue;
+        }
+        // One output page per source PDF page
+        for (let p = 0; p < pageBuffers.length; p++) {
+          addNewPage();
+          drawDrawingImagePage(doc, drawing, pageBuffers[p], p + 1, pageBuffers.length, pageW, pageH);
+        }
+      } else if (
+        ext === ".png" || ext === ".jpg" || ext === ".jpeg" ||
+        ext === ".webp" || ext === ".tif" || ext === ".tiff"
+      ) {
+        // Embed the image directly on its own page
+        const imgBuf = readImageBuffer(filePath);
+        if (!imgBuf) {
+          addNewPage();
+          drawDrawingPlaceholder(
+            doc, drawing,
+            `[Could not read image: ${drawing.fileName}]`,
+            pageW, pageH,
+          );
+          continue;
+        }
         addNewPage();
-        drawDrawingImagePage(doc, drawing, pageBuffers[p], p + 1, pageBuffers.length, pageW, pageH);
-      }
-    } else if (
-      ext === ".png" || ext === ".jpg" || ext === ".jpeg" ||
-      ext === ".webp" || ext === ".tif" || ext === ".tiff"
-    ) {
-      // Embed the image directly on its own page
-      const imgBuf = readImageBuffer(filePath);
-      if (!imgBuf) {
+        drawDrawingImagePage(doc, drawing, imgBuf, 1, 1, pageW, pageH);
+      } else {
+        // DWG / DXF / unsupported — show a placeholder
         addNewPage();
         drawDrawingPlaceholder(
           doc, drawing,
-          `[Could not read image: ${drawing.fileName}]`,
+          `[${ext.toUpperCase()} File: ${drawing.fileName}]\n\n` +
+          `Preview is not available for native CAD formats. The original file ` +
+          `is preserved on disk and can be downloaded separately.`,
           pageW, pageH,
         );
-        continue;
       }
-      addNewPage();
-      drawDrawingImagePage(doc, drawing, imgBuf, 1, 1, pageW, pageH);
-    } else {
-      // DWG / DXF / unsupported — show a placeholder
-      addNewPage();
-      drawDrawingPlaceholder(
-        doc, drawing,
-        `[${ext.toUpperCase()} File: ${drawing.fileName}]\n\n` +
-        `Preview is not available for native CAD formats. The original file ` +
-        `is preserved on disk and can be downloaded separately.`,
-        pageW, pageH,
-      );
     }
   }
 
@@ -939,8 +972,12 @@ export async function generatePipelineReportPdf(
 
   // Helper: decide whether to start on a fresh page or continue.
   // Uses pageMaxY (not maxRowY) because these pages don't have a sign-off.
+  // If drawings were emitted (only possible when includeDrawings is true
+  // AND at least one drawing was attached), the body always starts on a
+  // fresh page. Otherwise, continue on the same page if there's room,
+  // else a new page.
   const startBodyOnFreshPage = (neededSpace: number) => {
-    if (linkedDrawings.length > 0) {
+    if (includeDrawings && linkedDrawings.length > 0) {
       addNewPage();
       y = MARGIN;
     } else if (y + neededSpace > pageMaxY) {
@@ -1014,53 +1051,132 @@ export async function generatePipelineReportPdf(
     startBodyOnFreshPage(80);
     y = drawConditionAssessment(doc, report as any, y, pageW, pageH, MARGIN, pageMaxY, addNewPage);
   } else if (reportType === "PIPELINE_DPT") {
-    // ─── DPT / DPPT INSPECTION TABLE ───
-    // Render DPT-specific header (testing materials) + observation table
-    startBodyOnFreshPage(120);
+    // ─── DPT / DPPT REPORT BODY ───
+    // Renders, in this order:
+    //   1. "3. DYE PENETRANT PROCEDURE" — two-column table with 17 rows
+    //      (Date of Examination + 16 typeable procedure fields).
+    //   2. "Consumable Details" — two-column table with 3 rows
+    //      (Solvent, Penetrant, Developer).
+    //   3. DPT Inspection Results — observation table with auto-serial
+    //      numbers, Accept / Reject result, custom columns.
+    //
+    // DPT reports do NOT include engineering drawing uploads — the
+    // drawing section is skipped entirely above for this report type.
+    startBodyOnFreshPage(160);
 
-    // DPT testing materials header
     const dptReport = report as any;
-    if (dptReport.dptDateOfExamination || dptReport.dptSolventCleaner || dptReport.dptPenetrant || dptReport.dptDeveloper) {
-      if (y + 80 > pageMaxY) { addNewPage(); y = MARGIN; }
-      y += 10;
-      doc.font(FONT_BOLD).fontSize(10).fillColor("#000");
-      doc.text("Testing Materials", MARGIN, y);
-      y += 16;
 
-      const dptLabelW = 140;
-      const dptValueW = (pageW - 2 * MARGIN - 2 * dptLabelW) / 2;
-      const dptRowH = 20;
-      const dptInfo: Array<[string, string | null]> = [
-        ["Date of Examination", dptReport.dptDateOfExamination ? new Date(dptReport.dptDateOfExamination).toISOString().slice(0, 10) : "—"],
-        ["Solvent / Cleaner", dptReport.dptSolventCleaner],
-        ["Penetrant", dptReport.dptPenetrant],
-        ["Developer", dptReport.dptDeveloper],
+    // ─── 3. DYE PENETRANT PROCEDURE ───
+    // Two-column table: left = field name (bold), right = value.
+    // All values are typeable text from the form (or "—" if blank).
+    {
+      if (y + 24 > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 6;
+      doc.font(FONT_BOLD).fontSize(11).fillColor("#3a1d4a");
+      doc.text("3. DYE PENETRANT PROCEDURE", MARGIN, y);
+      doc.fillColor("#000");
+      y += 18;
+
+      // 17 rows: Date of Examination + 16 typeable procedure fields.
+      // Each row is a [label, value] tuple. The value comes straight from
+      // the corresponding dpt* field on the report.
+      const procedureRows: Array<[string, string | null]> = [
+        ["Date of Examination", dptReport.dptDateOfExamination
+          ? new Date(dptReport.dptDateOfExamination).toISOString().slice(0, 10)
+          : null],
+        ["Testing Standard", dptReport.dptTestingStandard],
+        ["Acceptance Criteria", dptReport.dptAcceptanceCriteria],
+        ["Surface Preparation", dptReport.dptSurfacePreparation],
+        ["Surface Temperature", dptReport.dptSurfaceTemperature],
+        ["Penetrant Type", dptReport.dptPenetrantType],
+        ["Penetrant Process", dptReport.dptPenetrantProcess],
+        ["Method of Pre-cleaning", dptReport.dptMethodOfPreCleaning],
+        ["Drying Time After Pre-cleaning", dptReport.dptDryingTimeAfterPreCleaning],
+        ["Method of Applying Penetrant", dptReport.dptMethodOfApplyingPenetrant],
+        ["Penetrating Time", dptReport.dptPenetratingTime],
+        ["Method of Removing Excess Penetrant", dptReport.dptMethodOfRemovingExcessPenetrant],
+        ["Method of Applying Developer", dptReport.dptMethodOfApplyingDeveloper],
+        ["Development Time", dptReport.dptDevelopmentTime],
+        ["Interpretation Time", dptReport.dptInterpretationTime],
+        ["Lighting Equipment", dptReport.dptLightingEquipment],
+        ["Post Cleaning", dptReport.dptPostCleaning],
       ];
-      for (let i = 0; i < dptInfo.length; i += 2) {
-        const left = dptInfo[i];
-        const right = dptInfo[i + 1] ?? ["", "—"];
-        if (y + dptRowH > pageMaxY) { addNewPage(); y = MARGIN; }
-        // Left
-        doc.font(FONT_BOLD).fontSize(9);
-        doc.rect(MARGIN, y, dptLabelW, dptRowH).stroke("#888");
-        doc.text(left[0], MARGIN + 4, y + 5, { width: dptLabelW - 8 });
-        doc.font(FONT_REGULAR).fontSize(9);
-        doc.rect(MARGIN + dptLabelW, y, dptValueW, dptRowH).stroke("#888");
-        doc.text(left[1] ?? "—", MARGIN + dptLabelW + 4, y + 5, { width: dptValueW - 8 });
-        // Right
-        const rx = MARGIN + dptLabelW + dptValueW;
-        doc.font(FONT_BOLD).fontSize(9);
-        doc.rect(rx, y, dptLabelW, dptRowH).stroke("#888");
-        doc.text(right[0] ?? "", rx + 4, y + 5, { width: dptLabelW - 8 });
-        doc.font(FONT_REGULAR).fontSize(9);
-        doc.rect(rx + dptLabelW, y, dptValueW, dptRowH).stroke("#888");
-        doc.text(right[1] ?? "—", rx + dptLabelW + 4, y + 5, { width: dptValueW - 8 });
-        y += dptRowH;
+
+      // Two-column table: label column ~38% of usable width, value column ~62%.
+      const procLabelW = (pageW - 2 * MARGIN) * 0.38;
+      const procValueW = (pageW - 2 * MARGIN) - procLabelW;
+      const procRowH = 18;
+
+      for (const [label, value] of procedureRows) {
+        if (y + procRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+        // Label cell (left) — purple-tinted background
+        doc.rect(MARGIN, y, procLabelW, procRowH).fill("#f3e8fb").stroke("#bbb");
+        doc.font(FONT_BOLD).fontSize(8.5).fillColor("#000");
+        doc.text(label, MARGIN + 4, y + 5, { width: procLabelW - 8 });
+        // Value cell (right)
+        doc.rect(MARGIN + procLabelW, y, procValueW, procRowH).fill("#ffffff").stroke("#bbb");
+        doc.font(FONT_REGULAR).fontSize(8.5).fillColor("#000");
+        const valueText = value && value.trim() ? value.trim() : "—";
+        // Truncate long values to fit the cell width
+        const maxW = procValueW - 8;
+        let displayText = valueText;
+        if (doc.widthOfString(displayText) > maxW) {
+          // Approximate truncation with ellipsis
+          const charsToKeep = Math.floor((maxW / Math.max(1, doc.widthOfString(displayText))) * displayText.length);
+          displayText = displayText.slice(0, Math.max(1, charsToKeep - 1)) + "…";
+        }
+        doc.text(displayText, MARGIN + procLabelW + 4, y + 5, { width: maxW });
+        y += procRowH;
       }
       y += 8;
     }
 
-    // DPT observation table
+    // ─── CONSUMABLE DETAILS ───
+    // Three rows: Solvent, Penetrant, Developer. Same two-column layout
+    // as the procedure section. The values are the actual product / make
+    // / material entered by the user.
+    {
+      if (y + 24 > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 4;
+      doc.font(FONT_BOLD).fontSize(11).fillColor("#3a1d4a");
+      doc.text("Consumable Details", MARGIN, y);
+      doc.fillColor("#000");
+      y += 18;
+
+      const consumableRows: Array<[string, string | null]> = [
+        ["Solvent", dptReport.dptSolventCleaner],
+        ["Penetrant", dptReport.dptPenetrant],
+        ["Developer", dptReport.dptDeveloper],
+      ];
+
+      const consLabelW = (pageW - 2 * MARGIN) * 0.38;
+      const consValueW = (pageW - 2 * MARGIN) - consLabelW;
+      const consRowH = 18;
+
+      for (const [label, value] of consumableRows) {
+        if (y + consRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+        doc.rect(MARGIN, y, consLabelW, consRowH).fill("#f3e8fb").stroke("#bbb");
+        doc.font(FONT_BOLD).fontSize(8.5).fillColor("#000");
+        doc.text(label, MARGIN + 4, y + 5, { width: consLabelW - 8 });
+        doc.rect(MARGIN + consLabelW, y, consValueW, consRowH).fill("#ffffff").stroke("#bbb");
+        doc.font(FONT_REGULAR).fontSize(8.5).fillColor("#000");
+        const valueText = value && value.trim() ? value.trim() : "—";
+        const maxW = consValueW - 8;
+        let displayText = valueText;
+        if (doc.widthOfString(displayText) > maxW) {
+          const charsToKeep = Math.floor((maxW / Math.max(1, doc.widthOfString(displayText))) * displayText.length);
+          displayText = displayText.slice(0, Math.max(1, charsToKeep - 1)) + "…";
+        }
+        doc.text(displayText, MARGIN + consLabelW + 4, y + 5, { width: maxW });
+        y += consRowH;
+      }
+      y += 10;
+    }
+
+    // ─── DPT INSPECTION RESULTS TABLE ───
+    // Dynamic table: system columns (Sl. No, Description, Weld Type,
+    // Result, Remarks) + any user-added custom columns. Serial numbers
+    // are auto-generated. Result is Accept / Reject.
     const dptObs = dptReport.dptObservations ?? report.dptObservations ?? [];
     // Parse custom columns
     let dptCustomCols: Array<{ id: string; name: string; unit: string }> = [];
@@ -1076,7 +1192,6 @@ export async function generatePipelineReportPdf(
     const descColW = 200;
     const weldColW = 80;
     const resultColW = 60;
-    const remarksColW = 0; // fill remaining
     const customColW = 60;
 
     // Calculate column widths
@@ -1085,6 +1200,14 @@ export async function generatePipelineReportPdf(
     const dptRemarksW = Math.max(100, pageW - 2 * MARGIN - dptFixedW - dptCustomTotalW);
     const dptColWidths = [slColW, descColW, weldColW, resultColW, ...dptCustomCols.map(() => customColW), dptRemarksW];
     const dptColHeaders = ["Sl.\nNo", "Description", "Weld\nType", "Result", ...dptCustomCols.map(c => c.name + (c.unit ? `\n(${c.unit})` : "")), "Remarks"];
+
+    // Section heading
+    if (y + 24 > pageMaxY) { addNewPage(); y = MARGIN; }
+    y += 4;
+    doc.font(FONT_BOLD).fontSize(11).fillColor("#3a1d4a");
+    doc.text("DPT Inspection Results", MARGIN, y);
+    doc.fillColor("#000");
+    y += 16;
 
     // Draw header
     if (y + dptHeaderH + dptRowH > pageMaxY) { addNewPage(); y = MARGIN; }
@@ -1110,6 +1233,34 @@ export async function generatePipelineReportPdf(
       doc.fillColor("#000");
       y += dptRowH;
     }
+  } else if (reportType === "PIPELINE_MPT" || reportType === "PIPELINE_WELD_SCAN") {
+    // ─── MPT / WELD SCAN PLACEHOLDER ───
+    // These report types are not yet fully implemented. Render a clear
+    // notice on the page so the PDF still has a sensible body section
+    // (instead of jumping from cover / findings straight to photos).
+    startBodyOnFreshPage(80);
+    if (y + 60 > pageMaxY) { addNewPage(); y = MARGIN; }
+    y += 10;
+    doc.font(FONT_BOLD).fontSize(11).fillColor("#000");
+    doc.text(
+      reportType === "PIPELINE_MPT"
+        ? "Magnetic Particle Testing — Inspection Procedure"
+        : "Weld Scan — Inspection Procedure",
+      MARGIN, y,
+    );
+    y += 18;
+    doc.font(FONT_REGULAR).fontSize(9).fillColor("#444");
+    const placeholderText =
+      "The detailed inspection procedure and observation table for " +
+      (reportType === "PIPELINE_MPT" ? "Magnetic Particle Testing" : "Weld Scan") +
+      " will be added in a future update. This report contains the header " +
+      "details, inspection photographs, and certification documents recorded " +
+      "for this inspection. Please refer to the report header, photographs, " +
+      "and certificates for the inspection details.";
+    const ph = doc.heightOfString(placeholderText, { width: pageW - 2 * MARGIN });
+    doc.text(placeholderText, MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
+    y += ph + 12;
+    doc.fillColor("#000");
   }
 
   // ═══════════════════════════════════════════════════════════════

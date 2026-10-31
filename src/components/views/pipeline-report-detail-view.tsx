@@ -46,7 +46,13 @@ import { toast } from "sonner";
 interface FullReport {
   id: string;
   reportNumber: string;
-  reportType: "PIPELINE_THICKNESS" | "PIPELINE_VISUAL" | "PIPELINE_CONDITION";
+  reportType:
+    | "PIPELINE_THICKNESS"
+    | "PIPELINE_VISUAL"
+    | "PIPELINE_CONDITION"
+    | "PIPELINE_DPT"
+    | "PIPELINE_MPT"
+    | "PIPELINE_WELD_SCAN";
   clientId: string;
   plantId: string;
   inspectionArea: string | null;
@@ -80,7 +86,29 @@ interface FullReport {
   secondReviewedByDesignation?: string | null;
   secondReviewedAt?: string | null;
   approvedByDesignation?: string | null;
-  recommendations?: string | null;
+  // ─── DPT / DPPT FIELDS ───
+  dptDateOfExamination?: string | null;
+  dptSolventCleaner?: string | null;
+  dptPenetrant?: string | null;
+  dptDeveloper?: string | null;
+  dptCustomColumns?: string | null;
+  // ─── DYE PENETRANT PROCEDURE FIELDS (16 typeable fields) ───
+  dptTestingStandard?: string | null;
+  dptAcceptanceCriteria?: string | null;
+  dptSurfacePreparation?: string | null;
+  dptSurfaceTemperature?: string | null;
+  dptPenetrantType?: string | null;
+  dptPenetrantProcess?: string | null;
+  dptMethodOfPreCleaning?: string | null;
+  dptDryingTimeAfterPreCleaning?: string | null;
+  dptMethodOfApplyingPenetrant?: string | null;
+  dptPenetratingTime?: string | null;
+  dptMethodOfRemovingExcessPenetrant?: string | null;
+  dptMethodOfApplyingDeveloper?: string | null;
+  dptDevelopmentTime?: string | null;
+  dptInterpretationTime?: string | null;
+  dptLightingEquipment?: string | null;
+  dptPostCleaning?: string | null;
   // ─── Certificates ───
   certificates?: Array<{
     id: string; category: string; title: string; fileName: string;
@@ -187,6 +215,17 @@ interface FullReport {
     recommendations: string | null;
     inspectorComments: string | null;
   }>;
+  // DPT observations — only populated for PIPELINE_DPT reports.
+  dptObservations?: Array<{
+    id: string;
+    serialNo: number;
+    sortOrder: number;
+    description: string | null;
+    weldType: string | null;
+    result: string;
+    remarks: string | null;
+    customColumnValues: string | null;
+  }>;
   revisions: Array<{
     id: string;
     revisionNumber: number;
@@ -240,6 +279,21 @@ const REPORT_TYPE_LABEL: Record<string, { label: string; title: string; color: s
     label: "Condition",
     title: "PIPELINE CONDITION ASSESSMENT REPORT",
     color: "border-amber-500 text-amber-700",
+  },
+  PIPELINE_DPT: {
+    label: "DPT/DPPT",
+    title: "DYE PENETRANT TESTING REPORT",
+    color: "border-purple-500 text-purple-700",
+  },
+  PIPELINE_MPT: {
+    label: "MPT",
+    title: "MAGNETIC PARTICLE TESTING REPORT",
+    color: "border-orange-500 text-orange-700",
+  },
+  PIPELINE_WELD_SCAN: {
+    label: "Weld Scan",
+    title: "WELD SCAN REPORT",
+    color: "border-cyan-500 text-cyan-700",
   },
 };
 
@@ -561,6 +615,135 @@ export function PipelineReportDetailView() {
             </div>
           ))}
         </div>
+
+        {/* DPT-specific sections — shown only for DPT / DPPT reports.
+            These appear BEFORE the measurement table block (which only
+            applies to thickness reports) so the correct content is shown
+            under the correct heading for DPT reports.
+        */}
+        {report.reportType === "PIPELINE_DPT" && (
+          <div className="mt-6 space-y-6">
+            {/* 3. Dye Penetrant Procedure */}
+            <div>
+              <h3 className="mb-2 text-xs font-bold uppercase text-purple-700 border-b border-purple-300 pb-1">
+                3. Dye Penetrant Procedure
+              </h3>
+              <table className="w-full border-collapse text-xs">
+                <tbody>
+                  {([
+                    ["Date of Examination", report.dptDateOfExamination ? new Date(report.dptDateOfExamination).toISOString().slice(0, 10) : null],
+                    ["Testing Standard", report.dptTestingStandard],
+                    ["Acceptance Criteria", report.dptAcceptanceCriteria],
+                    ["Surface Preparation", report.dptSurfacePreparation],
+                    ["Surface Temperature", report.dptSurfaceTemperature],
+                    ["Penetrant Type", report.dptPenetrantType],
+                    ["Penetrant Process", report.dptPenetrantProcess],
+                    ["Method of Pre-cleaning", report.dptMethodOfPreCleaning],
+                    ["Drying Time After Pre-cleaning", report.dptDryingTimeAfterPreCleaning],
+                    ["Method of Applying Penetrant", report.dptMethodOfApplyingPenetrant],
+                    ["Penetrating Time", report.dptPenetratingTime],
+                    ["Method of Removing Excess Penetrant", report.dptMethodOfRemovingExcessPenetrant],
+                    ["Method of Applying Developer", report.dptMethodOfApplyingDeveloper],
+                    ["Development Time", report.dptDevelopmentTime],
+                    ["Interpretation Time", report.dptInterpretationTime],
+                    ["Lighting Equipment", report.dptLightingEquipment],
+                    ["Post Cleaning", report.dptPostCleaning],
+                  ] as Array<[string, string | null | undefined]>).map(([label, value], idx) => (
+                    <tr key={idx} className="border-b border-zinc-200">
+                      <td className="bg-purple-50 border-r border-zinc-200 px-3 py-1.5 font-medium text-zinc-700 w-1/3">
+                        {label}
+                      </td>
+                      <td className="px-3 py-1.5">
+                        {value && value.trim() ? value : <span className="text-muted-foreground">—</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Consumable Details */}
+            <div>
+              <h3 className="mb-2 text-xs font-bold uppercase text-purple-700 border-b border-purple-300 pb-1">
+                Consumable Details
+              </h3>
+              <table className="w-full border-collapse text-xs">
+                <tbody>
+                  {([
+                    ["Solvent", report.dptSolventCleaner],
+                    ["Penetrant", report.dptPenetrant],
+                    ["Developer", report.dptDeveloper],
+                  ] as Array<[string, string | null | undefined]>).map(([label, value], idx) => (
+                    <tr key={idx} className="border-b border-zinc-200">
+                      <td className="bg-purple-50 border-r border-zinc-200 px-3 py-1.5 font-medium text-zinc-700 w-1/3">
+                        {label}
+                      </td>
+                      <td className="px-3 py-1.5">
+                        {value && value.trim() ? value : <span className="text-muted-foreground">—</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* DPT Inspection Results table */}
+            {report.dptObservations && report.dptObservations.length > 0 && (() => {
+              // Parse custom columns
+              let dptCustomCols: Array<{ id: string; name: string; unit: string }> = [];
+              try {
+                const cc = JSON.parse(report.dptCustomColumns ?? "[]");
+                if (Array.isArray(cc)) dptCustomCols = cc;
+              } catch {}
+              return (
+                <div>
+                  <h3 className="mb-2 text-xs font-bold uppercase text-purple-700 border-b border-purple-300 pb-1">
+                    DPT Inspection Results ({report.dptObservations.length})
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-purple-800 text-white">
+                          <th className="border border-purple-900 px-2 py-2 text-center">Sl. No</th>
+                          <th className="border border-purple-900 px-2 py-2 text-center">Description</th>
+                          <th className="border border-purple-900 px-2 py-2 text-center">Weld Type</th>
+                          <th className="border border-purple-900 px-2 py-2 text-center">Result</th>
+                          {dptCustomCols.map((cc) => (
+                            <th key={cc.id} className="border border-purple-900 px-2 py-2 text-center">
+                              {cc.name}{cc.unit && <span className="opacity-70"> ({cc.unit})</span>}
+                            </th>
+                          ))}
+                          <th className="border border-purple-900 px-2 py-2 text-center">Remarks</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {report.dptObservations.map((obs) => (
+                          <tr key={obs.id} className="hover:bg-muted/30">
+                            <td className="border border-zinc-300 px-2 py-1 text-center font-mono">{obs.serialNo}</td>
+                            <td className="border border-zinc-300 px-2 py-1">{obs.description ?? "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{obs.weldType ?? "—"}</td>
+                            <td className={`border border-zinc-300 px-2 py-1 text-center font-bold ${obs.result === "Reject" ? "text-red-700 bg-red-50" : "text-emerald-700 bg-emerald-50"}`}>
+                              {obs.result}
+                            </td>
+                            {dptCustomCols.map((cc) => {
+                              let val = "—";
+                              try {
+                                const vals = JSON.parse(obs.customColumnValues ?? "{}");
+                                val = vals[cc.id] ?? "—";
+                              } catch {}
+                              return <td key={cc.id} className="border border-zinc-300 px-2 py-1 text-center">{val}</td>;
+                            })}
+                            <td className="border border-zinc-300 px-2 py-1">{obs.remarks ?? "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
 
         {/* Measurement table */}
         <div className="overflow-x-auto">

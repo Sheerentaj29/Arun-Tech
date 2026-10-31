@@ -19,6 +19,7 @@ import {
   PenTool,
   FileText,
   Image as ImageIcon,
+  Droplet,
 } from "lucide-react";
 import {
   Card,
@@ -54,6 +55,10 @@ const REPORT_TYPE_INFO: Record<PipelineReportType, {
   formDescription: string;
   step2Label: string;       // middle step name
   accent: string;           // badge color class
+  /** When true, the form shows a "Coming soon" notice instead of an
+   * inspection table. The user can still fill in the header, save, and
+   * submit, but the type-specific inspection data entry is disabled. */
+  comingSoon?: boolean;
 }> = {
   PIPELINE_THICKNESS: {
     title: "PIPELINE THICKNESS MEASUREMENT REPORT",
@@ -83,9 +88,27 @@ const REPORT_TYPE_INFO: Record<PipelineReportType, {
     title: "DYE PENETRANT TESTING REPORT",
     shortLabel: "DPT/DPPT",
     formHeading: "New DPT / DPPT Dye Penetrant Testing Report",
-    formDescription: "Dye penetrant testing with testing materials, observation table, and Accept/Reject results.",
+    formDescription: "Dye penetrant testing with complete Dye Penetrant Procedure, Consumable Details, observation table, and Accept/Reject results.",
     step2Label: "DPT Observations",
     accent: "border-purple-500 text-purple-700",
+  },
+  PIPELINE_MPT: {
+    title: "MAGNETIC PARTICLE TESTING REPORT",
+    shortLabel: "MPT",
+    formHeading: "New MPT – Magnetic Particle Testing Report",
+    formDescription: "Magnetic particle inspection for surface and near-surface flaws in ferromagnetic materials.",
+    step2Label: "MPT Observations",
+    accent: "border-orange-500 text-orange-700",
+    comingSoon: true,
+  },
+  PIPELINE_WELD_SCAN: {
+    title: "WELD SCAN REPORT",
+    shortLabel: "Weld Scan",
+    formHeading: "New Weld Scan Report",
+    formDescription: "Systematic weld scan inspection along a pipeline or vessel.",
+    step2Label: "Weld Scan Observations",
+    accent: "border-cyan-500 text-cyan-700",
+    comingSoon: true,
   },
 };
 
@@ -176,6 +199,24 @@ interface ReportHeader {
   dptPenetrant: string;
   dptDeveloper: string;
   dptCustomColumns: string;
+  // ─── DYE PENETRANT PROCEDURE FIELDS ───
+  // Two-column "DYE PENETRANT PROCEDURE" section. All editable/typeable.
+  dptTestingStandard: string;
+  dptAcceptanceCriteria: string;
+  dptSurfacePreparation: string;
+  dptSurfaceTemperature: string;
+  dptPenetrantType: string;
+  dptPenetrantProcess: string;
+  dptMethodOfPreCleaning: string;
+  dptDryingTimeAfterPreCleaning: string;
+  dptMethodOfApplyingPenetrant: string;
+  dptPenetratingTime: string;
+  dptMethodOfRemovingExcessPenetrant: string;
+  dptMethodOfApplyingDeveloper: string;
+  dptDevelopmentTime: string;
+  dptInterpretationTime: string;
+  dptLightingEquipment: string;
+  dptPostCleaning: string;
   // Condition fields default empty
   pipelineAgeYears: string;
   serviceFluid: string;
@@ -225,6 +266,23 @@ const EMPTY_HEADER: ReportHeader = {
   dptPenetrant: "",
   dptDeveloper: "",
   dptCustomColumns: "[]",
+  // Dye Penetrant Procedure fields default empty
+  dptTestingStandard: "",
+  dptAcceptanceCriteria: "",
+  dptSurfacePreparation: "",
+  dptSurfaceTemperature: "",
+  dptPenetrantType: "",
+  dptPenetrantProcess: "",
+  dptMethodOfPreCleaning: "",
+  dptDryingTimeAfterPreCleaning: "",
+  dptMethodOfApplyingPenetrant: "",
+  dptPenetratingTime: "",
+  dptMethodOfRemovingExcessPenetrant: "",
+  dptMethodOfApplyingDeveloper: "",
+  dptDevelopmentTime: "",
+  dptInterpretationTime: "",
+  dptLightingEquipment: "",
+  dptPostCleaning: "",
   // Condition fields default empty
   pipelineAgeYears: "",
   serviceFluid: "",
@@ -400,8 +458,10 @@ export function PipelineReportFormView() {
   // ─── Step navigation state ───
   // 4 steps: Report Details → Engineering Drawings → Measurements → Findings & Photos
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
-  // Custom columns parsed from header.customColumns JSON
+  // Custom columns parsed from header.customColumns JSON (thickness reports)
   const [customColumns, setCustomColumns] = useState<CustomColumn[]>([]);
+  // DPT custom columns parsed from header.dptCustomColumns JSON (DPT reports)
+  const [dptCustomColumns, setDptCustomColumns] = useState<CustomColumn[]>([]);
   // Row selection for bulk delete
   const [selectedRowIdxs, setSelectedRowIdxs] = useState<Set<number>>(new Set());
   // Photos for Step 3
@@ -488,6 +548,23 @@ export function PipelineReportFormView() {
           dptPenetrant: r.dptPenetrant ?? "",
           dptDeveloper: r.dptDeveloper ?? "",
           dptCustomColumns: r.dptCustomColumns ?? "[]",
+          // Dye Penetrant Procedure fields
+          dptTestingStandard: r.dptTestingStandard ?? "",
+          dptAcceptanceCriteria: r.dptAcceptanceCriteria ?? "",
+          dptSurfacePreparation: r.dptSurfacePreparation ?? "",
+          dptSurfaceTemperature: r.dptSurfaceTemperature ?? "",
+          dptPenetrantType: r.dptPenetrantType ?? "",
+          dptPenetrantProcess: r.dptPenetrantProcess ?? "",
+          dptMethodOfPreCleaning: r.dptMethodOfPreCleaning ?? "",
+          dptDryingTimeAfterPreCleaning: r.dptDryingTimeAfterPreCleaning ?? "",
+          dptMethodOfApplyingPenetrant: r.dptMethodOfApplyingPenetrant ?? "",
+          dptPenetratingTime: r.dptPenetratingTime ?? "",
+          dptMethodOfRemovingExcessPenetrant: r.dptMethodOfRemovingExcessPenetrant ?? "",
+          dptMethodOfApplyingDeveloper: r.dptMethodOfApplyingDeveloper ?? "",
+          dptDevelopmentTime: r.dptDevelopmentTime ?? "",
+          dptInterpretationTime: r.dptInterpretationTime ?? "",
+          dptLightingEquipment: r.dptLightingEquipment ?? "",
+          dptPostCleaning: r.dptPostCleaning ?? "",
           // Condition fields (only populated for PIPELINE_CONDITION reports)
           pipelineAgeYears: r.pipelineAgeYears != null ? String(r.pipelineAgeYears) : "",
           serviceFluid: r.serviceFluid ?? "",
@@ -530,11 +607,16 @@ export function PipelineReportFormView() {
         } else {
           setDrawings([]);
         }
-        // Parse custom columns from the report's JSON field
+        // Parse custom columns from the report's JSON field (thickness reports)
         try {
           const cc = JSON.parse(r.customColumns ?? "[]");
           if (Array.isArray(cc)) setCustomColumns(cc);
         } catch { setCustomColumns([]); }
+        // Parse DPT custom columns (DPT reports)
+        try {
+          const dcc = JSON.parse(r.dptCustomColumns ?? "[]");
+          if (Array.isArray(dcc)) setDptCustomColumns(dcc);
+        } catch { setDptCustomColumns([]); }
         // Load photos for this report
         if (r.reportPhotos) {
           setPhotos(r.reportPhotos.map((p: any) => ({
@@ -796,6 +878,8 @@ export function PipelineReportFormView() {
       } else if (header.reportType === "PIPELINE_DPT") {
         // DPT custom columns are saved as JSON string
         payload.dptCustomColumns = header.dptCustomColumns;
+        // Dye Penetrant Procedure fields are passed through verbatim —
+        // they're all editable/typeable text fields.
       } else {
         payload.pipelineAgeYears = null;
       }
@@ -923,9 +1007,18 @@ export function PipelineReportFormView() {
         toast.warning("No DPT observations yet. You can proceed, but you'll need to add at least one before submitting.");
       }
     }
-    // PIPELINE_CONDITION has no row requirement — fields live on the header.
+    // PIPELINE_CONDITION, PIPELINE_MPT, PIPELINE_WELD_SCAN have no row requirement.
     return true;
   }
+
+  // Report types that DO NOT have an Engineering Drawings step. They skip
+  // straight from Step 1 (Report Details) to Step 3 (Inspection Findings).
+  // DPT reports explicitly do not include drawing uploads (per spec);
+  // MPT and Weld Scan are placeholders and likewise have no drawings yet.
+  const SKIP_DRAWINGS_STEP: boolean =
+    header.reportType === "PIPELINE_DPT" ||
+    header.reportType === "PIPELINE_MPT" ||
+    header.reportType === "PIPELINE_WELD_SCAN";
 
   async function proceedToNext() {
     if (step === 1) {
@@ -937,7 +1030,21 @@ export function PipelineReportFormView() {
       // report and sets editingPipelineReportId. For existing reports,
       // it updates the header.
       await saveHeader();
-      setStep(2);
+      // For DPT/MPT/Weld Scan: skip the Engineering Drawings step
+      // (DPT explicitly has no drawings; MPT/Weld Scan placeholders).
+      // For PIPELINE_CONDITION: also skip drawings (condition has no
+      // drawings either — it's a single-instance assessment form).
+      if (SKIP_DRAWINGS_STEP || header.reportType === "PIPELINE_CONDITION") {
+        // For MPT / Weld Scan placeholders, jump straight to Step 4
+        // (Findings & Photos) since there's no inspection table yet.
+        if (header.reportType === "PIPELINE_MPT" || header.reportType === "PIPELINE_WELD_SCAN") {
+          setStep(4);
+        } else {
+          setStep(3);
+        }
+      } else {
+        setStep(2);
+      }
     } else if (step === 2) {
       // Engineering Drawings step — no validation needed (drawings are optional)
       // Header is already saved from Step 1; no need to re-save here.
@@ -945,11 +1052,13 @@ export function PipelineReportFormView() {
     } else if (step === 3) {
       validateStep2();
       // For PIPELINE_THICKNESS reports, persist the custom columns JSON
-      // onto the header before saving. Other report types don't use
-      // custom columns, but saving the header still picks up any
-      // condition field edits the user made on Step 3.
+      // onto the header before saving. For PIPELINE_DPT, persist the DPT
+      // custom columns. Other report types don't use custom columns, but
+      // saving the header still picks up any edits the user made on Step 3.
       if (header.reportType === "PIPELINE_THICKNESS") {
         setHeader((h) => ({ ...h, customColumns: JSON.stringify(customColumns) }));
+      } else if (header.reportType === "PIPELINE_DPT") {
+        setHeader((h) => ({ ...h, dptCustomColumns: JSON.stringify(dptCustomColumns) }));
       }
       await saveHeader();
       setStep(4);
@@ -964,8 +1073,21 @@ export function PipelineReportFormView() {
       // Save current state before going back
       if (header.reportType === "PIPELINE_THICKNESS") {
         setHeader((h) => ({ ...h, customColumns: JSON.stringify(customColumns) }));
+      } else if (header.reportType === "PIPELINE_DPT") {
+        setHeader((h) => ({ ...h, dptCustomColumns: JSON.stringify(dptCustomColumns) }));
       }
-      setStep((step - 1) as 1 | 2 | 3 | 4);
+      // For DPT/MPT/Weld Scan/Condition, we skipped the drawings step on
+      // the way in — so going back from Step 3 or 4 should land on Step 1
+      // (or Step 3 if going back from Step 4 on a DPT report).
+      if (SKIP_DRAWINGS_STEP || header.reportType === "PIPELINE_CONDITION") {
+        if (step === 4 && header.reportType !== "PIPELINE_MPT" && header.reportType !== "PIPELINE_WELD_SCAN") {
+          setStep(3);
+        } else {
+          setStep(1);
+        }
+      } else {
+        setStep((step - 1) as 1 | 2 | 3 | 4);
+      }
       if (typeof window !== "undefined") {
         window.scrollTo({ top: 0, behavior: "smooth" });
       }
@@ -1010,6 +1132,56 @@ export function PipelineReportFormView() {
 
   function setCustomColumnValue(idx: number, colId: string, value: string) {
     setRows((rs) => {
+      const next = [...rs];
+      const row = { ...next[idx] };
+      let vals: Record<string, string> = {};
+      try { vals = JSON.parse(row.customColumnValues || "{}"); } catch {}
+      vals[colId] = value;
+      row.customColumnValues = JSON.stringify(vals);
+      next[idx] = row;
+      return next;
+    });
+  }
+
+  // ─── DPT CUSTOM COLUMN MANAGEMENT ───
+  // Same as the thickness custom column functions, but operates on the
+  // dptCustomColumns array and the per-row DPT customColumnValues JSON.
+  function addDptCustomColumn() {
+    const name = window.prompt("Enter column name (e.g. 'Weld Length', 'Heat No'):");
+    if (!name || !name.trim()) return;
+    const trimmed = name.trim();
+    if (dptCustomColumns.some((c) => c.name.toLowerCase() === trimmed.toLowerCase())) {
+      toast.error(`A column named "${trimmed}" already exists.`);
+      return;
+    }
+    const unit = window.prompt("Enter unit (e.g. 'mm', '°C', or leave blank):", "") || "";
+    const newCol: CustomColumn = {
+      id: `dptcol_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      name: trimmed,
+      unit: unit.trim(),
+    };
+    setDptCustomColumns((cc) => [...cc, newCol]);
+    toast.success(`Added column "${trimmed}"`);
+  }
+
+  function deleteDptCustomColumn(colId: string) {
+    const col = dptCustomColumns.find((c) => c.id === colId);
+    if (!col) return;
+    if (!window.confirm(`Delete column "${col.name}"? Values in this column will be lost from all DPT rows.`)) return;
+    setDptCustomColumns((cc) => cc.filter((c) => c.id !== colId));
+    toast.success(`Deleted column "${col.name}"`);
+  }
+
+  function getDptCustomColumnValue(row: DptObservationRow, colId: string): string {
+    if (!row.customColumnValues) return "";
+    try {
+      const vals = JSON.parse(row.customColumnValues);
+      return vals[colId] ?? "";
+    } catch { return ""; }
+  }
+
+  function setDptCustomColumnValue(idx: number, colId: string, value: string) {
+    setDptObservations((rs) => {
       const next = [...rs];
       const row = { ...next[idx] };
       let vals: Record<string, string> = {};
@@ -1411,6 +1583,8 @@ export function PipelineReportFormView() {
   async function saveDraft() {
     if (header.reportType === "PIPELINE_THICKNESS") {
       setHeader((h) => ({ ...h, customColumns: JSON.stringify(customColumns) }));
+    } else if (header.reportType === "PIPELINE_DPT") {
+      setHeader((h) => ({ ...h, dptCustomColumns: JSON.stringify(dptCustomColumns) }));
     }
     if (isEdit) {
       await saveHeader();
@@ -1476,25 +1650,70 @@ export function PipelineReportFormView() {
         </p>
       </div>
 
-      {/* ─── Step indicator ─── */}
+      {/* ─── Step indicator ───
+          Fixed labels (correct content for each step):
+            Step 1 → Report Details
+            Step 2 → Engineering Drawings  (drawing uploads — skipped for DPT/MPT/Weld Scan)
+            Step 3 → Inspection Findings   (measurement table / DPT observations / etc.)
+            Step 4 → Findings & Photos     (description, observations, results, conclusion, photos, certificates)
+          Previously Step 2 was labeled "Inspection Findings" and Step 3 was
+          labeled "Engineering Drawings" — those labels were swapped relative
+          to the actual content rendered under each step.
+      */}
       <div className="flex items-center gap-2 rounded-md border bg-muted/30 p-3 flex-wrap">
-        {[1, 2, 3, 4].map((s) => (
-          <div key={s} className="flex items-center gap-2">
-            <div
-              className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${
-                step === s ? "bg-amber-600 text-white" : step > s ? "bg-emerald-600 text-white" : "bg-zinc-200 text-zinc-500"
-              }`}
-            >
-              {step > s ? "✓" : s}
+        {[1, 2, 3, 4].map((s) => {
+          // Hide the Engineering Drawings step in the indicator for report
+          // types that skip it (DPT / MPT / Weld Scan / Condition). The
+          // user goes 1 → 3 → 4 directly, but the indicator should still
+          // show the three remaining steps in order. We renumber visually.
+          const skipDrawings =
+            SKIP_DRAWINGS_STEP || header.reportType === "PIPELINE_CONDITION";
+          // Map logical step number → label, skipping Engineering Drawings
+          // when the report type doesn't use drawings.
+          const labelForStep = (s: number): string => {
+            if (s === 1) return "Report Details";
+            if (s === 2) return "Engineering Drawings";
+            if (s === 3) return "Inspection Findings";
+            return "Findings & Photos";
+          };
+          // For report types without drawings, collapse Step 2 visually:
+          //   actual step 1 → shown as 1
+          //   actual step 3 → shown as 2
+          //   actual step 4 → shown as 3
+          // For MPT/Weld Scan placeholders that also skip Step 3:
+          //   actual step 1 → shown as 1
+          //   actual step 4 → shown as 2
+          const skipFindings =
+            header.reportType === "PIPELINE_MPT" || header.reportType === "PIPELINE_WELD_SCAN";
+          let displayNum = s;
+          if (skipDrawings && skipFindings) {
+            if (s === 2 || s === 3) return null; // hide both
+            if (s === 4) displayNum = 2;
+          } else if (skipDrawings) {
+            if (s === 2) return null; // hide drawings step
+            if (s === 3) displayNum = 2;
+            if (s === 4) displayNum = 3;
+          }
+          const isActive = step === s;
+          const isDone = step > s;
+          return (
+            <div key={s} className="flex items-center gap-2">
+              <div
+                className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${
+                  isActive ? "bg-amber-600 text-white" : isDone ? "bg-emerald-600 text-white" : "bg-zinc-200 text-zinc-500"
+                }`}
+              >
+                {isDone ? "✓" : displayNum}
+              </div>
+              <span className={`text-sm font-medium ${isActive ? "text-amber-700" : "text-muted-foreground"}`}>
+                {labelForStep(s)}
+              </span>
+              {s < 4 && <span className="text-zinc-300">→</span>}
             </div>
-            <span className={`text-sm font-medium ${step === s ? "text-amber-700" : "text-muted-foreground"}`}>
-              {s === 1 ? "Report Details" : s === 2 ? "Inspection Findings" : s === 3 ? "Engineering Drawings" : "Measurements & Photos"}
-            </span>
-            {s < 4 && <span className="text-zinc-300">→</span>}
-          </div>
-        ))}
+          );
+        })}
         <span className="ml-auto text-xs text-muted-foreground">
-          Step {step} of 4 — {step === 1 ? "Report Details" : step === 2 ? "Inspection Findings" : step === 3 ? "Engineering Drawings" : "Measurements & Photos"}
+          Step {step} of 4 — {step === 1 ? "Report Details" : step === 2 ? "Engineering Drawings" : step === 3 ? "Inspection Findings" : "Findings & Photos"}
         </span>
       </div>
 
@@ -1663,51 +1882,9 @@ export function PipelineReportFormView() {
         </CardContent>
       </Card>
 
-      {/* ─── DPT / DPPT Testing Materials (only for DPT reports) ─── */}
-      {header.reportType === "PIPELINE_DPT" && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Testing Materials</CardTitle>
-            <CardDescription>
-              Enter the materials used during the dye penetrant inspection.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="space-y-2">
-              <Label>Date of Examination</Label>
-              <Input
-                type="date"
-                value={header.dptDateOfExamination}
-                onChange={(e) => updateHeader("dptDateOfExamination", e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Solvent / Cleaner</Label>
-              <Input
-                value={header.dptSolventCleaner}
-                onChange={(e) => updateHeader("dptSolventCleaner", e.target.value)}
-                placeholder="e.g. ORION 115PR"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Penetrant</Label>
-              <Input
-                value={header.dptPenetrant}
-                onChange={(e) => updateHeader("dptPenetrant", e.target.value)}
-                placeholder="e.g. ORION 115P"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Developer</Label>
-              <Input
-                value={header.dptDeveloper}
-                onChange={(e) => updateHeader("dptDeveloper", e.target.value)}
-                placeholder="e.g. ORION 115D"
-              />
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* DPT procedure / consumable details have been moved to Step 3
+          (Inspection Findings) — they belong with the inspection data,
+          not with the report header. */}
 
       {/* ─── Primary Inspection Photo ─── */}
       <Card>
@@ -2802,19 +2979,168 @@ export function PipelineReportFormView() {
       {/* ═══ STEP 3 (DPT): DPT OBSERVATION TABLE ═══ */}
       {step === 3 && header.reportType === "PIPELINE_DPT" && (
       <>
+      {/* ═══ 3. DYE PENETRANT PROCEDURE ═══
+          Two-column table: left = field name, right = editable value.
+          All fields are typeable/editable unless explicitly noted.
+          The Date of Examination is an editable date field.
+      */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Droplet className="h-4 w-4 text-purple-700" />
+            3. Dye Penetrant Procedure
+          </CardTitle>
+          <CardDescription>
+            Record the complete dye penetrant inspection procedure. All fields
+            are editable — type the value as it applies to this inspection.
+            Leave a field blank if it is not applicable.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <tbody>
+                {/* Each row: field name (left) + editable value (right) */}
+                {/* Date of Examination — editable date field */}
+                <tr className="border-b border-zinc-200">
+                  <td className="bg-purple-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/3">
+                    Date of Examination
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <Input
+                      type="date"
+                      className="h-8 text-sm"
+                      value={header.dptDateOfExamination}
+                      onChange={(e) => updateHeader("dptDateOfExamination", e.target.value)}
+                    />
+                  </td>
+                </tr>
+                {/* Typeable text fields */}
+                {([
+                  ["Testing Standard", "dptTestingStandard", "e.g. ASME Section V Article 6 / ASTM E165"],
+                  ["Acceptance Criteria", "dptAcceptanceCriteria", "e.g. ASME Section VIII Div 1 Appendix 8"],
+                  ["Surface Preparation", "dptSurfacePreparation", "e.g. Cleaned with solvent, wire brushed"],
+                  ["Surface Temperature", "dptSurfaceTemperature", "e.g. 28 °C"],
+                  ["Penetrant Type", "dptPenetrantType", "e.g. Colour contrast / Fluorescent"],
+                  ["Penetrant Process", "dptPenetrantProcess", "e.g. Solvent removable / Water washable"],
+                  ["Method of Pre-cleaning", "dptMethodOfPreCleaning", "e.g. Solvent wiping"],
+                  ["Drying Time After Pre-cleaning", "dptDryingTimeAfterPreCleaning", "e.g. 5 minutes"],
+                  ["Method of Applying Penetrant", "dptMethodOfApplyingPenetrant", "e.g. Spray / Brush"],
+                  ["Penetrating Time", "dptPenetratingTime", "e.g. 10 minutes"],
+                  ["Method of Removing Excess Penetrant", "dptMethodOfRemovingExcessPenetrant", "e.g. Solvent wipe"],
+                  ["Method of Applying Developer", "dptMethodOfApplyingDeveloper", "e.g. Spray"],
+                  ["Development Time", "dptDevelopmentTime", "e.g. 7 minutes"],
+                  ["Interpretation Time", "dptInterpretationTime", "e.g. 10 minutes"],
+                  ["Lighting Equipment", "dptLightingEquipment", "e.g. LED torch ≥ 1000 lux"],
+                  ["Post Cleaning", "dptPostCleaning", "e.g. Solvent wipe / Water wash"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-purple-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ═══ Consumable Details ═══
+          Three editable/typeable fields: Solvent, Penetrant, Developer.
+          These capture the actual product / make / material used.
+      */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Droplet className="h-4 w-4 text-purple-700" />
+            Consumable Details
+          </CardTitle>
+          <CardDescription>
+            Enter the actual product, make, or material used for each
+            consumable. All three fields are editable.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <tbody>
+                <tr className="border-b border-zinc-200">
+                  <td className="bg-purple-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/3">
+                    Solvent
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <Input
+                      className="h-8 text-sm"
+                      value={header.dptSolventCleaner}
+                      onChange={(e) => updateHeader("dptSolventCleaner", e.target.value)}
+                      placeholder="Make – ORION 115PR (example only — type the actual product used)"
+                    />
+                  </td>
+                </tr>
+                <tr className="border-b border-zinc-200">
+                  <td className="bg-purple-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                    Penetrant
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <Input
+                      className="h-8 text-sm"
+                      value={header.dptPenetrant}
+                      onChange={(e) => updateHeader("dptPenetrant", e.target.value)}
+                      placeholder="Make – ORION 115P (example only — type the actual product used)"
+                    />
+                  </td>
+                </tr>
+                <tr className="border-b border-zinc-200">
+                  <td className="bg-purple-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                    Developer
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <Input
+                      className="h-8 text-sm"
+                      value={header.dptDeveloper}
+                      onChange={(e) => updateHeader("dptDeveloper", e.target.value)}
+                      placeholder="Make – ORION 115D (example only — type the actual product used)"
+                    />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ═══ DPT Inspection Results Table ═══
+          Supports add/delete rows, add/delete custom columns, and
+          automatic serial numbers (1, 2, 3…). Serial numbers are
+          renumbered whenever rows are added or deleted.
+      */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-base">DPT Inspection Results</CardTitle>
               <CardDescription>
-                Add one row per inspection point. Serial numbers are auto-generated.
-                Select Accept or Reject for each row. Use Remarks for additional details.
+                Add one row per inspection point. Serial numbers are auto-generated
+                and renumbered whenever rows are added or deleted. Select Accept or
+                Reject for each row. Use custom columns for any additional data you
+                need to record per inspection point.
               </CardDescription>
             </div>
             <div className="flex gap-2">
               <Button onClick={addDptObservation} size="sm">
                 <Plus className="mr-1 h-4 w-4" /> Add Row
+              </Button>
+              <Button onClick={addDptCustomColumn} size="sm" variant="outline">
+                <Columns3 className="mr-1 h-4 w-4" /> Add Column
               </Button>
             </div>
           </div>
@@ -2828,6 +3154,21 @@ export function PipelineReportFormView() {
                   <th className="border border-purple-900 px-2 py-2 text-center" style={{ minWidth: 200 }}>Description</th>
                   <th className="border border-purple-900 px-2 py-2 text-center" style={{ minWidth: 100 }}>Weld Type</th>
                   <th className="border border-purple-900 px-2 py-2 text-center" style={{ minWidth: 80 }}>Result</th>
+                  {dptCustomColumns.map((cc) => (
+                    <th key={cc.id} className="border border-purple-900 px-2 py-2 text-center" style={{ minWidth: 90 }}>
+                      <div className="flex items-center justify-center gap-1">
+                        <span>{cc.name}</span>
+                        {cc.unit && <span className="text-[9px] opacity-70">({cc.unit})</span>}
+                        <button
+                          onClick={() => deleteDptCustomColumn(cc.id)}
+                          className="ml-1 text-purple-300 hover:text-purple-100"
+                          title={`Delete column "${cc.name}"`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </th>
+                  ))}
                   <th className="border border-purple-900 px-2 py-2 text-center" style={{ minWidth: 200 }}>Remarks</th>
                   <th className="border border-purple-900 px-2 py-2 text-center" style={{ minWidth: 80 }}>Actions</th>
                 </tr>
@@ -2835,7 +3176,7 @@ export function PipelineReportFormView() {
               <tbody>
                 {dptObservations.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="text-center py-6 text-muted-foreground border border-zinc-300">
+                    <td colSpan={6 + dptCustomColumns.length} className="text-center py-6 text-muted-foreground border border-zinc-300">
                       No DPT observations yet. Click <strong>Add Row</strong> to begin.
                     </td>
                   </tr>
@@ -2862,7 +3203,7 @@ export function PipelineReportFormView() {
                     <td className="border border-zinc-300 p-1">
                       <Select
                         value={obs.result}
-                        onValueChange={(v) => updateDptObservation(idx, { result: v })}
+                        onValueChange={(v) => updateDptObservation(idx, { result: v as "Accept" | "Reject" })}
                       >
                         <SelectTrigger className={`h-8 text-xs font-bold ${obs.result === "Reject" ? "text-red-700" : "text-emerald-700"}`}>
                           <SelectValue />
@@ -2873,6 +3214,18 @@ export function PipelineReportFormView() {
                         </SelectContent>
                       </Select>
                     </td>
+                    {/* Custom columns */}
+                    {dptCustomColumns.map((cc) => (
+                      <td key={cc.id} className="border border-zinc-300 p-1 text-center">
+                        <Input
+                          type="text"
+                          className="h-8 text-xs text-center"
+                          value={getDptCustomColumnValue(obs, cc.id)}
+                          onChange={(e) => setDptCustomColumnValue(idx, cc.id, e.target.value)}
+                          placeholder={cc.unit || "—"}
+                        />
+                      </td>
+                    ))}
                     <td className="border border-zinc-300 p-1">
                       <Textarea
                         rows={1}
@@ -2915,9 +3268,11 @@ export function PipelineReportFormView() {
 
       <Card className="bg-zinc-50">
         <CardContent className="p-4 text-xs text-muted-foreground space-y-1">
-          <div><strong>DPT Inspection:</strong> each row records one inspection point with Accept/Reject result.</div>
-          <div><strong>Serial numbers:</strong> auto-generated and renumbered when rows are added or deleted.</div>
+          <div><strong>DPT Inspection:</strong> each row records one inspection point with Accept / Reject result.</div>
+          <div><strong>Serial numbers:</strong> auto-generated (1, 2, 3…) and renumbered when rows are added or deleted.</div>
+          <div><strong>Custom columns:</strong> click <strong>Add Column</strong> to add a new column. System columns (Sl. No, Description, Weld Type, Result, Remarks) cannot be deleted.</div>
           <div><strong>No drawings:</strong> DPT reports do not include engineering drawing uploads.</div>
+          <div><strong>Results:</strong> only Accept / Reject is selectable per row. All other fields are typeable text.</div>
         </CardContent>
       </Card>
 
@@ -2936,6 +3291,40 @@ export function PipelineReportFormView() {
       </div>
       </>
       )} {/* end step 3 — DPT */}
+
+      {/* ═══ STEP 3 PLACEHOLDER: MPT / WELD SCAN ═══
+          These report types are not yet fully implemented. The user can
+          still create the report, fill the header (Step 1), and proceed
+          to Findings & Photos (Step 4). They cannot accidentally land on
+          Step 3 for these types because proceedToNext jumps from Step 1
+          straight to Step 4. This block only renders if the user lands
+          on Step 3 directly (e.g. via the URL), and shows a notice.
+      */}
+      {step === 3 && (header.reportType === "PIPELINE_MPT" || header.reportType === "PIPELINE_WELD_SCAN") && (
+      <>
+        <Alert className="border-amber-200 bg-amber-50">
+          <ShieldAlert className="h-4 w-4 text-amber-700" />
+          <AlertTitle className="text-amber-900">
+            {header.reportType === "PIPELINE_MPT" ? "MPT report workflow — coming soon" : "Weld Scan report workflow — coming soon"}
+          </AlertTitle>
+          <AlertDescription className="text-amber-900">
+            The detailed inspection workflow for {header.reportType === "PIPELINE_MPT" ? "Magnetic Particle Testing" : "Weld Scan"} is
+            not yet available. You can still fill in the report header
+            (Step 1), upload photographs and certificates (Step 4), and
+            submit the report for review. The full inspection procedure
+            and observation table will be added in a future update.
+          </AlertDescription>
+        </Alert>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" onClick={goPrevious}>
+            <ArrowLeft className="mr-2 h-4 w-4" /> Previous
+          </Button>
+          <Button onClick={proceedToNext} disabled={saving}>
+            Proceed to Findings & Photos <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
+        </div>
+      </>
+      )}
 
       {/* ═══ STEP 4: FINDINGS & PHOTOS ═══ */}
       {step === 4 && (
@@ -3007,7 +3396,7 @@ export function PipelineReportFormView() {
                 <div className="space-y-2">
                   <Label className="text-xs">Inspected By — Name</Label>
                   <Input
-                    value={header.inspectorName}
+                    value={user?.name ?? ""}
                     readOnly
                     className="text-sm bg-muted/30"
                     placeholder="Auto-filled from session"

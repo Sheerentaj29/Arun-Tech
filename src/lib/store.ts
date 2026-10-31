@@ -42,7 +42,23 @@ interface AppUser {
 // screen before opening the form. When null (default), the form opens
 // without a type, which only makes sense when editing an existing report
 // (the type is read from the API response in that case).
-export type PipelineReportType = "PIPELINE_THICKNESS" | "PIPELINE_VISUAL" | "PIPELINE_CONDITION" | "PIPELINE_DPT";
+//
+// Active report types (shown in the selector):
+//   • PIPELINE_THICKNESS  → Pipeline Thickness Measurement Report
+//   • PIPELINE_DPT        → DPT / DPPT Dye Penetrant Testing Report
+//   • PIPELINE_MPT        → Magnetic Particle Testing Report (placeholder)
+//   • PIPELINE_WELD_SCAN  → Weld Scan Report (placeholder)
+//
+// Legacy report types (kept type-compatible for existing DB rows):
+//   • PIPELINE_VISUAL     → Pipeline Visual Inspection Report (legacy)
+//   • PIPELINE_CONDITION  → Pipeline Condition Assessment Report (legacy)
+export type PipelineReportType =
+  | "PIPELINE_THICKNESS"
+  | "PIPELINE_DPT"
+  | "PIPELINE_MPT"
+  | "PIPELINE_WELD_SCAN"
+  | "PIPELINE_VISUAL"
+  | "PIPELINE_CONDITION";
 
 interface AppState {
   view: ViewKey;
