@@ -20,6 +20,9 @@ import {
   FileText,
   Image as ImageIcon,
   Droplet,
+  Upload,
+  CheckCircle2,
+  RefreshCw,
 } from "lucide-react";
 import {
   Card,
@@ -1886,133 +1889,41 @@ export function PipelineReportFormView() {
           (Inspection Findings) — they belong with the inspection data,
           not with the report header. */}
 
-      {/* ─── Primary Inspection Photo ─── */}
+      {/* ─── Primary Inspection Photo ───
+          Uses the dedicated PrimaryPhotoUploader component which handles
+          three states cleanly:
+            A) No report header saved yet → shows a "Save Report Header"
+               button so the user can complete the required action inline.
+            B) Header saved, no photo yet → shows a drag-and-drop upload
+               zone with file-type / size hints and retry-on-error.
+            C) Photo uploaded → shows a preview + Replace / Remove buttons.
+          After the header is saved, the upload area appears automatically
+          (no page refresh needed) because the component re-renders when
+          editingPipelineReportId changes.
+      */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Primary Inspection Photo</CardTitle>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Camera className="h-4 w-4" />
+            Primary Inspection Photo
+          </CardTitle>
           <CardDescription>
             Upload one main photo of the pipeline, vessel, or equipment being inspected.
-            This photo appears on the first page of the PDF, after the client details.
+            This photo appears on the first page of the PDF, immediately after the Client Details section.
+            Workflow: <strong>Save Report Header</strong> → <strong>Upload Photo</strong> → <strong>Preview</strong> → <strong>Generate Report</strong>.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {!editingPipelineReportId && (
-            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
-              Save the report header first (Step 1) to enable photo upload.
-            </p>
-          )}
-          {editingPipelineReportId && !header.primaryPhotoPath && (
-            <label className="cursor-pointer">
-              <input
-                type="file"
-                accept=".png,.jpg,.jpeg,image/png,image/jpeg"
-                className="hidden"
-                onChange={async (e) => {
-                  if (!e.target.files?.[0] || !editingPipelineReportId) return;
-                  const file = e.target.files[0];
-                  if (!file.type.startsWith("image/")) {
-                    toast.error("Only image files (PNG, JPG, JPEG) are supported.");
-                    return;
-                  }
-                  try {
-                    const fd = new FormData();
-                    fd.append("file", file);
-                    fd.append("caption", "Primary inspection photo");
-                    const token = typeof window !== "undefined" ? window.localStorage.getItem("ira_session_token") : null;
-                    // Upload via the photos endpoint, then set the path as primary
-                    const res = await fetch(`/api/pipeline-inspections/${editingPipelineReportId}/photos`, {
-                      method: "POST",
-                      body: fd,
-                      credentials: "include",
-                      headers: token ? { Authorization: `Bearer ${token}` } : {},
-                    });
-                    if (!res.ok) throw new Error("Upload failed");
-                    const photo = await res.json();
-                    // Save the photo path as the primary photo
-                    await apiFetch(`/api/pipeline-inspections/${editingPipelineReportId}`, {
-                      method: "PUT",
-                      body: JSON.stringify({ primaryPhotoPath: photo.filePath }),
-                    });
-                    setHeader((h) => ({ ...h, primaryPhotoPath: photo.filePath }));
-                    toast.success("Primary photo uploaded");
-                  } catch (err) {
-                    toast.error("Failed to upload primary photo");
-                  }
-                  e.target.value = "";
-                }}
-              />
-              <div className="border-2 border-dashed border-zinc-300 rounded-md p-6 text-center cursor-pointer hover:border-amber-400 transition-colors">
-                <Camera className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
-                <p className="text-sm text-muted-foreground">Click to upload primary photo</p>
-                <p className="text-xs text-muted-foreground mt-1">PNG · JPG · JPEG</p>
-              </div>
-            </label>
-          )}
-          {editingPipelineReportId && header.primaryPhotoPath && (
-            <div className="flex items-start gap-4">
-              <div className="border rounded-md overflow-hidden" style={{ maxWidth: "300px" }}>
-                <AuthImage
-                  src={`/api/pipeline-inspections/${editingPipelineReportId}/primary-photo`}
-                  alt="Primary inspection photo"
-                  className="w-full h-auto max-h-[200px] object-contain"
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={async () => {
-                    // Remove primary photo (just clear the path, don't delete the file)
-                    await apiFetch(`/api/pipeline-inspections/${editingPipelineReportId}`, {
-                      method: "PUT",
-                      body: JSON.stringify({ primaryPhotoPath: "" }),
-                    });
-                    setHeader((h) => ({ ...h, primaryPhotoPath: "" }));
-                    toast.success("Primary photo removed");
-                  }}
-                >
-                  <Trash2 className="mr-1 h-4 w-4" /> Remove Photo
-                </Button>
-                <label className="cursor-pointer">
-                  <input
-                    type="file"
-                    accept=".png,.jpg,.jpeg,image/png,image/jpeg"
-                    className="hidden"
-                    onChange={async (e) => {
-                      if (!e.target.files?.[0] || !editingPipelineReportId) return;
-                      const file = e.target.files[0];
-                      try {
-                        const fd = new FormData();
-                        fd.append("file", file);
-                        fd.append("caption", "Primary inspection photo");
-                        const token = typeof window !== "undefined" ? window.localStorage.getItem("ira_session_token") : null;
-                        const res = await fetch(`/api/pipeline-inspections/${editingPipelineReportId}/photos`, {
-                          method: "POST",
-                          body: fd,
-                          credentials: "include",
-                          headers: token ? { Authorization: `Bearer ${token}` } : {},
-                        });
-                        if (!res.ok) throw new Error("Upload failed");
-                        const photo = await res.json();
-                        await apiFetch(`/api/pipeline-inspections/${editingPipelineReportId}`, {
-                          method: "PUT",
-                          body: JSON.stringify({ primaryPhotoPath: photo.filePath }),
-                        });
-                        setHeader((h) => ({ ...h, primaryPhotoPath: photo.filePath }));
-                        toast.success("Primary photo replaced");
-                      } catch (err) {
-                        toast.error("Failed to replace primary photo");
-                      }
-                      e.target.value = "";
-                    }}
-                  />
-                  <Button size="sm" asChild>
-                    <span><Camera className="mr-1 h-4 w-4" /> Replace Photo</span>
-                  </Button>
-                </label>
-              </div>
-            </div>
-          )}
+          <PrimaryPhotoUploader
+            reportId={editingPipelineReportId}
+            primaryPhotoPath={header.primaryPhotoPath}
+            onPhotoChange={(path) => setHeader((h) => ({ ...h, primaryPhotoPath: path }))}
+            onSaveHeader={saveHeader}
+            savingHeader={saving}
+            headerValid={
+              !!header.reportNumber.trim() && !!header.clientId && !!header.plantId
+            }
+          />
         </CardContent>
       </Card>
 
@@ -3756,6 +3667,428 @@ function ConsumableSelector({
           placeholder={customPrompt}
           autoFocus
         />
+      )}
+    </div>
+  );
+}
+
+// ─── PrimaryPhotoUploader component ───
+// A self-contained uploader for the Primary Inspection Photo with three
+// visual states:
+//
+//   STATE A — "Save Report Header first"
+//     Shown when the report hasn't been saved yet (no editingPipelineReportId).
+//     Displays a clear explanation + a prominent "Save Report Header" button
+//     that calls the parent's onSaveHeader callback. After the header is
+//     saved, the parent updates editingPipelineReportId and this component
+//     automatically transitions to STATE B (no page refresh needed).
+//
+//   STATE B — "Upload Photo"
+//     Shown when the header is saved but no primary photo has been uploaded.
+//     Renders a drag-and-drop zone (also clickable to open the file picker).
+//     Validates file type and size client-side before uploading. Shows
+//     upload status (idle / uploading / error) inline. On error, displays
+//     the reason and offers a "Try again" button.
+//
+//   STATE C — "Photo Preview"
+//     Shown after a successful upload. Displays the photo preview (via
+//     AuthImage so it works on the cross-origin preview URL), the file
+//     metadata (name + size), and "Replace Photo" / "Remove Photo" buttons.
+//
+// Props:
+//   reportId        — the editingPipelineReportId (null when no report saved yet)
+//   primaryPhotoPath — current value of header.primaryPhotoPath
+//   onPhotoChange   — parent callback to update header.primaryPhotoPath
+//   onSaveHeader    — parent callback to save the report header (saveHeader())
+//   savingHeader    — whether the parent is currently saving the header
+//   headerValid     — whether the header has the required fields filled in
+//                     (report number, client, plant). Used to show validation
+//                     hints in STATE A.
+//
+// All API calls use the dedicated /api/pipeline-inspections/[id]/primary-photo
+// endpoints (POST /upload for uploading, DELETE for clearing).
+
+interface PrimaryPhotoUploaderProps {
+  reportId: string | null;
+  primaryPhotoPath: string;
+  onPhotoChange: (path: string) => void;
+  onSaveHeader: () => Promise<void>;
+  savingHeader: boolean;
+  headerValid: boolean;
+}
+
+type UploadStatus = "idle" | "uploading" | "error";
+
+function PrimaryPhotoUploader({
+  reportId,
+  primaryPhotoPath,
+  onPhotoChange,
+  onSaveHeader,
+  savingHeader,
+  headerValid,
+}: PrimaryPhotoUploaderProps) {
+  const [uploadStatus, setUploadStatus] = useState<UploadStatus>("idle");
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  // Bump this key to force the AuthImage to re-fetch after a replace
+  // (otherwise the blob URL might be cached).
+  const [previewKey, setPreviewKey] = useState(0);
+
+  // Allowed file types — keep in sync with the API endpoint.
+  const ACCEPTED_TYPES = "image/png,image/jpeg,image/webp,image/gif";
+  const ACCEPTED_EXTS = [".png", ".jpg", ".jpeg", ".webp", ".gif"];
+  const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+
+  // ─── Upload handler ───
+  // Shared by both the initial upload (STATE B) and the replace flow (STATE C).
+  // Validates the file client-side first, then POSTs it to the dedicated
+  // /primary-photo/upload endpoint.
+  async function uploadFile(file: File) {
+    if (!reportId) {
+      setUploadError("Save the report header first, then upload the photo.");
+      setUploadStatus("error");
+      return;
+    }
+    // Client-side validation
+    if (!file.type.startsWith("image/")) {
+      setUploadError(`"${file.name}" is not an image file. Allowed: PNG, JPG, JPEG, WebP, GIF.`);
+      setUploadStatus("error");
+      return;
+    }
+    if (!ACCEPTED_EXTS.some((ext) => file.name.toLowerCase().endsWith(ext))) {
+      setUploadError(`"${file.name}" has an unsupported extension. Allowed: ${ACCEPTED_EXTS.join(", ")}.`);
+      setUploadStatus("error");
+      return;
+    }
+    if (file.size > MAX_SIZE_BYTES) {
+      setUploadError(`File is too large (${(file.size / 1024 / 1024).toFixed(2)} MB). Maximum: 10 MB.`);
+      setUploadStatus("error");
+      return;
+    }
+
+    setUploadStatus("uploading");
+    setUploadError(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const token = typeof window !== "undefined" ? window.localStorage.getItem("ira_session_token") : null;
+      const res = await fetch(
+        `/api/pipeline-inspections/${reportId}/primary-photo/upload`,
+        {
+          method: "POST",
+          body: fd,
+          credentials: "include",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error ?? `Upload failed (HTTP ${res.status})`);
+      }
+      const result = await res.json();
+      onPhotoChange(result.filePath);
+      setPreviewKey((k) => k + 1);
+      setUploadStatus("idle");
+      setUploadError(null);
+      toast.success("Primary photo uploaded");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Upload failed";
+      setUploadError(msg);
+      setUploadStatus("error");
+      toast.error(`Failed to upload primary photo: ${msg}`);
+    }
+  }
+
+  // ─── Remove handler ───
+  async function removePhoto() {
+    if (!reportId) return;
+    try {
+      const token = typeof window !== "undefined" ? window.localStorage.getItem("ira_session_token") : null;
+      const res = await fetch(
+        `/api/pipeline-inspections/${reportId}/primary-photo`,
+        {
+          method: "DELETE",
+          credentials: "include",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error ?? `Remove failed (HTTP ${res.status})`);
+      }
+      onPhotoChange("");
+      setPreviewKey((k) => k + 1);
+      setUploadStatus("idle");
+      setUploadError(null);
+      toast.success("Primary photo removed");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Remove failed";
+      toast.error(`Failed to remove primary photo: ${msg}`);
+    }
+  }
+
+  // ─── Drag-and-drop handlers ───
+  function onDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(true);
+  }
+  function onDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+  }
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      uploadFile(files[0]);
+    }
+  }
+
+  // ─── File input change handler ───
+  function onFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    if (e.target.files && e.target.files.length > 0) {
+      uploadFile(e.target.files[0]);
+    }
+    // Reset the input value so the same file can be selected again
+    e.target.value = "";
+  }
+
+  // ─── STATE A: No report header saved yet ───
+  if (!reportId) {
+    return (
+      <div className="rounded-md border-2 border-amber-200 bg-amber-50 p-4 space-y-3">
+        <div className="flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="space-y-1 flex-1">
+            <p className="text-sm font-semibold text-amber-900">
+              Save the Report Header to enable photo upload
+            </p>
+            <p className="text-xs text-amber-800 leading-relaxed">
+              The Primary Inspection Photo is attached to the report record.
+              Before uploading, fill in the required header fields above
+              (<strong>Report Number</strong>, <strong>Client</strong>, and{" "}
+              <strong>Plant Location</strong>) and save the header. The upload
+              area will appear here automatically once the header is saved —
+              no page refresh needed.
+            </p>
+            {!headerValid && (
+              <p className="text-xs text-amber-700 italic mt-2">
+                Required fields are still missing in the Report Header above.
+                Please fill them in before clicking the button below.
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-3 pl-8">
+          <Button
+            size="sm"
+            onClick={async () => {
+              try {
+                await onSaveHeader();
+                // After saveHeader succeeds, the parent updates reportId,
+                // which causes this component to re-render into STATE B.
+                // No additional action needed here.
+              } catch (err) {
+                // Errors are surfaced by saveHeader itself via toast + setError
+              }
+            }}
+            disabled={savingHeader}
+          >
+            {savingHeader ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving Header…
+              </>
+            ) : (
+              <>
+                <Save className="mr-2 h-4 w-4" /> Save Report Header
+              </>
+            )}
+          </Button>
+          {savingHeader && (
+            <span className="text-xs text-amber-700">Creating report record…</span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ─── STATE C: Photo already uploaded — show preview + Replace/Remove ───
+  if (primaryPhotoPath) {
+    return (
+      <div className="space-y-3">
+        {/* Preview + actions */}
+        <div className="flex flex-col sm:flex-row items-start gap-4">
+          {/* Image preview */}
+          <div
+            className="border rounded-md overflow-hidden bg-zinc-50"
+            style={{ maxWidth: "360px", minWidth: "240px" }}
+          >
+            <AuthImage
+              key={previewKey}
+              src={`/api/pipeline-inspections/${reportId}/primary-photo`}
+              alt="Primary inspection photo"
+              className="w-full h-auto max-h-[260px] object-contain"
+            />
+          </div>
+          {/* Metadata + actions */}
+          <div className="flex flex-col gap-3 flex-1 min-w-0">
+            <div className="flex items-start gap-2 text-emerald-700">
+              <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
+              <div className="text-xs">
+                <p className="font-semibold">Photo uploaded successfully</p>
+                <p className="text-muted-foreground mt-0.5">
+                  This photo appears on the first page of the generated PDF,
+                  immediately after the Client Details section.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {/* Replace Photo — triggers file picker */}
+              <label className="cursor-pointer">
+                <input
+                  type="file"
+                  accept={ACCEPTED_TYPES}
+                  className="hidden"
+                  onChange={onFileInputChange}
+                  disabled={uploadStatus === "uploading"}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  asChild
+                  disabled={uploadStatus === "uploading"}
+                >
+                  <span>
+                    {uploadStatus === "uploading" ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Uploading…
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4" /> Replace Photo
+                      </>
+                    )}
+                  </span>
+                </Button>
+              </label>
+              {/* Remove Photo */}
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-red-600 hover:text-red-700"
+                onClick={removePhoto}
+                disabled={uploadStatus === "uploading"}
+              >
+                <Trash2 className="mr-2 h-4 w-4" /> Remove Photo
+              </Button>
+            </div>
+            {/* Inline error display after a failed replace */}
+            {uploadStatus === "error" && uploadError && (
+              <div className="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700 flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-semibold">Upload failed</p>
+                  <p className="mt-0.5">{uploadError}</p>
+                </div>
+                <button
+                  onClick={() => { setUploadStatus("idle"); setUploadError(null); }}
+                  className="text-red-500 hover:text-red-700 shrink-0"
+                  title="Dismiss"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── STATE B: Header saved, no photo yet — show upload area ───
+  return (
+    <div className="space-y-3">
+      {/* Drag-and-drop zone (also clickable) */}
+      <label className="cursor-pointer block">
+        <input
+          type="file"
+          accept={ACCEPTED_TYPES}
+          className="hidden"
+          onChange={onFileInputChange}
+          disabled={uploadStatus === "uploading"}
+        />
+        <div
+          className={`border-2 border-dashed rounded-md p-8 text-center transition-colors ${
+            dragOver
+              ? "border-amber-500 bg-amber-50"
+              : uploadStatus === "error"
+                ? "border-red-300 bg-red-50"
+                : "border-zinc-300 hover:border-amber-400 hover:bg-zinc-50"
+          } ${uploadStatus === "uploading" ? "opacity-60 pointer-events-none" : ""}`}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+        >
+          {uploadStatus === "uploading" ? (
+            <>
+              <Loader2 className="mx-auto h-10 w-10 text-amber-600 mb-3 animate-spin" />
+              <p className="text-sm font-medium text-zinc-700">Uploading photo…</p>
+              <p className="text-xs text-muted-foreground mt-1">Please wait a moment</p>
+            </>
+          ) : uploadStatus === "error" ? (
+            <>
+              <AlertCircle className="mx-auto h-10 w-10 text-red-500 mb-3" />
+              <p className="text-sm font-medium text-red-700">Upload failed</p>
+              <p className="text-xs text-red-600 mt-1 max-w-sm mx-auto">{uploadError}</p>
+              <p className="text-xs text-muted-foreground mt-3">Click here to try again</p>
+            </>
+          ) : (
+            <>
+              <Upload className="mx-auto h-10 w-10 text-muted-foreground mb-3" />
+              <p className="text-sm font-medium text-zinc-700">
+                Drag and drop the primary photo here
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                or <span className="text-amber-700 underline">click to select a file</span>
+              </p>
+              <div className="mt-4 flex items-center justify-center gap-2 text-[10px] text-muted-foreground">
+                <Badge variant="outline" className="text-[10px] font-normal">PNG</Badge>
+                <Badge variant="outline" className="text-[10px] font-normal">JPG</Badge>
+                <Badge variant="outline" className="text-[10px] font-normal">JPEG</Badge>
+                <Badge variant="outline" className="text-[10px] font-normal">WebP</Badge>
+                <Badge variant="outline" className="text-[10px] font-normal">GIF</Badge>
+                <span className="text-muted-foreground">·</span>
+                <span>Max 10 MB</span>
+              </div>
+            </>
+          )}
+        </div>
+      </label>
+      {/* Dismissable error message below the drop zone (in addition to the
+          inline error state above, so the user always sees the reason even
+          if they navigate away from the drop zone) */}
+      {uploadStatus === "error" && uploadError && (
+        <div className="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700 flex items-start gap-2">
+          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="font-semibold">Could not upload the photo</p>
+            <p className="mt-0.5">{uploadError}</p>
+            <p className="mt-1 text-muted-foreground">
+              Fix the issue above and click the drop zone to try again.
+            </p>
+          </div>
+          <button
+            onClick={() => { setUploadStatus("idle"); setUploadError(null); }}
+            className="text-red-500 hover:text-red-700 shrink-0"
+            title="Dismiss"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
       )}
     </div>
   );
