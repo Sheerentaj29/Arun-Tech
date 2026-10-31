@@ -3055,8 +3055,10 @@ export function PipelineReportFormView() {
       </Card>
 
       {/* ═══ Consumable Details ═══
-          Three editable/typeable fields: Solvent, Penetrant, Developer.
-          These capture the actual product / make / material used.
+          Three fields: Solvent, Penetrant, Developer.
+          Each is a dropdown with preset options PLUS an "Other / Custom"
+          option that reveals a free-text input for entering a custom
+          product / make / material.
       */}
       <Card>
         <CardHeader>
@@ -3065,50 +3067,63 @@ export function PipelineReportFormView() {
             Consumable Details
           </CardTitle>
           <CardDescription>
-            Enter the actual product, make, or material used for each
-            consumable. All three fields are editable.
+            Select the product / make used for each consumable. If the
+            required option is not listed, choose <strong>Other / Custom</strong>
+            and type the actual product used.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <table className="w-full text-sm border-collapse">
               <tbody>
+                {/* Solvent — dropdown + custom input */}
                 <tr className="border-b border-zinc-200">
                   <td className="bg-purple-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/3">
                     Solvent
                   </td>
                   <td className="px-2 py-1.5">
-                    <Input
-                      className="h-8 text-sm"
+                    <ConsumableSelector
                       value={header.dptSolventCleaner}
-                      onChange={(e) => updateHeader("dptSolventCleaner", e.target.value)}
-                      placeholder="Make – ORION 115PR (example only — type the actual product used)"
+                      onChange={(v) => updateHeader("dptSolventCleaner", v)}
+                      options={[
+                        { value: "ORION 115PR", label: "ORION 115PR" },
+                      ]}
+                      placeholder="Select solvent / cleaner"
+                      customPrompt="Enter the actual solvent / cleaner used (product / make / model)"
                     />
                   </td>
                 </tr>
+                {/* Penetrant — dropdown + custom input */}
                 <tr className="border-b border-zinc-200">
                   <td className="bg-purple-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
                     Penetrant
                   </td>
                   <td className="px-2 py-1.5">
-                    <Input
-                      className="h-8 text-sm"
+                    <ConsumableSelector
                       value={header.dptPenetrant}
-                      onChange={(e) => updateHeader("dptPenetrant", e.target.value)}
-                      placeholder="Make – ORION 115P (example only — type the actual product used)"
+                      onChange={(v) => updateHeader("dptPenetrant", v)}
+                      options={[
+                        { value: "ORION 115P", label: "ORION 115P" },
+                      ]}
+                      placeholder="Select penetrant"
+                      customPrompt="Enter the actual penetrant used (product / make / model)"
                     />
                   </td>
                 </tr>
+                {/* Developer — dropdown + custom input */}
                 <tr className="border-b border-zinc-200">
                   <td className="bg-purple-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
                     Developer
                   </td>
                   <td className="px-2 py-1.5">
-                    <Input
-                      className="h-8 text-sm"
+                    <ConsumableSelector
                       value={header.dptDeveloper}
-                      onChange={(e) => updateHeader("dptDeveloper", e.target.value)}
-                      placeholder="Make – ORION 115D (example only — type the actual product used)"
+                      onChange={(v) => updateHeader("dptDeveloper", v)}
+                      options={[
+                        { value: "ORION 115D", label: "ORION 115D" },
+                      ]}
+                      placeholder="Select developer"
+                      customPrompt="Enter the actual developer used (product / make / model)"
                     />
                   </td>
                 </tr>
@@ -3639,6 +3654,108 @@ export function PipelineReportFormView() {
           </Button>
         </div>
       </>
+      )}
+    </div>
+  );
+}
+
+// ─── ConsumableSelector component ───
+// A dropdown with preset product options PLUS an "Other / Custom" option.
+// When the user picks "Other / Custom", a free-text input is revealed
+// so they can enter any product / make / material not in the preset list.
+//
+// Behaviour:
+//   • If the current value matches one of the preset options, the dropdown
+//     shows that option selected and the custom input is hidden.
+//   • If the current value is non-empty AND doesn't match any preset, the
+//     dropdown shows "Other / Custom" selected and the custom input is
+//     shown with the current value as its contents.
+//   • If the current value is empty, the dropdown shows the placeholder
+//     and the custom input is hidden.
+//
+// The parent component receives the final value via onChange — either a
+// preset option value or whatever the user typed into the custom input.
+
+interface ConsumableOption {
+  value: string;
+  label: string;
+}
+
+function ConsumableSelector({
+  value,
+  onChange,
+  options,
+  placeholder,
+  customPrompt,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: ConsumableOption[];
+  placeholder: string;
+  customPrompt: string;
+}) {
+  // Determine whether the current value is a preset option or a custom value.
+  const matchesPreset = options.some((o) => o.value === value);
+  const isCustom = value !== "" && !matchesPreset;
+  // The dropdown's current selected key:
+  //   - "" when no value is set
+  //   - the preset value when it matches
+  //   - "__custom__" when the value is a non-preset custom entry
+  const dropdownKey = matchesPreset ? value : isCustom ? "__custom__" : "";
+
+  const [showCustom, setShowCustom] = useState(isCustom);
+
+  // Keep the local showCustom state in sync if the value changes externally
+  // (e.g. when loading an existing report).
+  useEffect(() => {
+    setShowCustom(value !== "" && !options.some((o) => o.value === value));
+  }, [value, options]);
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Select
+        value={dropdownKey}
+        onValueChange={(key) => {
+          if (key === "__custom__") {
+            setShowCustom(true);
+            // Don't clear the existing custom value — keep it so the user
+            // can edit it. If there's no current value, leave it empty
+            // and let them type.
+          } else if (key === "__clear__") {
+            setShowCustom(false);
+            onChange("");
+          } else {
+            setShowCustom(false);
+            onChange(key);
+          }
+        }}
+      >
+        <SelectTrigger className="h-8 text-sm">
+          <SelectValue placeholder={placeholder} />
+        </SelectTrigger>
+        <SelectContent>
+          {/* Clear / none option */}
+          <SelectItem value="__clear__" className="text-muted-foreground italic">
+            — None —
+          </SelectItem>
+          {/* Preset options */}
+          {options.map((o) => (
+            <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+          ))}
+          {/* Other / Custom option */}
+          <SelectItem value="__custom__" className="font-medium text-purple-700">
+            Other / Custom…
+          </SelectItem>
+        </SelectContent>
+      </Select>
+      {showCustom && (
+        <Input
+          className="h-8 text-sm"
+          value={matchesPreset ? "" : value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={customPrompt}
+          autoFocus
+        />
       )}
     </div>
   );

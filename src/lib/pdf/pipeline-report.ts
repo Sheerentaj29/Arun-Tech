@@ -169,9 +169,32 @@ const PAGE_SIZES = {
   portrait: [595.28, 841.89] as [number, number],
 };
 
+// ─── Table colour palette (clean, professional, engineering-report style) ───
+// All tables in the report use the same neutral palette:
+//   • Header background: very light grey (#f1f5f9) — readable, not distracting
+//   • Header text: dark grey / near-black (#1f2937) — high contrast
+//   • Outer border: dark grey (#374151) — solid, clearly visible
+//   • Internal cell borders: medium grey (#9ca3af) — distinct but not heavy
+//   • Row data text: black (#000)
+//
+// The previous palette used report-type-specific accent colours (green for
+// thickness, blue for visual, purple for DPT). Per spec, those heavy
+// colours have been removed in favour of a single clean engineering style
+// across all tables. The only colour exception is the DPT result cell,
+// which keeps its Accept (green tint) / Reject (red tint) colour coding
+// because it conveys meaningful pass/fail information.
+
 const MARGIN = 28;
-const HEADER_BG = "#3a7d3a";
-const HEADER_FG = "#ffffff";
+const TABLE_HEADER_BG = "#f1f5f9";        // very light grey
+const TABLE_HEADER_FG = "#1f2937";        // dark grey
+const TABLE_OUTER_BORDER = "#374151";     // dark grey outer border
+const TABLE_INNER_BORDER = "#9ca3af";     // medium grey inner borders
+const TABLE_ROW_ALT_BG = "#fafafa";       // very faint alt-row tint (readability)
+
+// Legacy aliases kept for backward compatibility with any code that still
+// references them — they now point to the clean palette.
+const HEADER_BG = TABLE_HEADER_BG;
+const HEADER_FG = TABLE_HEADER_FG;
 
 interface Column {
   key: string;
@@ -811,36 +834,105 @@ export async function generatePipelineReportPdf(
   //   6. Thickness Measurement Table / Inspection Data
   //   7. Inspection Photographs
   //   8. Certification (Equipment + Personnel)
+  //
+  // PAGE-BREAK RULE (applies to ALL sections):
+  //   A heading must NEVER appear alone at the bottom of a page with its
+  //   content starting on the next page. The helper below computes the
+  //   body height BEFORE drawing the heading, then checks whether heading
+  //   + body fit together on the current page. If they don't, BOTH move
+  //   to a new page. This guarantees the heading is always visually
+  //   connected to at least the beginning of its content.
   // ═══════════════════════════════════════════════════════════════
+
+  // Helper: draw a bold heading followed by a body paragraph, ensuring the
+  // heading is never left alone at the bottom of a page.
+  //
+  // Parameters:
+  //   headingText    — the bold heading to render
+  //   bodyText       — the body paragraph (plain text, will wrap)
+  //   gapBefore      — vertical gap before the heading (default 8pt)
+  //   gapAfter       — vertical gap between heading and body (default 14pt)
+  //   headingFontSize — font size for the heading (default 9pt)
+  //   bodyFontSize   — font size for the body (default 8pt)
+  //
+  // Behaviour:
+  //   • Computes bodyH = wrapped height of bodyText at bodyFontSize.
+  //   • Computes headingH ≈ 12pt (single line at 9pt).
+  //   • totalH = gapBefore + headingH + gapAfter + bodyH + 6.
+  //   • If y + totalH > pageMaxY, BOTH heading and body move to a new page.
+  //   • If bodyH itself exceeds a full page, the body is rendered with
+  //     pdfkit's auto-flow (the heading stays with the first portion of
+  //     the body, the rest flows across pages naturally).
+  const drawHeadingAndBody = (
+    headingText: string,
+    bodyText: string,
+    gapBefore = 8,
+    gapAfter = 14,
+    headingFontSize = 9,
+    bodyFontSize = 8,
+  ) => {
+    if (!bodyText || !bodyText.trim()) return;
+    const usableW = pageW - 2 * MARGIN;
+    // Compute body height at the body font size (BEFORE drawing the heading,
+    // so we can decide whether to move to a new page first).
+    doc.font(FONT_REGULAR).fontSize(bodyFontSize);
+    const bodyH = doc.heightOfString(bodyText, { width: usableW });
+    // Heading is a single line at headingFontSize (approximate height)
+    const headingH = headingFontSize + 3;
+    // PAGE-BREAK RULE: if heading + body don't fit on the current page,
+    // move BOTH to a new page. This is the key rule — a heading must
+    // NEVER appear alone at the bottom of a page.
+    // If the body alone is taller than a full page, only require that the
+    // heading + ~3 lines of body fit (the rest flows across pages naturally).
+    const minBodyPreviewH = bodyFontSize * 3 + 4; // ~3 lines of body text
+    const minNeeded = gapBefore + headingH + gapAfter + minBodyPreviewH;
+    const totalNeeded = gapBefore + headingH + gapAfter + bodyH + 6;
+    const needed = bodyH > pageMaxY - MARGIN ? minNeeded : totalNeeded;
+    if (y + needed > pageMaxY) {
+      addNewPage();
+      y = MARGIN;
+    }
+    // Draw heading
+    y += gapBefore;
+    doc.font(FONT_BOLD).fontSize(headingFontSize).fillColor("#000");
+    doc.text(headingText, MARGIN, y, { width: usableW });
+    // Move to body_top (heading height + gap-after)
+    y += headingH + gapAfter;
+    // Draw body — pdfkit will auto-flow across pages if the body is long.
+    // The heading has already been drawn above on the same page, so it
+    // stays visually connected to the start of the body.
+    doc.font(FONT_REGULAR).fontSize(bodyFontSize);
+    doc.text(bodyText, MARGIN, y, { width: usableW, align: "left" });
+    // After pdfkit renders the text (possibly across multiple pages), doc.y
+    // is the current y position. Sync our local y.
+    y = doc.y + 6;
+    doc.fillColor("#000");
+  };
 
   // ── 1. INSPECTION DESCRIPTION ──
   if (report.inspectionDescription) {
-    if (y + 60 > pageMaxY) { addNewPage(); y = MARGIN; }
-    y += 10;
-    doc.font(FONT_BOLD).fontSize(9).fillColor("#000");
-    doc.text("Inspection Description", MARGIN, y);
-    y += 14;
-    doc.font(FONT_REGULAR).fontSize(8);
-    const descHeight = doc.heightOfString(report.inspectionDescription, { width: pageW - 2 * MARGIN });
-    if (y + descHeight > pageMaxY) { addNewPage(); y = MARGIN; }
-    doc.text(report.inspectionDescription, MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
-    y += descHeight + 6;
+    drawHeadingAndBody(
+      "Inspection Description",
+      report.inspectionDescription,
+      10,  // larger gap before this section
+      14,
+      9,
+      8,
+    );
   }
 
   // ── 2. SUMMARY OF SITE OBSERVATIONS ──
   {
     const text = ((report as any).siteObservationSummary ?? "").trim();
     if (text) {
-      if (y + 40 > pageMaxY) { addNewPage(); y = MARGIN; }
-      y += 8;
-      doc.font(FONT_BOLD).fontSize(9).fillColor("#000");
-      doc.text("Summary Of Site Observations", MARGIN, y);
-      y += 14;
-      doc.font(FONT_REGULAR).fontSize(8);
-      const h = doc.heightOfString(text, { width: pageW - 2 * MARGIN });
-      if (y + h > pageMaxY) { addNewPage(); y = MARGIN; }
-      doc.text(text, MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
-      y += h + 6;
+      drawHeadingAndBody(
+        "Summary Of Site Observations",
+        text,
+        8,
+        14,
+        9,
+        8,
+      );
     }
   }
 
@@ -848,16 +940,14 @@ export async function generatePipelineReportPdf(
   {
     const text = ((report as any).results ?? "").trim();
     if (text) {
-      if (y + 40 > pageMaxY) { addNewPage(); y = MARGIN; }
-      y += 8;
-      doc.font(FONT_BOLD).fontSize(9);
-      doc.text("Results", MARGIN, y);
-      y += 14;
-      doc.font(FONT_REGULAR).fontSize(8);
-      const h = doc.heightOfString(text, { width: pageW - 2 * MARGIN });
-      if (y + h > pageMaxY) { addNewPage(); y = MARGIN; }
-      doc.text(text, MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
-      y += h + 6;
+      drawHeadingAndBody(
+        "Results",
+        text,
+        8,
+        14,
+        9,
+        8,
+      );
     }
   }
 
@@ -865,16 +955,14 @@ export async function generatePipelineReportPdf(
   {
     const text = ((report as any).conclusion ?? "").trim();
     if (text) {
-      if (y + 40 > pageMaxY) { addNewPage(); y = MARGIN; }
-      y += 8;
-      doc.font(FONT_BOLD).fontSize(9);
-      doc.text("Conclusion", MARGIN, y);
-      y += 14;
-      doc.font(FONT_REGULAR).fontSize(8);
-      const h = doc.heightOfString(text, { width: pageW - 2 * MARGIN });
-      if (y + h > pageMaxY) { addNewPage(); y = MARGIN; }
-      doc.text(text, MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
-      y += h + 6;
+      drawHeadingAndBody(
+        "Conclusion",
+        text,
+        8,
+        14,
+        9,
+        8,
+      );
     }
   }
 
@@ -1069,8 +1157,10 @@ export async function generatePipelineReportPdf(
     // ─── 3. DYE PENETRANT PROCEDURE ───
     // Two-column table: left = field name (bold), right = value.
     // All values are typeable text from the form (or "—" if blank).
+    // PAGE-BREAK RULE: ensure heading + first row fit together.
     {
-      if (y + 24 > pageMaxY) { addNewPage(); y = MARGIN; }
+      const procRowH_local = 18;
+      if (y + 24 + procRowH_local > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 6;
       doc.font(FONT_BOLD).fontSize(11).fillColor("#3a1d4a");
       doc.text("3. DYE PENETRANT PROCEDURE", MARGIN, y);
@@ -1103,25 +1193,33 @@ export async function generatePipelineReportPdf(
       ];
 
       // Two-column table: label column ~38% of usable width, value column ~62%.
+      // Each row is drawn as a self-contained bordered unit (outer dark border
+      // + inner column separator), so the table renders correctly even when
+      // it spans multiple pages.
       const procLabelW = (pageW - 2 * MARGIN) * 0.38;
       const procValueW = (pageW - 2 * MARGIN) - procLabelW;
       const procRowH = 18;
+      const procUsableW = pageW - 2 * MARGIN;
 
       for (const [label, value] of procedureRows) {
         if (y + procRowH > pageMaxY) { addNewPage(); y = MARGIN; }
-        // Label cell (left) — purple-tinted background
-        doc.rect(MARGIN, y, procLabelW, procRowH).fill("#f3e8fb").stroke("#bbb");
+        // Fill label cell (left) — light purple-tinted background
+        doc.rect(MARGIN, y, procLabelW, procRowH).fill("#f3e8fb");
+        // Fill value cell (right) — white background
+        doc.rect(MARGIN + procLabelW, y, procValueW, procRowH).fill("#ffffff");
+        // Outer border around the whole row
+        doc.rect(MARGIN, y, procUsableW, procRowH).stroke(TABLE_OUTER_BORDER);
+        // Column separator between label and value
+        doc.moveTo(MARGIN + procLabelW, y).lineTo(MARGIN + procLabelW, y + procRowH).stroke(TABLE_INNER_BORDER);
+        // Label text
         doc.font(FONT_BOLD).fontSize(8.5).fillColor("#000");
         doc.text(label, MARGIN + 4, y + 5, { width: procLabelW - 8 });
-        // Value cell (right)
-        doc.rect(MARGIN + procLabelW, y, procValueW, procRowH).fill("#ffffff").stroke("#bbb");
+        // Value text
         doc.font(FONT_REGULAR).fontSize(8.5).fillColor("#000");
         const valueText = value && value.trim() ? value.trim() : "—";
-        // Truncate long values to fit the cell width
         const maxW = procValueW - 8;
         let displayText = valueText;
         if (doc.widthOfString(displayText) > maxW) {
-          // Approximate truncation with ellipsis
           const charsToKeep = Math.floor((maxW / Math.max(1, doc.widthOfString(displayText))) * displayText.length);
           displayText = displayText.slice(0, Math.max(1, charsToKeep - 1)) + "…";
         }
@@ -1134,9 +1232,11 @@ export async function generatePipelineReportPdf(
     // ─── CONSUMABLE DETAILS ───
     // Three rows: Solvent, Penetrant, Developer. Same two-column layout
     // as the procedure section. The values are the actual product / make
-    // / material entered by the user.
+    // / material entered by the user (or selected from the dropdown).
+    // PAGE-BREAK RULE: ensure heading + first row fit together.
     {
-      if (y + 24 > pageMaxY) { addNewPage(); y = MARGIN; }
+      const consRowH_local = 18;
+      if (y + 24 + consRowH_local > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 4;
       doc.font(FONT_BOLD).fontSize(11).fillColor("#3a1d4a");
       doc.text("Consumable Details", MARGIN, y);
@@ -1152,13 +1252,22 @@ export async function generatePipelineReportPdf(
       const consLabelW = (pageW - 2 * MARGIN) * 0.38;
       const consValueW = (pageW - 2 * MARGIN) - consLabelW;
       const consRowH = 18;
+      const consUsableW = pageW - 2 * MARGIN;
 
       for (const [label, value] of consumableRows) {
         if (y + consRowH > pageMaxY) { addNewPage(); y = MARGIN; }
-        doc.rect(MARGIN, y, consLabelW, consRowH).fill("#f3e8fb").stroke("#bbb");
+        // Fill label cell (left)
+        doc.rect(MARGIN, y, consLabelW, consRowH).fill("#f3e8fb");
+        // Fill value cell (right)
+        doc.rect(MARGIN + consLabelW, y, consValueW, consRowH).fill("#ffffff");
+        // Outer border around the row
+        doc.rect(MARGIN, y, consUsableW, consRowH).stroke(TABLE_OUTER_BORDER);
+        // Column separator
+        doc.moveTo(MARGIN + consLabelW, y).lineTo(MARGIN + consLabelW, y + consRowH).stroke(TABLE_INNER_BORDER);
+        // Label text
         doc.font(FONT_BOLD).fontSize(8.5).fillColor("#000");
         doc.text(label, MARGIN + 4, y + 5, { width: consLabelW - 8 });
-        doc.rect(MARGIN + consLabelW, y, consValueW, consRowH).fill("#ffffff").stroke("#bbb");
+        // Value text
         doc.font(FONT_REGULAR).fontSize(8.5).fillColor("#000");
         const valueText = value && value.trim() ? value.trim() : "—";
         const maxW = consValueW - 8;
@@ -1201,8 +1310,9 @@ export async function generatePipelineReportPdf(
     const dptColWidths = [slColW, descColW, weldColW, resultColW, ...dptCustomCols.map(() => customColW), dptRemarksW];
     const dptColHeaders = ["Sl.\nNo", "Description", "Weld\nType", "Result", ...dptCustomCols.map(c => c.name + (c.unit ? `\n(${c.unit})` : "")), "Remarks"];
 
-    // Section heading
-    if (y + 24 > pageMaxY) { addNewPage(); y = MARGIN; }
+    // Section heading — ensure heading + table header + first row fit together
+    // (a heading must never appear alone at the bottom of a page).
+    if (y + 24 + dptHeaderH + dptRowH > pageMaxY) { addNewPage(); y = MARGIN; }
     y += 4;
     doc.font(FONT_BOLD).fontSize(11).fillColor("#3a1d4a");
     doc.text("DPT Inspection Results", MARGIN, y);
@@ -1272,17 +1382,29 @@ export async function generatePipelineReportPdf(
   // ENTIRE photo (image + caption) to the next page — never split.
   // ═══════════════════════════════════════════════════════════════
   if (allPhotos.length > 0) {
-    if (y + 30 > pageMaxY) { addNewPage(); y = MARGIN; }
+    // PHOTO GALLERY HEADING — ensure heading + first photo row fit together
+    // (a heading must never appear alone at the bottom of a page).
+    // First photo row needs: cellH (photo + caption) + small gap.
+    const photoW_forCalc = orientation === "landscape" ? 180 : 140;
+    const photoH_forCalc = orientation === "landscape" ? 120 : 95;
+    const captionH_forCalc = 16;
+    const cellH_forCalc = photoH_forCalc + captionH_forCalc;
+    const headingH_photos = 22; // heading line + small gap below
+    // Need: heading + first row of photos
+    if (y + headingH_photos + cellH_forCalc + 10 > pageMaxY) {
+      addNewPage();
+      y = MARGIN;
+    }
     y += 10;
     doc.font(FONT_BOLD).fontSize(10).fillColor("#000");
     doc.text("Inspection Photographs", MARGIN, y);
     y += 20;
 
     // Fixed thumbnail size — consistent across all photos
-    const photoW = orientation === "landscape" ? 180 : 140;
-    const photoH = orientation === "landscape" ? 120 : 95;
-    const captionH = 16; // space reserved for caption below each photo
-    const cellH = photoH + captionH; // total height per photo cell
+    const photoW = photoW_forCalc;
+    const photoH = photoH_forCalc;
+    const captionH = captionH_forCalc; // space reserved for caption below each photo
+    const cellH = cellH_forCalc; // total height per photo cell
     const gap = 10;
     const photosPerRow = Math.max(1, Math.floor((pageW - 2 * MARGIN + gap) / (photoW + gap)));
 
@@ -1559,15 +1681,17 @@ function drawPhotoCell(
   photoH: number,
   fontRegular: string,
 ) {
-  // Draw the bordered cell
-  doc.rect(x, y, photoW, photoH).stroke("#999");
+  // 1. Fill the cell with white first — handles transparent PNGs and gives
+  //    a consistent background regardless of the image's own background.
+  doc.rect(x, y, photoW, photoH).fill("#ffffff");
 
-  // Embed the image (fitted, centered, aspect ratio preserved)
+  // 2. Embed the image (fitted, centered, aspect ratio preserved).
+  //    The image is drawn inside a 2pt inset so the border stays crisp.
   if (photo.filePath && existsSync(photo.filePath)) {
     try {
       const imgBuf = readFileSync(photo.filePath);
-      doc.image(imgBuf, x + 1, y + 1, {
-        fit: [photoW - 2, photoH - 2],
+      doc.image(imgBuf, x + 2, y + 2, {
+        fit: [photoW - 4, photoH - 4],
         align: "center",
         valign: "center",
       });
@@ -1586,9 +1710,22 @@ function drawPhotoCell(
     doc.fillColor("#000");
   }
 
-  // Draw caption below the photo (within the cell's allocated caption space)
+  // 3. Draw the cell border ON TOP of the image so it's always visible
+  //    (a clean dark grey border, consistent with the table styling).
+  doc.rect(x, y, photoW, photoH).stroke(TABLE_OUTER_BORDER);
+
+  // 4. Draw caption below the photo (within the cell's allocated caption
+  //    space). Truncate to fit the cell width so long captions don't bleed
+  //    into neighbouring cells.
   doc.font(fontRegular).fontSize(7).fillColor("#333");
-  const caption = photo.caption || photo.fileName;
+  let caption = photo.caption || photo.fileName || "";
+  const maxCaptionW = photoW;
+  if (doc.widthOfString(caption) > maxCaptionW) {
+    const charsToKeep = Math.floor(
+      (maxCaptionW / Math.max(1, doc.widthOfString(caption))) * caption.length,
+    );
+    caption = caption.slice(0, Math.max(1, charsToKeep - 1)) + "…";
+  }
   doc.text(caption, x, y + photoH + 2, { width: photoW, align: "center" });
   doc.fillColor("#000");
 }
@@ -1699,27 +1836,30 @@ function drawDrawingPlaceholder(
 
 // ─── VISUAL OBSERVATION TABLE HELPERS ───
 // These mirror drawTableHeader / drawMeasurementRow but for the visual
-// inspection observation rows. The header uses a blue accent instead of
-// green to visually distinguish the report type.
-
-const VISUAL_HEADER_BG = "#1e4d8b";
-const VISUAL_HEADER_FG = "#ffffff";
+// inspection observation rows. The header uses the same clean engineering
+// palette as the thickness table (no heavy colour accents).
 
 function drawVisualTableHeader(doc: Doc, columns: Column[], colWidths: number[], y: number, pageW: number) {
   const usable = pageW - 2 * MARGIN;
-  doc.rect(MARGIN, y, usable, 36).fill(VISUAL_HEADER_BG).fillColor(VISUAL_HEADER_FG);
+  const headerH = 36;
+  doc.rect(MARGIN, y, usable, headerH).fill(TABLE_HEADER_BG);
+  doc.rect(MARGIN, y, usable, headerH).stroke(TABLE_OUTER_BORDER);
   let x = MARGIN;
-  doc.font(FONT_BOLD).fontSize(7).fillColor(VISUAL_HEADER_FG);
+  doc.font(FONT_BOLD).fontSize(7.5).fillColor(TABLE_HEADER_FG);
   for (let i = 0; i < columns.length; i++) {
     const c = columns[i];
     const w = colWidths[i];
+    if (i > 0) {
+      doc.moveTo(x, y).lineTo(x, y + headerH).stroke(TABLE_INNER_BORDER);
+    }
     const lines = c.header.split("\n");
-    let ly = y + 4;
+    const lineH = 9;
+    const totalH = lines.length * lineH;
+    let ly = y + (headerH - totalH) / 2 + 1;
     for (const ln of lines) {
       doc.text(ln, x + 3, ly, { width: w - 6, align: "center" });
-      ly += 9;
+      ly += lineH;
     }
-    doc.rect(x, y, w, 36).stroke("#0e2d5b");
     x += w;
   }
   doc.fillColor("#000");
@@ -1734,10 +1874,10 @@ function drawVisualObservationRow(
 ) {
   const rowH = 28;
   const usable = doc.page.width - 2 * MARGIN;
-  doc.rect(MARGIN, y, usable, rowH).stroke("#999");
+  doc.rect(MARGIN, y, usable, rowH).stroke(TABLE_OUTER_BORDER);
   let x = MARGIN;
-  const cellPad = 3;
-  doc.font(FONT_REGULAR).fontSize(7).fillColor("#000");
+  const cellPad = 4;
+  doc.font(FONT_REGULAR).fontSize(7.5).fillColor("#000");
 
   for (let i = 0; i < columns.length; i++) {
     const c = columns[i];
@@ -1759,17 +1899,20 @@ function drawVisualObservationRow(
       case "vRecs":       text = o.recommendations ?? ""; break;
       case "vComments":   text = o.inspectorComments ?? ""; break;
     }
-    doc.rect(x, y, w, rowH).stroke("#bbb");
+    if (i > 0) {
+      doc.moveTo(x, y).lineTo(x, y + rowH).stroke(TABLE_INNER_BORDER);
+    }
     const maxW = w - 2 * cellPad;
     // Truncate with ellipsis if too long
     const wrapped = doc.widthOfString(text) > maxW
       ? text.slice(0, Math.floor((maxW / Math.max(1, doc.widthOfString(text))) * text.length)) + "…"
       : text;
-    doc.text(wrapped, x + cellPad, y + 9, {
+    doc.text(wrapped, x + cellPad, y + (rowH - 10) / 2, {
       width: maxW, align: "left",
     });
     x += w;
   }
+  doc.fillColor("#000");
 }
 
 // ─── CONDITION ASSESSMENT HELPER ───
@@ -1880,24 +2023,37 @@ function drawConditionAssessment(
 }
 
 // ─── DPT TABLE HELPERS ───
+// Same clean engineering palette as the thickness and visual tables.
+// The ONLY colour exception is the Result cell, which keeps its Accept
+// (green tint) / Reject (red tint) colour coding because that conveys
+// meaningful pass/fail information at a glance.
 
-const DPT_HEADER_BG = "#5b2c6f";
-const DPT_HEADER_FG = "#ffffff";
+// Result cell colour coding (kept — meaningful pass/fail signal)
+const DPT_RESULT_ACCEPT_BG = "#dcfce7";   // light green
+const DPT_RESULT_ACCEPT_FG = "#166534";   // dark green
+const DPT_RESULT_REJECT_BG = "#fee2e2";   // light red
+const DPT_RESULT_REJECT_FG = "#991b1b";   // dark red
 
 function drawDptTableHeader(doc: Doc, headers: string[], colWidths: number[], y: number, pageW: number) {
   const usable = pageW - 2 * MARGIN;
-  doc.rect(MARGIN, y, usable, 36).fill(DPT_HEADER_BG).fillColor(DPT_HEADER_FG);
+  const headerH = 36;
+  doc.rect(MARGIN, y, usable, headerH).fill(TABLE_HEADER_BG);
+  doc.rect(MARGIN, y, usable, headerH).stroke(TABLE_OUTER_BORDER);
   let x = MARGIN;
-  doc.font(FONT_BOLD).fontSize(7).fillColor(DPT_HEADER_FG);
+  doc.font(FONT_BOLD).fontSize(7.5).fillColor(TABLE_HEADER_FG);
   for (let i = 0; i < headers.length; i++) {
     const w = colWidths[i];
+    if (i > 0) {
+      doc.moveTo(x, y).lineTo(x, y + headerH).stroke(TABLE_INNER_BORDER);
+    }
     const lines = headers[i].split("\n");
-    let ly = y + 4;
+    const lineH = 9;
+    const totalH = lines.length * lineH;
+    let ly = y + (headerH - totalH) / 2 + 1;
     for (const ln of lines) {
       doc.text(ln, x + 3, ly, { width: w - 6, align: "center" });
-      ly += 9;
+      ly += lineH;
     }
-    doc.rect(x, y, w, 36).stroke("#3a1d4a");
     x += w;
   }
   doc.fillColor("#000");
@@ -1913,27 +2069,38 @@ function drawDptRow(
 ) {
   const rowH = 28;
   const usable = doc.page.width - 2 * MARGIN;
-  doc.rect(MARGIN, y, usable, rowH).stroke("#999");
+  // Outer row border
+  doc.rect(MARGIN, y, usable, rowH).stroke(TABLE_OUTER_BORDER);
   let x = MARGIN;
-  const cellPad = 3;
+  const cellPad = 4;
   doc.font(FONT_REGULAR).fontSize(8).fillColor("#000");
 
+  // First pass: fill the Result cell background (so the border drawn on
+  // top of it is crisp). The Result cell is at index 3.
+  for (let i = 0; i < headers.length; i++) {
+    if (i === 3) {
+      const w = colWidths[i];
+      if (obs.result === "Reject") {
+        doc.rect(x, y, w, rowH).fill(DPT_RESULT_REJECT_BG);
+      } else {
+        doc.rect(x, y, w, rowH).fill(DPT_RESULT_ACCEPT_BG);
+      }
+    }
+    x += colWidths[i];
+  }
+
+  // Second pass: draw text and internal column separators
+  x = MARGIN;
   for (let i = 0; i < headers.length; i++) {
     const w = colWidths[i];
     let text = "";
+    let isResult = false;
     if (i === 0) text = String(obs.serialNo);
     else if (i === 1) text = obs.description ?? "—";
     else if (i === 2) text = obs.weldType ?? "—";
     else if (i === 3) {
       text = obs.result;
-      // Color-code the result
-      if (obs.result === "Reject") {
-        doc.rect(x, y, w, rowH).fill("#fee2e2");
-        doc.fillColor("#991b1b");
-      } else {
-        doc.rect(x, y, w, rowH).fill("#dcfce7");
-        doc.fillColor("#166534");
-      }
+      isResult = true;
     } else if (i === headers.length - 1) {
       text = obs.remarks ?? "—";
     } else {
@@ -1947,52 +2114,81 @@ function drawDptRow(
       }
     }
 
-    // Draw border (for non-result columns)
-    if (i !== 3) {
-      doc.rect(x, y, w, rowH).stroke("#bbb");
+    // Internal column separator
+    if (i > 0) {
+      doc.moveTo(x, y).lineTo(x, y + rowH).stroke(TABLE_INNER_BORDER);
+    }
+
+    // Set text colour for the result cell, black for everything else
+    if (isResult) {
+      doc.fillColor(obs.result === "Reject" ? DPT_RESULT_REJECT_FG : DPT_RESULT_ACCEPT_FG);
+      doc.font(FONT_BOLD).fontSize(8);
+    } else {
       doc.fillColor("#000");
+      doc.font(FONT_REGULAR).fontSize(8);
     }
 
     const maxW = w - 2 * cellPad;
     const wrapped = doc.widthOfString(text) > maxW
       ? text.slice(0, Math.floor((maxW / Math.max(1, doc.widthOfString(text))) * text.length)) + "…"
       : text;
-    doc.font(i === 3 ? FONT_BOLD : FONT_REGULAR).fontSize(8);
-    doc.text(wrapped, x + cellPad, y + 9, {
+    doc.text(wrapped, x + cellPad, y + (rowH - 10) / 2, {
       width: maxW, align: i === 0 || i === 3 ? "center" : "left",
     });
-    doc.fillColor("#000");
     x += w;
   }
+
+  // Re-stroke the outer border on top of the result-cell fill so it's crisp
+  doc.rect(MARGIN, y, usable, rowH).stroke(TABLE_OUTER_BORDER);
+  doc.fillColor("#000");
 }
 
 // ─── TABLE HELPERS ───
+// Clean, professional engineering-report style:
+//   • Light header background, dark header text
+//   • Solid dark outer border around the whole table
+//   • Medium grey internal column borders
+//   • Medium grey row separators
+//   • Consistent 0.5pt border weight
+//   • Cell padding 3pt horizontal, 5pt vertical (centred text)
 
 function drawTableHeader(doc: Doc, columns: Column[], colWidths: number[], y: number, pageW: number) {
   const usable = pageW - 2 * MARGIN;
-  doc.rect(MARGIN, y, usable, 36).fill(HEADER_BG).fillColor(HEADER_FG);
+  const headerH = 36;
+  // Header background — very light grey fill
+  doc.rect(MARGIN, y, usable, headerH).fill(TABLE_HEADER_BG);
+  // Outer border around the entire header row
+  doc.rect(MARGIN, y, usable, headerH).stroke(TABLE_OUTER_BORDER);
+  // Internal column separators
   let x = MARGIN;
-  doc.font(FONT_BOLD).fontSize(7).fillColor(HEADER_FG);
+  doc.font(FONT_BOLD).fontSize(7.5).fillColor(TABLE_HEADER_FG);
   for (let i = 0; i < columns.length; i++) {
     const c = columns[i];
     const w = colWidths[i];
+    if (i > 0) {
+      // Vertical separator between columns
+      doc.moveTo(x, y).lineTo(x, y + headerH).stroke(TABLE_INNER_BORDER);
+    }
     if (c.vertical) {
+      // Vertical (rotated) heading — used for the clock-position columns
       const lines = c.header.split("\n");
       const joined = lines.join(" ");
       doc.save();
-      doc.translate(x + w / 2 + 3, y + 32);
+      doc.translate(x + w / 2 + 3, y + headerH - 4);
       doc.rotate(-90);
-      doc.text(joined, 0, 0, { width: 30, align: "left" });
+      doc.text(joined, 0, 0, { width: headerH - 8, align: "left" });
       doc.restore();
     } else {
       const lines = c.header.split("\n");
-      let ly = y + 4;
+      // Vertically centre multi-line headings inside the header row
+      const lineH = 9;
+      const totalH = lines.length * lineH;
+      let ly = y + (headerH - totalH) / 2 + 1;
       for (const ln of lines) {
         doc.text(ln, x + 3, ly, { width: w - 6, align: "center" });
-        ly += 9;
+        ly += lineH;
       }
     }
-    doc.rect(x, y, w, 36).stroke("#1b4d1b");
     x += w;
   }
   doc.fillColor("#000");
@@ -2009,9 +2205,14 @@ function drawMeasurementRow(
 ) {
   const rowH = 28;
   const usable = doc.page.width - 2 * MARGIN;
-  doc.rect(MARGIN, y, usable, rowH).stroke("#999");
+  // Row background — alternating very-faint tint for readability
+  // (the caller is responsible for tracking row index if alternation is
+  // desired; here we just use plain white for the row body so the table
+  // looks clean and uniform.)
+  // Outer border around the row
+  doc.rect(MARGIN, y, usable, rowH).stroke(TABLE_OUTER_BORDER);
   let x = MARGIN;
-  const cellPad = 3;
+  const cellPad = 4;
   doc.font(FONT_REGULAR).fontSize(8).fillColor("#000");
 
   for (let i = 0; i < columns.length; i++) {
@@ -2037,14 +2238,21 @@ function drawMeasurementRow(
         }
         break;
     }
-    doc.rect(x, y, w, rowH).stroke("#bbb");
+    // Internal column separator (skip for the first column — its left edge
+    // is the table's outer border, already drawn above).
+    if (i > 0) {
+      doc.moveTo(x, y).lineTo(x, y + rowH).stroke(TABLE_INNER_BORDER);
+    }
+    // Truncate with ellipsis if too long
     const maxW = w - 2 * cellPad;
     const wrapped = doc.widthOfString(text) > maxW
       ? text.slice(0, Math.floor((maxW / Math.max(1, doc.widthOfString(text))) * text.length)) + "…"
       : text;
-    doc.text(wrapped, x + cellPad, y + 9, {
+    // Vertically centre the text inside the cell (row height 28pt, text ~10pt tall)
+    doc.text(wrapped, x + cellPad, y + (rowH - 10) / 2, {
       width: maxW, align: c.key === "findings" ? "left" : "center",
     });
     x += w;
   }
+  doc.fillColor("#000");
 }
