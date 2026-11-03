@@ -127,7 +127,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   });
   const nextSortOrder = (existingPhotos[0]?.sortOrder ?? -1) + 1;
 
-  // Create the ReportPhoto row (so it also appears in the photo gallery)
+  // Create the ReportPhoto row tagged as PRIMARY so it can be excluded
+  // from the Inspection Photographs gallery (which only shows INSPECTION
+  // category photos). This prevents the primary photo from appearing twice.
   const photo = await db.reportPhoto.create({
     data: {
       pipelineInspectionId: id,
@@ -137,6 +139,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       mimeType: file.type,
       caption: "Primary inspection photo",
       sortOrder: nextSortOrder,
+      category: "PRIMARY",
       uploadedById: session.id,
       uploadedByName: session.name,
     },

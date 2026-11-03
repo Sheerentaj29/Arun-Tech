@@ -32,8 +32,12 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // Only return INSPECTION-category photos. PRIMARY-category photos
+  // (uploaded via /primary-photo) are excluded so they don't appear
+  // in the Inspection Photographs gallery — they already appear on
+  // the first page of the PDF in their designated position.
   const photos = await db.reportPhoto.findMany({
-    where: { pipelineInspectionId: id },
+    where: { pipelineInspectionId: id, category: "INSPECTION" },
     orderBy: { sortOrder: "asc" },
   });
 

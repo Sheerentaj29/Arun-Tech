@@ -194,6 +194,8 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       results: body.results !== undefined ? (body.results?.trim() || null) : existing.results,
       conclusion: body.conclusion !== undefined ? (body.conclusion?.trim() || null) : existing.conclusion,
       // ─── SIGN-OFF FIELDS ───
+      inspectorName: body.inspectorName !== undefined ? (body.inspectorName?.trim() || null) : existing.inspectorName,
+      approvedByName: body.approvedByName !== undefined ? (body.approvedByName?.trim() || null) : existing.approvedByName,
       inspectorDesignation: body.inspectorDesignation !== undefined ? (body.inspectorDesignation?.trim() || null) : existing.inspectorDesignation,
       secondReviewedByName: body.secondReviewedByName !== undefined ? (body.secondReviewedByName?.trim() || null) : existing.secondReviewedByName,
       secondReviewedByDesignation: body.secondReviewedByDesignation !== undefined ? (body.secondReviewedByDesignation?.trim() || null) : existing.secondReviewedByDesignation,
@@ -206,9 +208,6 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       dptDeveloper: body.dptDeveloper !== undefined ? (body.dptDeveloper?.trim() || null) : existing.dptDeveloper,
       dptCustomColumns: body.dptCustomColumns !== undefined ? body.dptCustomColumns : existing.dptCustomColumns,
       // ─── DYE PENETRANT PROCEDURE FIELDS (16 typeable fields) ───
-      // All fields are optional strings. When the form sends them (even
-      // as empty strings), we trim and persist; null preserves the
-      // existing value if the field wasn't sent.
       dptTestingStandard: body.dptTestingStandard !== undefined ? (body.dptTestingStandard?.trim() || null) : existing.dptTestingStandard,
       dptAcceptanceCriteria: body.dptAcceptanceCriteria !== undefined ? (body.dptAcceptanceCriteria?.trim() || null) : existing.dptAcceptanceCriteria,
       dptSurfacePreparation: body.dptSurfacePreparation !== undefined ? (body.dptSurfacePreparation?.trim() || null) : existing.dptSurfacePreparation,
@@ -225,6 +224,30 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       dptInterpretationTime: body.dptInterpretationTime !== undefined ? (body.dptInterpretationTime?.trim() || null) : existing.dptInterpretationTime,
       dptLightingEquipment: body.dptLightingEquipment !== undefined ? (body.dptLightingEquipment?.trim() || null) : existing.dptLightingEquipment,
       dptPostCleaning: body.dptPostCleaning !== undefined ? (body.dptPostCleaning?.trim() || null) : existing.dptPostCleaning,
+      // ─── MPT (MAGNETIC PARTICLE TESTING) FIELDS ───
+      mptDateOfExamination: body.mptDateOfExamination !== undefined ? (body.mptDateOfExamination ? new Date(body.mptDateOfExamination) : null) : existing.mptDateOfExamination,
+      mptTestingStandard: body.mptTestingStandard !== undefined ? (body.mptTestingStandard?.trim() || null) : existing.mptTestingStandard,
+      mptAcceptanceCriteria: body.mptAcceptanceCriteria !== undefined ? (body.mptAcceptanceCriteria?.trim() || null) : existing.mptAcceptanceCriteria,
+      mptSurfacePreparation: body.mptSurfacePreparation !== undefined ? (body.mptSurfacePreparation?.trim() || null) : existing.mptSurfacePreparation,
+      mptSurfaceTemperature: body.mptSurfaceTemperature !== undefined ? (body.mptSurfaceTemperature?.trim() || null) : existing.mptSurfaceTemperature,
+      mptInstrumentSerialNo: body.mptInstrumentSerialNo !== undefined ? (body.mptInstrumentSerialNo?.trim() || null) : existing.mptInstrumentSerialNo,
+      mptCalibrationDate: body.mptCalibrationDate !== undefined ? (body.mptCalibrationDate ? new Date(body.mptCalibrationDate) : null) : existing.mptCalibrationDate,
+      mptMethod: body.mptMethod !== undefined ? (body.mptMethod?.trim() || null) : existing.mptMethod,
+      mptTypeOfCurrent: body.mptTypeOfCurrent !== undefined ? (body.mptTypeOfCurrent?.trim() || null) : existing.mptTypeOfCurrent,
+      mptAcYokeLiftingCapacity: body.mptAcYokeLiftingCapacity !== undefined ? (body.mptAcYokeLiftingCapacity?.trim() || null) : existing.mptAcYokeLiftingCapacity,
+      mptContrastMedium: body.mptContrastMedium !== undefined ? (body.mptContrastMedium?.trim() || null) : existing.mptContrastMedium,
+      mptMethodOfPreCleaning: body.mptMethodOfPreCleaning !== undefined ? (body.mptMethodOfPreCleaning?.trim() || null) : existing.mptMethodOfPreCleaning,
+      mptMethodOfApplyingWhiteContrast: body.mptMethodOfApplyingWhiteContrast !== undefined ? (body.mptMethodOfApplyingWhiteContrast?.trim() || null) : existing.mptMethodOfApplyingWhiteContrast,
+      mptAcYokePoleSpacing: body.mptAcYokePoleSpacing !== undefined ? (body.mptAcYokePoleSpacing?.trim() || null) : existing.mptAcYokePoleSpacing,
+      mptMagneticMedium: body.mptMagneticMedium !== undefined ? (body.mptMagneticMedium?.trim() || null) : existing.mptMagneticMedium,
+      mptMethodOfApplyingMagneticMedium: body.mptMethodOfApplyingMagneticMedium !== undefined ? (body.mptMethodOfApplyingMagneticMedium?.trim() || null) : existing.mptMethodOfApplyingMagneticMedium,
+      mptDevelopmentTime: body.mptDevelopmentTime !== undefined ? (body.mptDevelopmentTime?.trim() || null) : existing.mptDevelopmentTime,
+      mptInterpretationTime: body.mptInterpretationTime !== undefined ? (body.mptInterpretationTime?.trim() || null) : existing.mptInterpretationTime,
+      mptLightingEquipment: body.mptLightingEquipment !== undefined ? (body.mptLightingEquipment?.trim() || null) : existing.mptLightingEquipment,
+      mptPostCleaning: body.mptPostCleaning !== undefined ? (body.mptPostCleaning?.trim() || null) : existing.mptPostCleaning,
+      mptWhiteContrast: body.mptWhiteContrast !== undefined ? (body.mptWhiteContrast?.trim() || null) : existing.mptWhiteContrast,
+      mptWetParticleIronInk: body.mptWetParticleIronInk !== undefined ? (body.mptWetParticleIronInk?.trim() || null) : existing.mptWetParticleIronInk,
+      mptCustomColumns: body.mptCustomColumns !== undefined ? body.mptCustomColumns : existing.mptCustomColumns,
     },
   });
 

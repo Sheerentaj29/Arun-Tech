@@ -23,6 +23,7 @@ import {
   Upload,
   CheckCircle2,
   RefreshCw,
+  Magnet,
 } from "lucide-react";
 import {
   Card,
@@ -99,10 +100,9 @@ const REPORT_TYPE_INFO: Record<PipelineReportType, {
     title: "MAGNETIC PARTICLE TESTING REPORT",
     shortLabel: "MPT",
     formHeading: "New MPT – Magnetic Particle Testing Report",
-    formDescription: "Magnetic particle inspection for surface and near-surface flaws in ferromagnetic materials.",
+    formDescription: "Magnetic particle inspection with MPT parameters, consumable details, observation table, and Accept/Reject results.",
     step2Label: "MPT Observations",
     accent: "border-orange-500 text-orange-700",
-    comingSoon: true,
   },
   PIPELINE_WELD_SCAN: {
     title: "WELD SCAN REPORT",
@@ -192,9 +192,11 @@ interface ReportHeader {
   results: string;
   conclusion: string;
   // ─── SIGN-OFF FIELDS ───
+  inspectorName: string;          // editable — Inspected By name
   inspectorDesignation: string;
   secondReviewedByName: string;
   secondReviewedByDesignation: string;
+  approvedByName: string;         // editable — Approved By name
   approvedByDesignation: string;
   // ─── DPT / DPPT FIELDS ───
   dptDateOfExamination: string;
@@ -220,6 +222,31 @@ interface ReportHeader {
   dptInterpretationTime: string;
   dptLightingEquipment: string;
   dptPostCleaning: string;
+  // ─── MPT (MAGNETIC PARTICLE TESTING) FIELDS ───
+  mptDateOfExamination: string;
+  mptTestingStandard: string;
+  mptAcceptanceCriteria: string;
+  mptSurfacePreparation: string;
+  mptSurfaceTemperature: string;
+  mptInstrumentSerialNo: string;
+  mptCalibrationDate: string;
+  mptMethod: string;
+  mptTypeOfCurrent: string;
+  mptAcYokeLiftingCapacity: string;
+  mptContrastMedium: string;
+  mptMethodOfPreCleaning: string;
+  mptMethodOfApplyingWhiteContrast: string;
+  mptAcYokePoleSpacing: string;
+  mptMagneticMedium: string;
+  mptMethodOfApplyingMagneticMedium: string;
+  mptDevelopmentTime: string;
+  mptInterpretationTime: string;
+  mptLightingEquipment: string;
+  mptPostCleaning: string;
+  // MPT Consumable Details
+  mptWhiteContrast: string;
+  mptWetParticleIronInk: string;
+  mptCustomColumns: string;
   // Condition fields default empty
   pipelineAgeYears: string;
   serviceFluid: string;
@@ -259,9 +286,11 @@ const EMPTY_HEADER: ReportHeader = {
   results: "",
   conclusion: "",
   // Sign-off fields
+  inspectorName: "",
   inspectorDesignation: "",
   secondReviewedByName: "",
   secondReviewedByDesignation: "",
+  approvedByName: "",
   approvedByDesignation: "",
   // DPT fields default empty
   dptDateOfExamination: new Date().toISOString().slice(0, 10),
@@ -286,6 +315,30 @@ const EMPTY_HEADER: ReportHeader = {
   dptInterpretationTime: "",
   dptLightingEquipment: "",
   dptPostCleaning: "",
+  // MPT fields default empty
+  mptDateOfExamination: new Date().toISOString().slice(0, 10),
+  mptTestingStandard: "",
+  mptAcceptanceCriteria: "",
+  mptSurfacePreparation: "",
+  mptSurfaceTemperature: "",
+  mptInstrumentSerialNo: "",
+  mptCalibrationDate: new Date().toISOString().slice(0, 10),
+  mptMethod: "",
+  mptTypeOfCurrent: "",
+  mptAcYokeLiftingCapacity: "",
+  mptContrastMedium: "",
+  mptMethodOfPreCleaning: "",
+  mptMethodOfApplyingWhiteContrast: "",
+  mptAcYokePoleSpacing: "",
+  mptMagneticMedium: "",
+  mptMethodOfApplyingMagneticMedium: "",
+  mptDevelopmentTime: "",
+  mptInterpretationTime: "",
+  mptLightingEquipment: "",
+  mptPostCleaning: "",
+  mptWhiteContrast: "",
+  mptWetParticleIronInk: "",
+  mptCustomColumns: "[]",
   // Condition fields default empty
   pipelineAgeYears: "",
   serviceFluid: "",
@@ -466,6 +519,8 @@ export function PipelineReportFormView() {
   const [customColumns, setCustomColumns] = useState<CustomColumn[]>([]);
   // DPT custom columns parsed from header.dptCustomColumns JSON (DPT reports)
   const [dptCustomColumns, setDptCustomColumns] = useState<CustomColumn[]>([]);
+  // MPT custom columns parsed from header.mptCustomColumns JSON (MPT reports)
+  const [mptCustomColumns, setMptCustomColumns] = useState<CustomColumn[]>([]);
   // Row selection for bulk delete
   const [selectedRowIdxs, setSelectedRowIdxs] = useState<Set<number>>(new Set());
   // Photos for Step 3
@@ -542,9 +597,11 @@ export function PipelineReportFormView() {
           results: r.results ?? "",
           conclusion: r.conclusion ?? "",
           // Sign-off fields
+          inspectorName: r.inspectorName ?? "",
           inspectorDesignation: r.inspectorDesignation ?? "",
           secondReviewedByName: r.secondReviewedByName ?? "",
           secondReviewedByDesignation: r.secondReviewedByDesignation ?? "",
+          approvedByName: r.approvedByName ?? "",
           approvedByDesignation: r.approvedByDesignation ?? "",
           // DPT fields
           dptDateOfExamination: r.dptDateOfExamination ? r.dptDateOfExamination.slice(0, 10) : new Date().toISOString().slice(0, 10),
@@ -569,6 +626,30 @@ export function PipelineReportFormView() {
           dptInterpretationTime: r.dptInterpretationTime ?? "",
           dptLightingEquipment: r.dptLightingEquipment ?? "",
           dptPostCleaning: r.dptPostCleaning ?? "",
+          // MPT fields
+          mptDateOfExamination: r.mptDateOfExamination ? r.mptDateOfExamination.slice(0, 10) : new Date().toISOString().slice(0, 10),
+          mptTestingStandard: r.mptTestingStandard ?? "",
+          mptAcceptanceCriteria: r.mptAcceptanceCriteria ?? "",
+          mptSurfacePreparation: r.mptSurfacePreparation ?? "",
+          mptSurfaceTemperature: r.mptSurfaceTemperature ?? "",
+          mptInstrumentSerialNo: r.mptInstrumentSerialNo ?? "",
+          mptCalibrationDate: r.mptCalibrationDate ? r.mptCalibrationDate.slice(0, 10) : new Date().toISOString().slice(0, 10),
+          mptMethod: r.mptMethod ?? "",
+          mptTypeOfCurrent: r.mptTypeOfCurrent ?? "",
+          mptAcYokeLiftingCapacity: r.mptAcYokeLiftingCapacity ?? "",
+          mptContrastMedium: r.mptContrastMedium ?? "",
+          mptMethodOfPreCleaning: r.mptMethodOfPreCleaning ?? "",
+          mptMethodOfApplyingWhiteContrast: r.mptMethodOfApplyingWhiteContrast ?? "",
+          mptAcYokePoleSpacing: r.mptAcYokePoleSpacing ?? "",
+          mptMagneticMedium: r.mptMagneticMedium ?? "",
+          mptMethodOfApplyingMagneticMedium: r.mptMethodOfApplyingMagneticMedium ?? "",
+          mptDevelopmentTime: r.mptDevelopmentTime ?? "",
+          mptInterpretationTime: r.mptInterpretationTime ?? "",
+          mptLightingEquipment: r.mptLightingEquipment ?? "",
+          mptPostCleaning: r.mptPostCleaning ?? "",
+          mptWhiteContrast: r.mptWhiteContrast ?? "",
+          mptWetParticleIronInk: r.mptWetParticleIronInk ?? "",
+          mptCustomColumns: r.mptCustomColumns ?? "[]",
           // Condition fields (only populated for PIPELINE_CONDITION reports)
           pipelineAgeYears: r.pipelineAgeYears != null ? String(r.pipelineAgeYears) : "",
           serviceFluid: r.serviceFluid ?? "",
@@ -621,16 +702,24 @@ export function PipelineReportFormView() {
           const dcc = JSON.parse(r.dptCustomColumns ?? "[]");
           if (Array.isArray(dcc)) setDptCustomColumns(dcc);
         } catch { setDptCustomColumns([]); }
-        // Load photos for this report
+        // Parse MPT custom columns (MPT reports)
+        try {
+          const mcc = JSON.parse(r.mptCustomColumns ?? "[]");
+          if (Array.isArray(mcc)) setMptCustomColumns(mcc);
+        } catch { setMptCustomColumns([]); }
+        // Load photos for this report — exclude PRIMARY-category photos
+        // (those are shown in the Primary Inspection Photo section, not here)
         if (r.reportPhotos) {
-          setPhotos(r.reportPhotos.map((p: any) => ({
-            id: p.id,
-            fileName: p.fileName,
-            filePath: p.filePath,
-            caption: p.caption ?? "",
-            fileSize: p.fileSize,
-            mimeType: p.mimeType,
-          })));
+          setPhotos(r.reportPhotos
+            .filter((p: any) => p.category !== "PRIMARY")
+            .map((p: any) => ({
+              id: p.id,
+              fileName: p.fileName,
+              filePath: p.filePath,
+              caption: p.caption ?? "",
+              fileSize: p.fileSize,
+              mimeType: p.mimeType,
+            })));
         } else {
           // Also try loading via the photos API
           apiFetch<{ items: any[] }>(`/api/pipeline-inspections/${editingPipelineReportId}/photos`)
@@ -1032,9 +1121,10 @@ export function PipelineReportFormView() {
       // report and sets editingPipelineReportId. For existing reports,
       // it updates the header.
       await saveHeader();
-      // For MPT/Weld Scan placeholders, jump straight to Step 3
+      // For Weld Scan placeholders, jump straight to Step 3
       // (Findings & Photos) since there's no inspection table yet.
-      if (header.reportType === "PIPELINE_MPT" || header.reportType === "PIPELINE_WELD_SCAN") {
+      // MPT now has its own procedure + observation table on Step 2.
+      if (header.reportType === "PIPELINE_WELD_SCAN") {
         setStep(3);
       } else {
         setStep(2);
@@ -1043,11 +1133,13 @@ export function PipelineReportFormView() {
       validateStep2();
       // For PIPELINE_THICKNESS reports, persist the custom columns JSON
       // onto the header before saving. For PIPELINE_DPT, persist the DPT
-      // custom columns.
+      // custom columns. For PIPELINE_MPT, persist the MPT custom columns.
       if (header.reportType === "PIPELINE_THICKNESS") {
         setHeader((h) => ({ ...h, customColumns: JSON.stringify(customColumns) }));
       } else if (header.reportType === "PIPELINE_DPT") {
         setHeader((h) => ({ ...h, dptCustomColumns: JSON.stringify(dptCustomColumns) }));
+      } else if (header.reportType === "PIPELINE_MPT") {
+        setHeader((h) => ({ ...h, mptCustomColumns: JSON.stringify(mptCustomColumns) }));
       }
       await saveHeader();
       setStep(3);
@@ -1065,10 +1157,13 @@ export function PipelineReportFormView() {
         setHeader((h) => ({ ...h, customColumns: JSON.stringify(customColumns) }));
       } else if (header.reportType === "PIPELINE_DPT") {
         setHeader((h) => ({ ...h, dptCustomColumns: JSON.stringify(dptCustomColumns) }));
+      } else if (header.reportType === "PIPELINE_MPT") {
+        setHeader((h) => ({ ...h, mptCustomColumns: JSON.stringify(mptCustomColumns) }));
       }
-      // For MPT/Weld Scan, Step 2 is skipped (they go 1 → 3), so going
+      // For Weld Scan, Step 2 is skipped (they go 1 → 3), so going
       // back from Step 3 lands on Step 1.
-      if (header.reportType === "PIPELINE_MPT" || header.reportType === "PIPELINE_WELD_SCAN") {
+      // MPT now goes through Step 2, so it uses the normal 3 → 2 → 1 flow.
+      if (header.reportType === "PIPELINE_WELD_SCAN") {
         setStep(1);
       } else {
         setStep((step - 1) as 1 | 2 | 3);
@@ -1166,6 +1261,56 @@ export function PipelineReportFormView() {
   }
 
   function setDptCustomColumnValue(idx: number, colId: string, value: string) {
+    setDptObservations((rs) => {
+      const next = [...rs];
+      const row = { ...next[idx] };
+      let vals: Record<string, string> = {};
+      try { vals = JSON.parse(row.customColumnValues || "{}"); } catch {}
+      vals[colId] = value;
+      row.customColumnValues = JSON.stringify(vals);
+      next[idx] = row;
+      return next;
+    });
+  }
+
+  // ─── MPT CUSTOM COLUMN MANAGEMENT ───
+  // Same pattern as DPT custom columns, but uses mptCustomColumns state
+  // and stores values in the same customColumnValues JSON on each row.
+  function addMptCustomColumn() {
+    const name = window.prompt("Enter column name (e.g. 'Weld Length', 'Heat No'):");
+    if (!name || !name.trim()) return;
+    const trimmed = name.trim();
+    if (mptCustomColumns.some((c) => c.name.toLowerCase() === trimmed.toLowerCase())) {
+      toast.error(`A column named "${trimmed}" already exists.`);
+      return;
+    }
+    const unit = window.prompt("Enter unit (e.g. 'mm', '°C', or leave blank):", "") || "";
+    const newCol: CustomColumn = {
+      id: `mptcol_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      name: trimmed,
+      unit: unit.trim(),
+    };
+    setMptCustomColumns((cc) => [...cc, newCol]);
+    toast.success(`Added column "${trimmed}"`);
+  }
+
+  function deleteMptCustomColumn(colId: string) {
+    const col = mptCustomColumns.find((c) => c.id === colId);
+    if (!col) return;
+    if (!window.confirm(`Delete column "${col.name}"? Values in this column will be lost from all MPT rows.`)) return;
+    setMptCustomColumns((cc) => cc.filter((c) => c.id !== colId));
+    toast.success(`Deleted column "${col.name}"`);
+  }
+
+  function getMptCustomColumnValue(row: DptObservationRow, colId: string): string {
+    if (!row.customColumnValues) return "";
+    try {
+      const vals = JSON.parse(row.customColumnValues);
+      return vals[colId] ?? "";
+    } catch { return ""; }
+  }
+
+  function setMptCustomColumnValue(idx: number, colId: string, value: string) {
     setDptObservations((rs) => {
       const next = [...rs];
       const row = { ...next[idx] };
@@ -1570,6 +1715,8 @@ export function PipelineReportFormView() {
       setHeader((h) => ({ ...h, customColumns: JSON.stringify(customColumns) }));
     } else if (header.reportType === "PIPELINE_DPT") {
       setHeader((h) => ({ ...h, dptCustomColumns: JSON.stringify(dptCustomColumns) }));
+    } else if (header.reportType === "PIPELINE_MPT") {
+      setHeader((h) => ({ ...h, mptCustomColumns: JSON.stringify(mptCustomColumns) }));
     }
     if (isEdit) {
       await saveHeader();
@@ -1642,13 +1789,13 @@ export function PipelineReportFormView() {
       <div className="flex items-center gap-2 rounded-md border bg-muted/30 p-3 flex-wrap">
         {[
           { num: 1, label: "Report Details" },
-          { num: 2, label: header.reportType === "PIPELINE_MPT" || header.reportType === "PIPELINE_WELD_SCAN" ? "Findings & Photos" : "Inspection Findings" },
+          { num: 2, label: header.reportType === "PIPELINE_WELD_SCAN" ? "Findings & Photos" : "Inspection Findings" },
           { num: 3, label: "Findings & Photos" },
-        ].filter(s => !(header.reportType === "PIPELINE_MPT" || header.reportType === "PIPELINE_WELD_SCAN") || s.num !== 2).map((s) => {
-          // For MPT/Weld Scan, only show steps 1 and 3 (skipping step 2 which is "Inspection Findings")
+        ].filter(s => header.reportType !== "PIPELINE_WELD_SCAN" || s.num !== 2).map((s) => {
+          // For Weld Scan, only show steps 1 and 3 (skipping step 2)
           // Renumber: step 3 becomes display #2
           let displayNum = s.num;
-          if (header.reportType === "PIPELINE_MPT" || header.reportType === "PIPELINE_WELD_SCAN") {
+          if (header.reportType === "PIPELINE_WELD_SCAN") {
             if (s.num === 3) displayNum = 2;
           }
           const isActive = step === s.num;
@@ -3164,23 +3311,290 @@ export function PipelineReportFormView() {
       </>
       )} {/* end step 2 — DPT */}
 
-      {/* ═══ STEP 2 PLACEHOLDER: MPT / WELD SCAN ═══
-          These report types are not yet fully implemented. The user can
-          still create the report, fill the header (Step 1), and proceed
-          to Findings & Photos (Step 3). They cannot accidentally land on
-          Step 2 for these types because proceedToNext jumps from Step 1
-          straight to Step 3. This block only renders if the user lands
-          on Step 2 directly (e.g. via the URL), and shows a notice.
-      */}
-      {step === 2 && (header.reportType === "PIPELINE_MPT" || header.reportType === "PIPELINE_WELD_SCAN") && (
+      {/* ═══ STEP 2 (MPT): MAGNETIC PARTICLE TESTING PROCEDURE ═══ */}
+      {step === 2 && header.reportType === "PIPELINE_MPT" && (
+      <>
+      {/* 5. MAGNETIC PARTICLE TESTING — Parameters */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Magnet className="h-4 w-4 text-orange-700" />
+            5.1 Magnetic Particle Testing Parameters
+          </CardTitle>
+          <CardDescription>
+            Record the MPT inspection parameters. All fields are editable.
+            Date fields use a calendar picker.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <tbody>
+                {/* Date of Examination — calendar picker */}
+                <tr className="border-b border-zinc-200">
+                  <td className="bg-orange-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/3">
+                    Date of Examination
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <Input type="date" className="h-8 text-sm"
+                      value={header.mptDateOfExamination}
+                      onChange={(e) => updateHeader("mptDateOfExamination", e.target.value)}
+                    />
+                  </td>
+                </tr>
+                {/* Typeable text fields */}
+                {([
+                  ["Testing Standard", "mptTestingStandard", "e.g. ASME Section V Article 7"],
+                  ["Acceptance Criteria", "mptAcceptanceCriteria", "e.g. ASME Section VIII Div 1 Appendix 6"],
+                  ["Surface preparation", "mptSurfacePreparation", "e.g. Cleaned with solvent, wire brushed"],
+                  ["Surface temperature", "mptSurfaceTemperature", "e.g. 28 °C"],
+                  ["Type of Instrument / SI.No", "mptInstrumentSerialNo", "e.g. SIMS / MPT – AC Yoke / 201501012123"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-orange-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+                {/* Instrument / Calibration Date — calendar picker */}
+                <tr className="border-b border-zinc-200">
+                  <td className="bg-orange-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                    Instrument / Calibration Date
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <Input type="date" className="h-8 text-sm"
+                      value={header.mptCalibrationDate}
+                      onChange={(e) => updateHeader("mptCalibrationDate", e.target.value)}
+                    />
+                  </td>
+                </tr>
+                {/* More typeable text fields */}
+                {([
+                  ["MPT Method", "mptMethod", "e.g. Wet Continuous"],
+                  ["Type of Current", "mptTypeOfCurrent", "e.g. AC"],
+                  ["AC Yoke Lifting Capacity", "mptAcYokeLiftingCapacity", "e.g. 5 kg / 50 N"],
+                  ["Contrast Medium", "mptContrastMedium", "e.g. White contrast"],
+                  ["Method of Pre cleaning", "mptMethodOfPreCleaning", "e.g. Solvent wiping"],
+                  ["Method of applying White Contrast", "mptMethodOfApplyingWhiteContrast", "e.g. Spray"],
+                  ["AC Yoke Pole Spacing", "mptAcYokePoleSpacing", "e.g. 150 mm"],
+                  ["Magnetic Medium", "mptMagneticMedium", "e.g. Wet particle iron ink"],
+                  ["Method of applying Magnetic Medium", "mptMethodOfApplyingMagneticMedium", "e.g. Spray"],
+                  ["Development time", "mptDevelopmentTime", "e.g. 5 minutes"],
+                  ["Interpretation time", "mptInterpretationTime", "e.g. 10 minutes"],
+                  ["Lightning Equipment", "mptLightingEquipment", "e.g. LED torch ≥ 1000 lux"],
+                  ["Post cleaning", "mptPostCleaning", "e.g. Solvent wipe"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-orange-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Consumable Details */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Magnet className="h-4 w-4 text-orange-700" />
+            Consumable Details
+          </CardTitle>
+          <CardDescription>
+            Enter the actual make, product name, lot number, expiry date and
+            other relevant details. All fields are editable.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <tbody>
+                {([
+                  ["White Contrast", "mptWhiteContrast", "e.g. Make – ORION WCM-1"],
+                  ["Wet Particle Iron Ink", "mptWetParticleIronInk", "e.g. Make – ORION MPI-14"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-orange-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/3">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* MPT Observation Table — reuses the DPT observation infrastructure */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base">MPT Inspection Results</CardTitle>
+              <CardDescription>
+                Add one row per inspection point. Serial numbers are auto-generated.
+                Select Accept or Reject for each row.
+              </CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={addDptObservation} size="sm">
+                <Plus className="mr-1 h-4 w-4" /> Add Row
+              </Button>
+              <Button onClick={addMptCustomColumn} size="sm" variant="outline">
+                <Columns3 className="mr-1 h-4 w-4" /> Add Column
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-orange-700 text-white">
+                <tr>
+                  <th className="border border-orange-800 px-2 py-2 text-center" style={{ minWidth: 40 }}>Sl. No</th>
+                  <th className="border border-orange-800 px-2 py-2 text-center" style={{ minWidth: 200 }}>Description</th>
+                  <th className="border border-orange-800 px-2 py-2 text-center" style={{ minWidth: 100 }}>Weld Type</th>
+                  <th className="border border-orange-800 px-2 py-2 text-center" style={{ minWidth: 80 }}>Result</th>
+                  {mptCustomColumns.map((cc) => (
+                    <th key={cc.id} className="border border-orange-800 px-2 py-2 text-center" style={{ minWidth: 90 }}>
+                      <div className="flex items-center justify-center gap-1">
+                        <span>{cc.name}</span>
+                        {cc.unit && <span className="text-[9px] opacity-70">({cc.unit})</span>}
+                        <button onClick={() => deleteMptCustomColumn(cc.id)} className="ml-1 text-orange-300 hover:text-orange-100" title={`Delete "${cc.name}"`}>
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </th>
+                  ))}
+                  <th className="border border-orange-800 px-2 py-2 text-center" style={{ minWidth: 200 }}>Remarks</th>
+                  <th className="border border-orange-800 px-2 py-2 text-center" style={{ minWidth: 80 }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dptObservations.length === 0 && (
+                  <tr>
+                    <td colSpan={6 + mptCustomColumns.length} className="text-center py-6 text-muted-foreground border border-zinc-300">
+                      No MPT observations yet. Click <strong>Add Row</strong> to begin.
+                    </td>
+                  </tr>
+                )}
+                {dptObservations.map((obs, idx) => (
+                  <tr key={idx} className="hover:bg-muted/30">
+                    <td className="border border-zinc-300 p-1 text-center font-mono tabular-nums">{obs.serialNo}</td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input className="h-8 text-xs" value={obs.description}
+                        onChange={(e) => updateDptObservation(idx, { description: e.target.value })}
+                        placeholder="Description of inspected area"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input className="h-8 text-xs" value={obs.weldType}
+                        onChange={(e) => updateDptObservation(idx, { weldType: e.target.value })}
+                        placeholder="e.g. Butt Weld"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Select value={obs.result}
+                        onValueChange={(v) => updateDptObservation(idx, { result: v as "Accept" | "Reject" })}
+                      >
+                        <SelectTrigger className={`h-8 text-xs font-bold ${obs.result === "Reject" ? "text-red-700" : "text-emerald-700"}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Accept" className="text-emerald-700">Accept</SelectItem>
+                          <SelectItem value="Reject" className="text-red-700">Reject</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    {mptCustomColumns.map((cc) => (
+                      <td key={cc.id} className="border border-zinc-300 p-1 text-center">
+                        <Input type="text" className="h-8 text-xs text-center"
+                          value={getMptCustomColumnValue(obs, cc.id)}
+                          onChange={(e) => setMptCustomColumnValue(idx, cc.id, e.target.value)}
+                          placeholder={cc.unit || "—"}
+                        />
+                      </td>
+                    ))}
+                    <td className="border border-zinc-300 p-1">
+                      <Textarea rows={1} className="text-xs min-h-[32px] py-1"
+                        value={obs.remarks}
+                        onChange={(e) => updateDptObservation(idx, { remarks: e.target.value })}
+                        placeholder="Observations, details..."
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <div className="flex flex-col gap-1">
+                        <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]"
+                          onClick={() => saveDptObservation(idx)} disabled={saving} title="Save row"
+                        >
+                          <Save className="h-3 w-3" />
+                        </Button>
+                        <Button size="sm" variant="ghost"
+                          className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+                          onClick={() => deleteDptObservationApi(idx)} title="Delete row"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Step 2 navigation */}
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" onClick={goPrevious}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> Previous
+        </Button>
+        <Button variant="ghost" onClick={saveDraft} disabled={saving}>
+          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+          Save Draft
+        </Button>
+        <Button onClick={proceedToNext} disabled={saving}>
+          Proceed to Next <ArrowRight className="ml-2 h-4 w-4" />
+        </Button>
+      </div>
+      </>
+      )}
+
+      {/* ═══ STEP 2 PLACEHOLDER: WELD SCAN (only) ═══ */}
+      {step === 2 && header.reportType === "PIPELINE_WELD_SCAN" && (
       <>
         <Alert className="border-amber-200 bg-amber-50">
           <ShieldAlert className="h-4 w-4 text-amber-700" />
           <AlertTitle className="text-amber-900">
-            {header.reportType === "PIPELINE_MPT" ? "MPT report workflow — coming soon" : "Weld Scan report workflow — coming soon"}
+            Weld Scan report workflow — coming soon
           </AlertTitle>
           <AlertDescription className="text-amber-900">
-            The detailed inspection workflow for {header.reportType === "PIPELINE_MPT" ? "Magnetic Particle Testing" : "Weld Scan"} is
+            The detailed inspection workflow for Weld Scan is
             not yet available. You can still fill in the report header
             (Step 1), upload photographs and certificates (Step 3), and
             submit the report for review. The full inspection procedure
@@ -3261,17 +3675,17 @@ export function PipelineReportFormView() {
               />
             </div>
 
-            {/* H. Sign-off fields */}
+            {/* H. Sign-off fields — ALL fields are editable text inputs */}
             <div className="rounded-md border border-zinc-200 p-3 space-y-3 bg-muted/20">
               <Label className="text-sm font-semibold block">Sign-Off Details</Label>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <div className="space-y-2">
                   <Label className="text-xs">Inspected By — Name</Label>
                   <Input
-                    value={user?.name ?? ""}
-                    readOnly
-                    className="text-sm bg-muted/30"
-                    placeholder="Auto-filled from session"
+                    value={header.inspectorName}
+                    onChange={(e) => updateHeader("inspectorName", e.target.value)}
+                    placeholder="e.g. Rahul Sharma"
+                    className="text-sm"
                   />
                   <Label className="text-xs">Inspected By — Designation</Label>
                   <Input
@@ -3300,9 +3714,10 @@ export function PipelineReportFormView() {
                 <div className="space-y-2">
                   <Label className="text-xs">Approved By — Name</Label>
                   <Input
-                    value={header.approvedByDesignation ? `Admin (set during approval)` : "Set during admin approval"}
-                    readOnly
-                    className="text-sm bg-muted/30"
+                    value={header.approvedByName}
+                    onChange={(e) => updateHeader("approvedByName", e.target.value)}
+                    placeholder="e.g. Priya Admin"
+                    className="text-sm"
                   />
                   <Label className="text-xs">Approved By — Designation</Label>
                   <Input
@@ -3378,13 +3793,10 @@ export function PipelineReportFormView() {
                     <div key={idx} className="border rounded-md overflow-hidden">
                       <div className="relative aspect-video bg-zinc-100">
                         {photo.filePath ? (
-                          <img
+                          <AuthImage
                             src={`/api/pipeline-inspections/${editingPipelineReportId}/photos/${photo.id}/raw`}
                             alt={photo.caption || photo.fileName}
                             className="w-full h-full object-cover"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).style.display = "none";
-                            }}
                           />
                         ) : (
                           <div className="flex items-center justify-center h-full text-muted-foreground text-xs">

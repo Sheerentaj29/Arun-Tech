@@ -271,7 +271,8 @@ model PipelineInspection {
   revisionNumber           Int      @default(1)
 
   inspectorId              String
-  inspectorName            String   // snapshot at approval time
+  inspectorName            String   // editable — inspector's name as typed by the user
+  approvedByName           String?  // editable — approver's name as typed by the user (also auto-filled during approval if empty)
   findingsSummary          String?  // overall findings section
   comments                 String?  // general comments
   // Large multiline inspection description for Step 3 of the form
@@ -372,6 +373,36 @@ model PipelineInspection {
   dptInterpretationTime             String? // Interpretation Time
   dptLightingEquipment              String? // Lighting Equipment
   dptPostCleaning                   String? // Post Cleaning
+
+  // ─── MPT (MAGNETIC PARTICLE TESTING) PROCEDURE FIELDS ───
+  // Populated when reportType = PIPELINE_MPT. Two-column
+  // "MAGNETIC PARTICLE TESTING PARAMETERS" section in the PDF.
+  // All values are typeable/editable unless noted.
+  mptDateOfExamination              DateTime? // Date of Examination (calendar picker)
+  mptTestingStandard                String? // Testing Standard
+  mptAcceptanceCriteria             String? // Acceptance Criteria
+  mptSurfacePreparation             String? // Surface preparation
+  mptSurfaceTemperature             String? // Surface temperature
+  mptInstrumentSerialNo             String? // Type of Instrument / SI.No
+  mptCalibrationDate                DateTime? // Instrument / Calibration Date (calendar picker)
+  mptMethod                         String? // MPT Method
+  mptTypeOfCurrent                  String? // Type of Current
+  mptAcYokeLiftingCapacity          String? // AC Yoke Lifting Capacity
+  mptContrastMedium                 String? // Contrast Medium
+  mptMethodOfPreCleaning            String? // Method of Pre cleaning
+  mptMethodOfApplyingWhiteContrast  String? // Method of applying White Contrast
+  mptAcYokePoleSpacing              String? // AC Yoke Pole Spacing
+  mptMagneticMedium                 String? // Magnetic Medium
+  mptMethodOfApplyingMagneticMedium String? // Method of applying Magnetic Medium
+  mptDevelopmentTime                String? // Development time
+  mptInterpretationTime             String? // Interpretation time
+  mptLightingEquipment              String? // Lightning Equipment
+  mptPostCleaning                   String? // Post cleaning
+  // MPT Consumable Details
+  mptWhiteContrast                  String? // White Contrast (consumable)
+  mptWetParticleIronInk             String? // Wet Particle Iron Ink (consumable)
+  // MPT custom columns for the observation table
+  mptCustomColumns                  String?  // JSON: [{id, name, unit}]
 
   isDemo                   Boolean  @default(false)
   createdAt                DateTime @default(now())
@@ -548,6 +579,12 @@ model ReportPhoto {
   mimeType             String   // image/jpeg, image/png, etc.
   caption              String?  // optional: "Overall pipeline view", "Corrosion observed", etc.
   sortOrder            Int      @default(0)
+  // Category: "PRIMARY" = primary inspection photo (first page of PDF),
+  //           "INSPECTION" = regular inspection photo (gallery section).
+  // When the primary photo is uploaded via /primary-photo, the ReportPhoto
+  // row is tagged PRIMARY so it can be excluded from the Inspection
+  // Photographs gallery. Regular photo uploads are tagged INSPECTION.
+  category             String   @default("INSPECTION")
   uploadedById         String?
   uploadedByName       String?
   createdAt            DateTime @default(now())
@@ -555,6 +592,7 @@ model ReportPhoto {
   pipelineInspection PipelineInspection @relation(fields: [pipelineInspectionId], references: [id], onDelete: Cascade)
 
   @@index([pipelineInspectionId])
+  @@index([category])
 }
 
 // =====================================================

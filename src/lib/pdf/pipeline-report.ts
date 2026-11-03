@@ -425,7 +425,12 @@ export async function generatePipelineReportPdf(
   const measurements = input.measurements;
   const visualObservations =
     input.report.visualObservations ?? (report as any).visualObservations ?? [];
-  const allPhotos = input.photos ?? input.report.reportPhotos ?? [];
+  // Exclude PRIMARY-category photos from the Inspection Photographs gallery.
+  // PRIMARY photos are shown on the first page in their designated position;
+  // they must NOT also appear in the gallery section.
+  const allPhotos = (input.photos ?? input.report.reportPhotos ?? []).filter(
+    (p: any) => p.category !== "PRIMARY",
+  );
   const customCols = getCustomColumns(report);
   const linkedDrawings = input.linkedDrawings ?? (report as any).linkedDrawings ?? [];
   const certificates: Array<{
@@ -776,7 +781,8 @@ export async function generatePipelineReportPdf(
       },
       {
         label: "Approved By",
-        name: report.approver?.name ?? "—",
+        // Use the editable approvedByName field; fall back to approver.name
+        name: (report as any).approvedByName ?? report.approver?.name ?? "—",
         designation: (report as any).approvedByDesignation ?? "",
         dateVal: report.approvedAt
           ? new Date(report.approvedAt).toISOString().slice(0, 10)
@@ -1367,27 +1373,188 @@ export async function generatePipelineReportPdf(
       doc.fillColor("#000");
       y += dptRowH;
     }
-  } else if (reportType === "PIPELINE_MPT" || reportType === "PIPELINE_WELD_SCAN") {
-    // ─── MPT / WELD SCAN PLACEHOLDER ───
-    // These report types are not yet fully implemented. Render a clear
-    // notice on the page so the PDF still has a sensible body section
-    // (instead of jumping from cover / findings straight to photos).
+  } else if (reportType === "PIPELINE_MPT") {
+    // ─── MPT (MAGNETIC PARTICLE TESTING) REPORT BODY ───
+    // Renders, in this order:
+    //   1. "5.1 Magnetic Particle Testing Parameters" — two-column table
+    //      with Date of Examination + 20 typeable parameter fields.
+    //   2. "Consumable Details" — two-column table with 2 fields.
+    //   3. MPT Inspection Results — observation table with auto-serial
+    //      numbers, Accept / Reject result, custom columns.
+    startBodyOnFreshPage(160);
+
+    const mptReport = report as any;
+
+    // ─── 5.1 MAGNETIC PARTICLE TESTING PARAMETERS ───
+    {
+      const procRowH = 18;
+      if (y + 24 + procRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 6;
+      doc.font(FONT_BOLD).fontSize(11).fillColor("#7c2d12");
+      doc.text("5.1 Magnetic Particle Testing Parameters", MARGIN, y);
+      doc.fillColor("#000");
+      y += 18;
+
+      const mptParams: Array<[string, string | null]> = [
+        ["Date of Examination", mptReport.mptDateOfExamination
+          ? new Date(mptReport.mptDateOfExamination).toISOString().slice(0, 10)
+          : null],
+        ["Testing Standard", mptReport.mptTestingStandard],
+        ["Acceptance Criteria", mptReport.mptAcceptanceCriteria],
+        ["Surface preparation", mptReport.mptSurfacePreparation],
+        ["Surface temperature", mptReport.mptSurfaceTemperature],
+        ["Type of Instrument / SI.No", mptReport.mptInstrumentSerialNo],
+        ["Instrument / Calibration Date", mptReport.mptCalibrationDate
+          ? new Date(mptReport.mptCalibrationDate).toISOString().slice(0, 10)
+          : null],
+        ["MPT Method", mptReport.mptMethod],
+        ["Type of Current", mptReport.mptTypeOfCurrent],
+        ["AC Yoke Lifting Capacity", mptReport.mptAcYokeLiftingCapacity],
+        ["Contrast Medium", mptReport.mptContrastMedium],
+        ["Method of Pre cleaning", mptReport.mptMethodOfPreCleaning],
+        ["Method of applying White Contrast", mptReport.mptMethodOfApplyingWhiteContrast],
+        ["AC Yoke Pole Spacing", mptReport.mptAcYokePoleSpacing],
+        ["Magnetic Medium", mptReport.mptMagneticMedium],
+        ["Method of applying Magnetic Medium", mptReport.mptMethodOfApplyingMagneticMedium],
+        ["Development time", mptReport.mptDevelopmentTime],
+        ["Interpretation time", mptReport.mptInterpretationTime],
+        ["Lightning Equipment", mptReport.mptLightingEquipment],
+        ["Post cleaning", mptReport.mptPostCleaning],
+      ];
+
+      const labelW = (pageW - 2 * MARGIN) * 0.38;
+      const valueW = (pageW - 2 * MARGIN) - labelW;
+      const usableW = pageW - 2 * MARGIN;
+
+      for (const [label, value] of mptParams) {
+        if (y + procRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+        doc.rect(MARGIN, y, labelW, procRowH).fill("#fff7ed");
+        doc.rect(MARGIN + labelW, y, valueW, procRowH).fill("#ffffff");
+        doc.rect(MARGIN, y, usableW, procRowH).stroke(TABLE_OUTER_BORDER);
+        doc.moveTo(MARGIN + labelW, y).lineTo(MARGIN + labelW, y + procRowH).stroke(TABLE_INNER_BORDER);
+        doc.font(FONT_BOLD).fontSize(8.5).fillColor("#000");
+        doc.text(label, MARGIN + 4, y + 5, { width: labelW - 8 });
+        doc.font(FONT_REGULAR).fontSize(8.5).fillColor("#000");
+        const valueText = value && value.trim() ? value.trim() : "—";
+        const maxW = valueW - 8;
+        let displayText = valueText;
+        if (doc.widthOfString(displayText) > maxW) {
+          const charsToKeep = Math.floor((maxW / Math.max(1, doc.widthOfString(displayText))) * displayText.length);
+          displayText = displayText.slice(0, Math.max(1, charsToKeep - 1)) + "…";
+        }
+        doc.text(displayText, MARGIN + labelW + 4, y + 5, { width: maxW });
+        y += procRowH;
+      }
+      y += 8;
+    }
+
+    // ─── CONSUMABLE DETAILS ───
+    {
+      const consRowH = 18;
+      if (y + 24 + consRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 4;
+      doc.font(FONT_BOLD).fontSize(11).fillColor("#7c2d12");
+      doc.text("Consumable Details", MARGIN, y);
+      doc.fillColor("#000");
+      y += 18;
+
+      const consumableRows: Array<[string, string | null]> = [
+        ["White Contrast", mptReport.mptWhiteContrast],
+        ["Wet Particle Iron Ink", mptReport.mptWetParticleIronInk],
+      ];
+
+      const labelW = (pageW - 2 * MARGIN) * 0.38;
+      const valueW = (pageW - 2 * MARGIN) - labelW;
+      const usableW = pageW - 2 * MARGIN;
+
+      for (const [label, value] of consumableRows) {
+        if (y + consRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+        doc.rect(MARGIN, y, labelW, consRowH).fill("#fff7ed");
+        doc.rect(MARGIN + labelW, y, valueW, consRowH).fill("#ffffff");
+        doc.rect(MARGIN, y, usableW, consRowH).stroke(TABLE_OUTER_BORDER);
+        doc.moveTo(MARGIN + labelW, y).lineTo(MARGIN + labelW, y + consRowH).stroke(TABLE_INNER_BORDER);
+        doc.font(FONT_BOLD).fontSize(8.5).fillColor("#000");
+        doc.text(label, MARGIN + 4, y + 5, { width: labelW - 8 });
+        doc.font(FONT_REGULAR).fontSize(8.5).fillColor("#000");
+        const valueText = value && value.trim() ? value.trim() : "—";
+        const maxW = valueW - 8;
+        let displayText = valueText;
+        if (doc.widthOfString(displayText) > maxW) {
+          const charsToKeep = Math.floor((maxW / Math.max(1, doc.widthOfString(displayText))) * displayText.length);
+          displayText = displayText.slice(0, Math.max(1, charsToKeep - 1)) + "…";
+        }
+        doc.text(displayText, MARGIN + labelW + 4, y + 5, { width: maxW });
+        y += consRowH;
+      }
+      y += 10;
+    }
+
+    // ─── MPT INSPECTION RESULTS TABLE ───
+    // Reuses the same DPT observation infrastructure (the DptObservation
+    // model and API are shared between DPT and MPT reports).
+    {
+      const mptObs = mptReport.dptObservations ?? [];
+      let mptCustomCols: Array<{ id: string; name: string; unit: string }> = [];
+      try {
+        const cc = JSON.parse(mptReport.mptCustomColumns ?? "[]");
+        if (Array.isArray(cc)) mptCustomCols = cc;
+      } catch {}
+
+      const headerH = 36;
+      const rowH = 28;
+      const slColW = 40;
+      const descColW = 200;
+      const weldColW = 80;
+      const resultColW = 60;
+      const customColW = 60;
+      const fixedW = slColW + descColW + weldColW + resultColW;
+      const customTotalW = mptCustomCols.length * customColW;
+      const remarksW = Math.max(100, pageW - 2 * MARGIN - fixedW - customTotalW);
+      const colWidths = [slColW, descColW, weldColW, resultColW, ...mptCustomCols.map(() => customColW), remarksW];
+      const colHeaders = ["Sl.\nNo", "Description", "Weld\nType", "Result", ...mptCustomCols.map(c => c.name + (c.unit ? `\n(${c.unit})` : "")), "Remarks"];
+
+      // Section heading — ensure heading + table header + first row fit together
+      if (y + 24 + headerH + rowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 4;
+      doc.font(FONT_BOLD).fontSize(11).fillColor("#7c2d12");
+      doc.text("MPT Inspection Results", MARGIN, y);
+      doc.fillColor("#000");
+      y += 16;
+
+      if (y + headerH + rowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      drawDptTableHeader(doc, colHeaders, colWidths, y, pageW);
+      y += headerH;
+
+      for (const obs of mptObs) {
+        if (y + rowH > pageMaxY) {
+          addNewPage();
+          drawDptTableHeader(doc, colHeaders, colWidths, MARGIN, pageW);
+          y = MARGIN + headerH;
+        }
+        drawDptRow(doc, obs, colHeaders, colWidths, y, mptCustomCols);
+        y += rowH;
+      }
+
+      if (mptObs.length === 0) {
+        doc.font(FONT_REGULAR).fontSize(8).fillColor("#666");
+        doc.rect(MARGIN, y, pageW - 2 * MARGIN, rowH).stroke("#bbb");
+        doc.text("No MPT observations recorded.", MARGIN + 4, y + 9, { width: pageW - 2 * MARGIN - 8, align: "center" });
+        doc.fillColor("#000");
+        y += rowH;
+      }
+    }
+  } else if (reportType === "PIPELINE_WELD_SCAN") {
+    // ─── WELD SCAN PLACEHOLDER ───
     startBodyOnFreshPage(80);
     if (y + 60 > pageMaxY) { addNewPage(); y = MARGIN; }
     y += 10;
     doc.font(FONT_BOLD).fontSize(11).fillColor("#000");
-    doc.text(
-      reportType === "PIPELINE_MPT"
-        ? "Magnetic Particle Testing — Inspection Procedure"
-        : "Weld Scan — Inspection Procedure",
-      MARGIN, y,
-    );
+    doc.text("Weld Scan — Inspection Procedure", MARGIN, y);
     y += 18;
     doc.font(FONT_REGULAR).fontSize(9).fillColor("#444");
     const placeholderText =
       "The detailed inspection procedure and observation table for " +
-      (reportType === "PIPELINE_MPT" ? "Magnetic Particle Testing" : "Weld Scan") +
-      " will be added in a future update. This report contains the header " +
+      "Weld Scan will be added in a future update. This report contains the header " +
       "details, inspection photographs, and certification documents recorded " +
       "for this inspection. Please refer to the report header, photographs, " +
       "and certificates for the inspection details.";

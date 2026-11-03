@@ -45,17 +45,14 @@ const OPTIONS: TypeOption[] = [
   {
     type: "PIPELINE_MPT",
     title: "MPT – Magnetic Particle Testing",
-    subtitle: "Magnetic particle inspection (coming soon)",
+    subtitle: "Magnetic particle inspection with Accept/Reject results",
     description:
       "Magnetic Particle Testing report for surface and near-surface flaw " +
-      "detection in ferromagnetic materials. The detailed MPT workflow — " +
-      "including magnetising equipment, particle medium, inspection " +
-      "parameters, and observation table — will be available shortly. " +
-      "You can create a placeholder report now and complete the inspection " +
-      "details later.",
+      "detection in ferromagnetic materials. Includes MPT parameters, " +
+      "consumable details, and an editable observation table with " +
+      "Accept / Reject results.",
     icon: Magnet,
     accent: "border-orange-500 bg-orange-50 hover:bg-orange-100",
-    comingSoon: true,
   },
   {
     type: "PIPELINE_WELD_SCAN",
