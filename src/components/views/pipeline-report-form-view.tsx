@@ -459,8 +459,9 @@ export function PipelineReportFormView() {
   const [reportStatus, setReportStatus] = useState<string>("Draft");
 
   // ─── Step navigation state ───
-  // 4 steps: Report Details → Engineering Drawings → Measurements → Findings & Photos
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  // 3 steps: Report Details → Inspection Findings → Findings & Photos
+  // (Engineering Drawings are part of Step 1 for report types that use them)
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   // Custom columns parsed from header.customColumns JSON (thickness reports)
   const [customColumns, setCustomColumns] = useState<CustomColumn[]>([]);
   // DPT custom columns parsed from header.dptCustomColumns JSON (DPT reports)
@@ -1014,14 +1015,12 @@ export function PipelineReportFormView() {
     return true;
   }
 
-  // Report types that DO NOT have an Engineering Drawings step. They skip
-  // straight from Step 1 (Report Details) to Step 3 (Inspection Findings).
-  // DPT reports explicitly do not include drawing uploads (per spec);
-  // MPT and Weld Scan are placeholders and likewise have no drawings yet.
-  const SKIP_DRAWINGS_STEP: boolean =
-    header.reportType === "PIPELINE_DPT" ||
-    header.reportType === "PIPELINE_MPT" ||
-    header.reportType === "PIPELINE_WELD_SCAN";
+  // Report types that include Engineering Drawings as part of Step 1.
+  // DPT/MPT/Weld Scan do NOT have drawings.
+  const INCLUDES_DRAWINGS: boolean =
+    header.reportType === "PIPELINE_THICKNESS" ||
+    header.reportType === "PIPELINE_VISUAL" ||
+    header.reportType === "PIPELINE_CONDITION";
 
   async function proceedToNext() {
     if (step === 1) {
@@ -1033,39 +1032,27 @@ export function PipelineReportFormView() {
       // report and sets editingPipelineReportId. For existing reports,
       // it updates the header.
       await saveHeader();
-      // For DPT/MPT/Weld Scan: skip the Engineering Drawings step
-      // (DPT explicitly has no drawings; MPT/Weld Scan placeholders).
-      // For PIPELINE_CONDITION: also skip drawings (condition has no
-      // drawings either — it's a single-instance assessment form).
-      if (SKIP_DRAWINGS_STEP || header.reportType === "PIPELINE_CONDITION") {
-        // For MPT / Weld Scan placeholders, jump straight to Step 4
-        // (Findings & Photos) since there's no inspection table yet.
-        if (header.reportType === "PIPELINE_MPT" || header.reportType === "PIPELINE_WELD_SCAN") {
-          setStep(4);
-        } else {
-          setStep(3);
-        }
+      // For MPT/Weld Scan placeholders, jump straight to Step 3
+      // (Findings & Photos) since there's no inspection table yet.
+      if (header.reportType === "PIPELINE_MPT" || header.reportType === "PIPELINE_WELD_SCAN") {
+        setStep(3);
       } else {
         setStep(2);
       }
     } else if (step === 2) {
-      // Engineering Drawings step — no validation needed (drawings are optional)
-      // Header is already saved from Step 1; no need to re-save here.
-      setStep(3);
-    } else if (step === 3) {
       validateStep2();
       // For PIPELINE_THICKNESS reports, persist the custom columns JSON
       // onto the header before saving. For PIPELINE_DPT, persist the DPT
-      // custom columns. Other report types don't use custom columns, but
-      // saving the header still picks up any edits the user made on Step 3.
+      // custom columns.
       if (header.reportType === "PIPELINE_THICKNESS") {
         setHeader((h) => ({ ...h, customColumns: JSON.stringify(customColumns) }));
       } else if (header.reportType === "PIPELINE_DPT") {
         setHeader((h) => ({ ...h, dptCustomColumns: JSON.stringify(dptCustomColumns) }));
       }
       await saveHeader();
-      setStep(4);
+      setStep(3);
     }
+    // step === 3 is the final step (Findings & Photos) — no "next" beyond it.
     if (typeof window !== "undefined") {
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
@@ -1079,17 +1066,12 @@ export function PipelineReportFormView() {
       } else if (header.reportType === "PIPELINE_DPT") {
         setHeader((h) => ({ ...h, dptCustomColumns: JSON.stringify(dptCustomColumns) }));
       }
-      // For DPT/MPT/Weld Scan/Condition, we skipped the drawings step on
-      // the way in — so going back from Step 3 or 4 should land on Step 1
-      // (or Step 3 if going back from Step 4 on a DPT report).
-      if (SKIP_DRAWINGS_STEP || header.reportType === "PIPELINE_CONDITION") {
-        if (step === 4 && header.reportType !== "PIPELINE_MPT" && header.reportType !== "PIPELINE_WELD_SCAN") {
-          setStep(3);
-        } else {
-          setStep(1);
-        }
+      // For MPT/Weld Scan, Step 2 is skipped (they go 1 → 3), so going
+      // back from Step 3 lands on Step 1.
+      if (header.reportType === "PIPELINE_MPT" || header.reportType === "PIPELINE_WELD_SCAN") {
+        setStep(1);
       } else {
-        setStep((step - 1) as 1 | 2 | 3 | 4);
+        setStep((step - 1) as 1 | 2 | 3);
       }
       if (typeof window !== "undefined") {
         window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1654,53 +1636,25 @@ export function PipelineReportFormView() {
       </div>
 
       {/* ─── Step indicator ───
-          Fixed labels (correct content for each step):
-            Step 1 → Report Details
-            Step 2 → Engineering Drawings  (drawing uploads — skipped for DPT/MPT/Weld Scan)
-            Step 3 → Inspection Findings   (measurement table / DPT observations / etc.)
-            Step 4 → Findings & Photos     (description, observations, results, conclusion, photos, certificates)
-          Previously Step 2 was labeled "Inspection Findings" and Step 3 was
-          labeled "Engineering Drawings" — those labels were swapped relative
-          to the actual content rendered under each step.
+          3 steps: Report Details → Inspection Findings → Findings & Photos
+          (Engineering Drawings are part of Step 1 for report types that use them)
       */}
       <div className="flex items-center gap-2 rounded-md border bg-muted/30 p-3 flex-wrap">
-        {[1, 2, 3, 4].map((s) => {
-          // Hide the Engineering Drawings step in the indicator for report
-          // types that skip it (DPT / MPT / Weld Scan / Condition). The
-          // user goes 1 → 3 → 4 directly, but the indicator should still
-          // show the three remaining steps in order. We renumber visually.
-          const skipDrawings =
-            SKIP_DRAWINGS_STEP || header.reportType === "PIPELINE_CONDITION";
-          // Map logical step number → label, skipping Engineering Drawings
-          // when the report type doesn't use drawings.
-          const labelForStep = (s: number): string => {
-            if (s === 1) return "Report Details";
-            if (s === 2) return "Engineering Drawings";
-            if (s === 3) return "Inspection Findings";
-            return "Findings & Photos";
-          };
-          // For report types without drawings, collapse Step 2 visually:
-          //   actual step 1 → shown as 1
-          //   actual step 3 → shown as 2
-          //   actual step 4 → shown as 3
-          // For MPT/Weld Scan placeholders that also skip Step 3:
-          //   actual step 1 → shown as 1
-          //   actual step 4 → shown as 2
-          const skipFindings =
-            header.reportType === "PIPELINE_MPT" || header.reportType === "PIPELINE_WELD_SCAN";
-          let displayNum = s;
-          if (skipDrawings && skipFindings) {
-            if (s === 2 || s === 3) return null; // hide both
-            if (s === 4) displayNum = 2;
-          } else if (skipDrawings) {
-            if (s === 2) return null; // hide drawings step
-            if (s === 3) displayNum = 2;
-            if (s === 4) displayNum = 3;
+        {[
+          { num: 1, label: "Report Details" },
+          { num: 2, label: header.reportType === "PIPELINE_MPT" || header.reportType === "PIPELINE_WELD_SCAN" ? "Findings & Photos" : "Inspection Findings" },
+          { num: 3, label: "Findings & Photos" },
+        ].filter(s => !(header.reportType === "PIPELINE_MPT" || header.reportType === "PIPELINE_WELD_SCAN") || s.num !== 2).map((s) => {
+          // For MPT/Weld Scan, only show steps 1 and 3 (skipping step 2 which is "Inspection Findings")
+          // Renumber: step 3 becomes display #2
+          let displayNum = s.num;
+          if (header.reportType === "PIPELINE_MPT" || header.reportType === "PIPELINE_WELD_SCAN") {
+            if (s.num === 3) displayNum = 2;
           }
-          const isActive = step === s;
-          const isDone = step > s;
+          const isActive = step === s.num;
+          const isDone = step > s.num;
           return (
-            <div key={s} className="flex items-center gap-2">
+            <div key={s.num} className="flex items-center gap-2">
               <div
                 className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${
                   isActive ? "bg-amber-600 text-white" : isDone ? "bg-emerald-600 text-white" : "bg-zinc-200 text-zinc-500"
@@ -1709,14 +1663,14 @@ export function PipelineReportFormView() {
                 {isDone ? "✓" : displayNum}
               </div>
               <span className={`text-sm font-medium ${isActive ? "text-amber-700" : "text-muted-foreground"}`}>
-                {labelForStep(s)}
+                {s.label}
               </span>
-              {s < 4 && <span className="text-zinc-300">→</span>}
+              {s.num < 3 && <span className="text-zinc-300">→</span>}
             </div>
           );
         })}
         <span className="ml-auto text-xs text-muted-foreground">
-          Step {step} of 4 — {step === 1 ? "Report Details" : step === 2 ? "Engineering Drawings" : step === 3 ? "Inspection Findings" : "Findings & Photos"}
+          Step {step} of 3 — {step === 1 ? "Report Details" : step === 2 ? "Inspection Findings" : "Findings & Photos"}
         </span>
       </div>
 
@@ -1929,28 +1883,17 @@ export function PipelineReportFormView() {
         </CardContent>
       </Card>
 
-      {/* Step 1 navigation */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Button variant="ghost" onClick={saveDraft} disabled={saving}>
-          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-          Save Draft
-        </Button>
-        <Button onClick={proceedToNext} disabled={saving}>
-          Proceed to Next <ArrowRight className="ml-2 h-4 w-4" />
-        </Button>
-        {error && <span className="text-sm text-red-600">{error}</span>}
-      </div>
       </>
-      )} {/* end step 1 */}
+      )} {/* end step 1 — header + primary photo */}
 
-      {/* ═══ STEP 2: ENGINEERING DRAWINGS ═══
-          A separate, clearly delineated section for attaching drawing
-          images and PDF files. Each uploaded drawing becomes one or more
-          full pages in the final PDF (images = 1 page each, PDFs are
-          rasterized page-by-page), appearing between the report header
-          and the measurement table.
+      {/* ═══ ENGINEERING DRAWINGS (part of Step 1 for report types that use them) ═══
+          Shown on Step 1 for Thickness / Visual / Condition reports.
+          DPT / MPT / Weld Scan do NOT have engineering drawings.
+          Each uploaded drawing becomes one or more full pages in the final PDF
+          (images = 1 page each, PDFs are rasterized page-by-page), appearing
+          between the report header and the measurement table.
       */}
-      {step === 2 && (
+      {step === 1 && INCLUDES_DRAWINGS && (
       <>
       <Card>
         <CardHeader>
@@ -2133,11 +2076,12 @@ export function PipelineReportFormView() {
         </CardContent>
       </Card>
 
-      {/* Step 2 navigation */}
-      <div className="flex items-center gap-2">
-        <Button variant="ghost" onClick={goPrevious}>
-          <ArrowLeft className="mr-2 h-4 w-4" /> Previous
-        </Button>
+      </>
+      )} {/* end engineering drawings (part of step 1) */}
+
+      {/* Step 1 navigation (after header + photo + drawings) */}
+      {step === 1 && (
+      <div className="flex flex-wrap items-center gap-2">
         <Button variant="ghost" onClick={saveDraft} disabled={saving}>
           {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
           Save Draft
@@ -2145,16 +2089,16 @@ export function PipelineReportFormView() {
         <Button onClick={proceedToNext} disabled={saving}>
           Proceed to Next <ArrowRight className="ml-2 h-4 w-4" />
         </Button>
+        {error && <span className="text-sm text-red-600">{error}</span>}
       </div>
-      </>
-      )} {/* end step 2 — engineering drawings */}
+      )}
 
-      {/* ═══ STEP 3: MIDDLE STEP — type-specific ═══
+      {/* ═══ STEP 2: INSPECTION FINDINGS — type-specific ═══
           • PIPELINE_THICKNESS → measurement table (11 columns + custom)
           • PIPELINE_VISUAL    → visual inspection observations (rows)
           • PIPELINE_CONDITION → condition assessment form (single-instance fields)
       */}
-      {step === 3 && header.reportType === "PIPELINE_THICKNESS" && (
+      {step === 2 && header.reportType === "PIPELINE_THICKNESS" && (
       <>
       <Card>
         <CardHeader>
@@ -2463,10 +2407,10 @@ export function PipelineReportFormView() {
         </Button>
       </div>
       </>
-      )} {/* end step 3 — thickness */}
+      )} {/* end step 2 — thickness */}
 
-      {/* ═══ STEP 3 (VISUAL): VISUAL OBSERVATIONS TABLE ═══ */}
-      {step === 3 && header.reportType === "PIPELINE_VISUAL" && (
+      {/* ═══ STEP 2 (VISUAL): VISUAL OBSERVATIONS TABLE ═══ */}
+      {step === 2 && header.reportType === "PIPELINE_VISUAL" && (
       <>
       <Card>
         <CardHeader>
@@ -2724,10 +2668,10 @@ export function PipelineReportFormView() {
         </Button>
       </div>
       </>
-      )} {/* end step 3 — visual */}
+      )} {/* end step 2 — visual */}
 
-      {/* ═══ STEP 3 (CONDITION): CONDITION ASSESSMENT FORM ═══ */}
-      {step === 3 && header.reportType === "PIPELINE_CONDITION" && (
+      {/* ═══ STEP 2 (CONDITION): CONDITION ASSESSMENT FORM ═══ */}
+      {step === 2 && header.reportType === "PIPELINE_CONDITION" && (
       <>
       <Card>
         <CardHeader>
@@ -2887,10 +2831,10 @@ export function PipelineReportFormView() {
         </Button>
       </div>
       </>
-      )} {/* end step 3 — condition */}
+      )} {/* end step 2 — condition */}
 
-      {/* ═══ STEP 3 (DPT): DPT OBSERVATION TABLE ═══ */}
-      {step === 3 && header.reportType === "PIPELINE_DPT" && (
+      {/* ═══ STEP 2 (DPT): DPT PROCEDURE + OBSERVATION TABLE ═══ */}
+      {step === 2 && header.reportType === "PIPELINE_DPT" && (
       <>
       {/* ═══ 3. DYE PENETRANT PROCEDURE ═══
           Two-column table: left = field name, right = editable value.
@@ -3204,7 +3148,7 @@ export function PipelineReportFormView() {
         </CardContent>
       </Card>
 
-      {/* Step 3 navigation */}
+      {/* Step 2 navigation */}
       <div className="flex items-center gap-2">
         <Button variant="ghost" onClick={goPrevious}>
           <ArrowLeft className="mr-2 h-4 w-4" /> Previous
@@ -3218,17 +3162,17 @@ export function PipelineReportFormView() {
         </Button>
       </div>
       </>
-      )} {/* end step 3 — DPT */}
+      )} {/* end step 2 — DPT */}
 
-      {/* ═══ STEP 3 PLACEHOLDER: MPT / WELD SCAN ═══
+      {/* ═══ STEP 2 PLACEHOLDER: MPT / WELD SCAN ═══
           These report types are not yet fully implemented. The user can
           still create the report, fill the header (Step 1), and proceed
-          to Findings & Photos (Step 4). They cannot accidentally land on
-          Step 3 for these types because proceedToNext jumps from Step 1
-          straight to Step 4. This block only renders if the user lands
-          on Step 3 directly (e.g. via the URL), and shows a notice.
+          to Findings & Photos (Step 3). They cannot accidentally land on
+          Step 2 for these types because proceedToNext jumps from Step 1
+          straight to Step 3. This block only renders if the user lands
+          on Step 2 directly (e.g. via the URL), and shows a notice.
       */}
-      {step === 3 && (header.reportType === "PIPELINE_MPT" || header.reportType === "PIPELINE_WELD_SCAN") && (
+      {step === 2 && (header.reportType === "PIPELINE_MPT" || header.reportType === "PIPELINE_WELD_SCAN") && (
       <>
         <Alert className="border-amber-200 bg-amber-50">
           <ShieldAlert className="h-4 w-4 text-amber-700" />
@@ -3238,7 +3182,7 @@ export function PipelineReportFormView() {
           <AlertDescription className="text-amber-900">
             The detailed inspection workflow for {header.reportType === "PIPELINE_MPT" ? "Magnetic Particle Testing" : "Weld Scan"} is
             not yet available. You can still fill in the report header
-            (Step 1), upload photographs and certificates (Step 4), and
+            (Step 1), upload photographs and certificates (Step 3), and
             submit the report for review. The full inspection procedure
             and observation table will be added in a future update.
           </AlertDescription>
@@ -3254,8 +3198,8 @@ export function PipelineReportFormView() {
       </>
       )}
 
-      {/* ═══ STEP 4: FINDINGS & PHOTOS ═══ */}
-      {step === 4 && (
+      {/* ═══ STEP 3: FINDINGS & PHOTOS ═══ */}
+      {step === 3 && (
       <>
         <Card>
           <CardHeader>
@@ -3546,7 +3490,7 @@ export function PipelineReportFormView() {
           <CardContent><CertificateList reportId={editingPipelineReportId} category="PERSONNEL" /></CardContent>
         </Card>
 
-        {/* Step 3 navigation */}
+        {/* Step 2 navigation */}
         <div className="flex items-center gap-2">
           <Button variant="ghost" onClick={goPrevious}>
             <ArrowLeft className="mr-2 h-4 w-4" /> Previous
@@ -3713,7 +3657,7 @@ function ConsumableSelector({
 //                     without filling in the required fields.
 //
 // All API calls use the dedicated /api/pipeline-inspections/[id]/primary-photo
-// endpoints (POST /upload for uploading, DELETE for clearing).
+// endpoint (POST for uploading, GET for serving, DELETE for clearing).
 
 interface PrimaryPhotoUploaderProps {
   reportId: string | null;
@@ -3754,7 +3698,7 @@ function PrimaryPhotoUploader({
   const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
   // ─── Core upload function ───
-  // Posts the file to the /primary-photo/upload endpoint. Returns true on
+  // Posts the file to the /primary-photo endpoint (POST). Returns true on
   // success, false on failure. Does NOT handle the "no reportId" case —
   // that's handled by uploadFile() below which decides whether to save
   // the header first.
@@ -3766,7 +3710,7 @@ function PrimaryPhotoUploader({
       fd.append("file", file);
       const token = typeof window !== "undefined" ? window.localStorage.getItem("ira_session_token") : null;
       const res = await fetch(
-        `/api/pipeline-inspections/${activeReportId}/primary-photo/upload`,
+        `/api/pipeline-inspections/${activeReportId}/primary-photo`,
         {
           method: "POST",
           body: fd,
@@ -4118,7 +4062,7 @@ function PrimaryPhotoUploader({
   );
 }
 
-// ─── CertificateList component (used in Step 4 of the form) ───
+// ─── CertificateList component (used in Step 3 of the form) ───
 // Fetches and displays certificates for a given report + category.
 // Supports image previews (via AuthImage) and PDF file icons.
 // Allows deletion.

@@ -745,7 +745,12 @@ export function PipelineReportDetailView() {
           </div>
         )}
 
-        {/* Measurement table */}
+        {/* Measurement table — ONLY for PIPELINE_THICKNESS reports.
+            This must NEVER appear in DPT or other report types. The report
+            type is checked explicitly (not just whether measurements exist)
+            so that a Thickness report with zero rows still shows the table
+            structure, while a DPT report never shows it. */}
+        {report.reportType === "PIPELINE_THICKNESS" && (
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-[11px]">
             <thead>
@@ -818,6 +823,7 @@ export function PipelineReportDetailView() {
             </tbody>
           </table>
         </div>
+        )} {/* end measurement table — Thickness only */}
 
         {/* Engineering Drawings section — shows attached drawings with previews */}
         {report.drawingLinks && report.drawingLinks.length > 0 && (

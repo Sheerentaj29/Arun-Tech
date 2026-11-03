@@ -818,11 +818,28 @@ export async function generatePipelineReportPdf(
   // temporal dead zone. It gets properly initialized by startBodyOnFreshPage
   // for the measurement table, and set to MARGIN for the findings sections.
   let y: number = 0;
-  addNewPage();
-  // Initialize y for the findings sections (startBodyOnFreshPage is
-  // called later for the measurement table, but the findings sections
-  // need y to be set to the top of the new page).
-  y = MARGIN;
+
+  // Only create a new page for findings if there IS findings content to
+  // render. If all four findings fields are empty AND there are drawings
+  // (which each get their own page), creating a blank page here would
+  // leave an empty page between the cover and the first drawing.
+  // So we check whether any findings text exists before calling addNewPage().
+  const hasFindingsContent =
+    !!((report as any).inspectionDescription && report.inspectionDescription!.trim()) ||
+    !!((report as any).siteObservationSummary && (report as any).siteObservationSummary.trim()) ||
+    !!((report as any).results && (report as any).results.trim()) ||
+    !!((report as any).conclusion && (report as any).conclusion.trim());
+  if (hasFindingsContent) {
+    addNewPage();
+    // Initialize y for the findings sections
+    y = MARGIN;
+  } else {
+    // No findings content — y stays at 0. The drawings section and
+    // startBodyOnFreshPage will create pages as needed. If there are
+    // no drawings either, startBodyOnFreshPage will create a page for
+    // the body content (measurement table, DPT observations, etc.).
+    y = 0;
+  }
 
   // ═══════════════════════════════════════════════════════════════
   // SECTION ORDER (per latest spec):
@@ -1060,12 +1077,19 @@ export async function generatePipelineReportPdf(
 
   // Helper: decide whether to start on a fresh page or continue.
   // Uses pageMaxY (not maxRowY) because these pages don't have a sign-off.
+  // If y === 0, no page was created after the first page (because there
+  // was no findings content), so we MUST create a new page here — the
+  // first page is full with the cover/sign-off and can't hold body content.
   // If drawings were emitted (only possible when includeDrawings is true
   // AND at least one drawing was attached), the body always starts on a
   // fresh page. Otherwise, continue on the same page if there's room,
   // else a new page.
   const startBodyOnFreshPage = (neededSpace: number) => {
-    if (includeDrawings && linkedDrawings.length > 0) {
+    if (y === 0) {
+      // No page exists after the first page — create one now.
+      addNewPage();
+      y = MARGIN;
+    } else if (includeDrawings && linkedDrawings.length > 0) {
       addNewPage();
       y = MARGIN;
     } else if (y + neededSpace > pageMaxY) {
@@ -1646,7 +1670,11 @@ export async function generatePipelineReportPdf(
       }
     }
 
-    // After certificates, set y to pageMaxY so the next section starts on a new page
+    // After certificates, set y to pageMaxY so the override note (if any)
+    // starts on a new page rather than overlapping with the last certificate.
+    // NOTE: This does NOT create a new page — it just sets y to the bottom
+    // of the current page so that any subsequent content (like the override
+    // note below) will trigger a page break via pdfkit's auto-flow.
     y = pageMaxY;
   }
 
