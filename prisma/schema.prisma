@@ -404,6 +404,33 @@ model PipelineInspection {
   // MPT custom columns for the observation table
   mptCustomColumns                  String?  // JSON: [{id, name, unit}]
 
+  // ─── UT (ULTRASONIC TEST) REPORT FIELDS ───
+  // Populated when reportType = PIPELINE_UT. UT-specific header fields
+  // stored directly on the report. Multi-row tables (equipment, probes,
+  // test results) are stored as JSON strings.
+  utSubContract                     String?  // Sub Contract
+  utProject                         String?  // Project
+  utJobLocation                     String?  // Job Location
+  utJobDescription                  String?  // Job Description
+  utMaterial                        String?  // Material
+  utCouplant                        String?  // Couplant
+  utReferenceDocuments              String?  // Reference Documents
+  utProcedureNo                     String?  // UT Procedure No.
+  utAcceptanceStandard              String?  // Acceptance Standard
+  utUfdDetails                      String?  // UFD Details (multiline text)
+  // Scanning details (single-instance fields)
+  utCalibrationBlock                String?  // Calibration Block (DAC Block)
+  utExtentOfExamination             String?  // Extent of Examination
+  utSurfaceCondition                String?  // Surface Condition
+  utReferenceLevel                  String?  // Reference Level
+  utFlawSizingTechnique             String?  // Flaw Sizing Technique
+  utInspectionNote                  String?  // Inspection note (multiline, below Test Results)
+  // Multi-row tables stored as JSON
+  utEquipmentRows                   String?  // JSON: [{equipmentType, machineMake, model, mcSrNo, calibrationDueDate}]
+  utProbeRows                       String?  // JSON: [{probeType, probeAngle, frequency, size, probeNo, range, referenceDb, scanningDb}]
+  utTestResultRows                  String?  // JSON: [{description, beamId, noOfJoints, thickness, weldType, moc, totalMeter, results}]
+  utCustomColumns                   String?  // JSON: [{id, name, unit}] (reserved for future)
+
   isDemo                   Boolean  @default(false)
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt

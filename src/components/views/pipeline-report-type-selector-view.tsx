@@ -7,6 +7,7 @@ import {
   Magnet,
   Zap,
   ChevronRight,
+  Waves,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -79,6 +80,18 @@ const OPTIONS: TypeOption[] = [
       "columns. Engineering drawings, photos, and certificates are included.",
     icon: Gauge,
     accent: "border-emerald-500 bg-emerald-50 hover:bg-emerald-100",
+  },
+  {
+    type: "PIPELINE_UT",
+    title: "Ultrasonic Test Report",
+    subtitle: "UT inspection with equipment, probes, scanning details and results",
+    description:
+      "Ultrasonic Test Report with report identification details, UFD details, " +
+      "equipment details, test probe details, scanning details, test results " +
+      "table, inspection notes, and sign-off section. Professional A4 portrait " +
+      "PDF layout matching industry-standard UT report format.",
+    icon: Waves,
+    accent: "border-blue-500 bg-blue-50 hover:bg-blue-100",
   },
 ];
 

@@ -77,7 +77,8 @@ type ReportType =
   | "PIPELINE_CONDITION"
   | "PIPELINE_DPT"
   | "PIPELINE_MPT"
-  | "PIPELINE_WELD_SCAN";
+  | "PIPELINE_WELD_SCAN"
+  | "PIPELINE_UT";
 
 const REPORT_TYPE_TITLE: Record<ReportType, string> = {
   PIPELINE_THICKNESS: "PIPELINE THICKNESS MEASUREMENT REPORT",
@@ -86,6 +87,7 @@ const REPORT_TYPE_TITLE: Record<ReportType, string> = {
   PIPELINE_DPT:       "DYE PENETRANT TESTING REPORT",
   PIPELINE_MPT:       "MAGNETIC PARTICLE TESTING REPORT",
   PIPELINE_WELD_SCAN: "WELD SCAN REPORT",
+  PIPELINE_UT:        "ULTRASONIC TEST REPORT",
 };
 
 function getReportType(raw: any): ReportType {
@@ -95,7 +97,8 @@ function getReportType(raw: any): ReportType {
     v === "PIPELINE_CONDITION" ||
     v === "PIPELINE_DPT" ||
     v === "PIPELINE_MPT" ||
-    v === "PIPELINE_WELD_SCAN"
+    v === "PIPELINE_WELD_SCAN" ||
+    v === "PIPELINE_UT"
   ) return v;
   return "PIPELINE_THICKNESS";
 }
@@ -1542,6 +1545,264 @@ export async function generatePipelineReportPdf(
         doc.fillColor("#000");
         y += rowH;
       }
+    }
+  } else if (reportType === "PIPELINE_UT") {
+    // ─── UT (ULTRASONIC TEST) REPORT BODY ───
+    // Renders all UT sections: Report Identification Details, UFD Details,
+    // Equipment Details, Test Probe Details, Scanning Details, Test Results,
+    // Inspection Note.
+    startBodyOnFreshPage(200);
+
+    const utReport = report as any;
+    const usableW = pageW - 2 * MARGIN;
+
+    // Helper: draw a two-column "label | value" table for the given rows
+    const drawTwoColTable = (heading: string, rows: Array<[string, string | null]>) => {
+      const rowH = 18;
+      const labelW = usableW * 0.35;
+      const valueW = usableW - labelW;
+      if (y + 24 + rowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 6;
+      doc.font(FONT_BOLD).fontSize(10).fillColor("#000");
+      doc.text(heading, MARGIN, y);
+      doc.fillColor("#000");
+      y += 16;
+      for (const [label, value] of rows) {
+        if (y + rowH > pageMaxY) { addNewPage(); y = MARGIN; }
+        doc.rect(MARGIN, y, labelW, rowH).fill("#eff6ff");
+        doc.rect(MARGIN + labelW, y, valueW, rowH).fill("#ffffff");
+        doc.rect(MARGIN, y, usableW, rowH).stroke(TABLE_OUTER_BORDER);
+        doc.moveTo(MARGIN + labelW, y).lineTo(MARGIN + labelW, y + rowH).stroke(TABLE_INNER_BORDER);
+        doc.font(FONT_BOLD).fontSize(7.5).fillColor("#000");
+        doc.text(label, MARGIN + 3, y + 5, { width: labelW - 6 });
+        doc.font(FONT_REGULAR).fontSize(7.5);
+        const val = value && String(value).trim() ? String(value).trim() : "—";
+        let disp = val;
+        if (doc.widthOfString(disp) > valueW - 6) {
+          const c = Math.floor((valueW - 6) / Math.max(1, doc.widthOfString(disp)) * disp.length);
+          disp = disp.slice(0, Math.max(1, c - 1)) + "…";
+        }
+        doc.text(disp, MARGIN + labelW + 3, y + 5, { width: valueW - 6 });
+        y += rowH;
+      }
+      y += 6;
+    };
+
+    // Helper: draw a multi-column data table from JSON rows
+    const drawMultiColTable = (heading: string, headers: string[], rowFields: string[], jsonStr: string, dateFields: string[] = []) => {
+      const headerH = 28;
+      const rowH = 22;
+      const colCount = headers.length;
+      const colW = usableW / colCount;
+      if (y + 24 + headerH + rowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 6;
+      doc.font(FONT_BOLD).fontSize(10).fillColor("#000");
+      doc.text(heading, MARGIN, y);
+      doc.fillColor("#000");
+      y += 16;
+
+      // Parse rows
+      let dataRows: any[] = [];
+      try { const parsed = JSON.parse(jsonStr || "[]"); if (Array.isArray(parsed)) dataRows = parsed; } catch {}
+
+      // Draw header
+      const drawHeader = (headerY: number) => {
+        doc.rect(MARGIN, headerY, usableW, headerH).fill(TABLE_HEADER_BG);
+        doc.rect(MARGIN, headerY, usableW, headerH).stroke(TABLE_OUTER_BORDER);
+        let x = MARGIN;
+        doc.font(FONT_BOLD).fontSize(6).fillColor(TABLE_HEADER_FG);
+        for (let i = 0; i < headers.length; i++) {
+          if (i > 0) doc.moveTo(x, headerY).lineTo(x, headerY + headerH).stroke(TABLE_INNER_BORDER);
+          doc.text(headers[i], x + 2, headerY + 8, { width: colW - 4, align: "center" });
+          x += colW;
+        }
+        doc.fillColor("#000");
+      };
+      drawHeader(y);
+      y += headerH;
+
+      // Draw rows
+      for (let r = 0; r < dataRows.length; r++) {
+        if (y + rowH > pageMaxY) {
+          addNewPage();
+          y = MARGIN;
+          drawHeader(y);
+          y += headerH;
+        }
+        let x = MARGIN;
+        for (let i = 0; i < headers.length; i++) {
+          if (i > 0) doc.moveTo(x, y).lineTo(x, y + rowH).stroke(TABLE_INNER_BORDER);
+          let val = "";
+          if (i === 0 && heading.includes("Test Results")) {
+            val = String(r + 1);
+          } else {
+            const fieldIdx = heading.includes("Test Results") ? i - 1 : i;
+            const field = rowFields[fieldIdx];
+            val = dataRows[r][field] ?? "—";
+            if (dateFields.includes(field) && val && val !== "—") {
+              try { val = new Date(val).toISOString().slice(0, 10); } catch {}
+            }
+          }
+          doc.rect(x, y, colW, rowH).stroke(TABLE_INNER_BORDER);
+          doc.font(FONT_REGULAR).fontSize(6.5).fillColor("#000");
+          let disp = String(val);
+          if (doc.widthOfString(disp) > colW - 4) {
+            const c = Math.floor((colW - 4) / Math.max(1, doc.widthOfString(disp)) * disp.length);
+            disp = disp.slice(0, Math.max(1, c - 1)) + "…";
+          }
+          doc.text(disp, x + 2, y + 7, { width: colW - 4, align: "center" });
+          x += colW;
+        }
+        doc.rect(MARGIN, y, usableW, rowH).stroke(TABLE_OUTER_BORDER);
+        y += rowH;
+      }
+      if (dataRows.length === 0) {
+        doc.font(FONT_REGULAR).fontSize(7).fillColor("#666");
+        doc.rect(MARGIN, y, usableW, rowH).stroke("#bbb");
+        doc.text("No entries recorded.", MARGIN + 4, y + 7, { width: usableW - 8, align: "center" });
+        doc.fillColor("#000");
+        y += rowH;
+      }
+      y += 6;
+    };
+
+    // 1. Report Identification Details
+    drawTwoColTable("Report Identification Details", [
+      ["Client", report.client?.name ?? null],
+      ["Test Report No.", report.reportNumber],
+      ["Sub Contract", utReport.utSubContract],
+      ["Test Date", utReport.fromDate ? new Date(utReport.fromDate).toISOString().slice(0, 10) : null],
+      ["Project", utReport.utProject],
+      ["Job Location", utReport.utJobLocation],
+      ["Material", utReport.utMaterial],
+      ["Job Description", utReport.utJobDescription],
+      ["Couplant", utReport.utCouplant],
+      ["Reference Documents", utReport.utReferenceDocuments],
+      ["UT Procedure No.", utReport.utProcedureNo],
+      ["Acceptance Standard", utReport.utAcceptanceStandard],
+    ]);
+
+    // 2. UFD Details
+    {
+      const text = (utReport.utUfdDetails ?? "").trim();
+      if (y + 24 + 30 > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 4;
+      doc.font(FONT_BOLD).fontSize(10).fillColor("#000");
+      doc.text("UFD Details", MARGIN, y);
+      y += 16;
+      if (text) {
+        doc.font(FONT_REGULAR).fontSize(8);
+        const h = doc.heightOfString(text, { width: usableW });
+        if (y + h > pageMaxY) { addNewPage(); y = MARGIN; }
+        doc.rect(MARGIN, y, usableW, h + 8).stroke(TABLE_OUTER_BORDER);
+        doc.text(text, MARGIN + 4, y + 4, { width: usableW - 8 });
+        y += h + 8 + 4;
+      } else {
+        doc.rect(MARGIN, y, usableW, 20).stroke(TABLE_OUTER_BORDER);
+        doc.font(FONT_REGULAR).fontSize(7).fillColor("#999");
+        doc.text("—", MARGIN + 4, y + 7, { width: usableW - 8 });
+        y += 20 + 4;
+      }
+      doc.fillColor("#000");
+      y += 4;
+    }
+
+    // 3. Equipment Details
+    drawMultiColTable(
+      "Equipment Details",
+      ["Equipment Type", "Machine Make", "Model", "M/c Sr. No.", "Calibration Due Date"],
+      ["equipmentType", "machineMake", "model", "mcSrNo", "calibrationDueDate"],
+      utReport.utEquipmentRows ?? "[]",
+      ["calibrationDueDate"],
+    );
+
+    // 4. Test Probe Details
+    drawMultiColTable(
+      "Test Probe Details",
+      ["Probe Type", "Probe Angle", "Frequency", "Size", "Probe No.", "Range", "Ref dB", "Scan dB"],
+      ["probeType", "probeAngle", "frequency", "size", "probeNo", "range", "referenceDb", "scanningDb"],
+      utReport.utProbeRows ?? "[]",
+    );
+
+    // 5. Scanning Details (two-column 2x2 layout)
+    {
+      const rowH = 18;
+      const labelW = usableW * 0.25;
+      const valueW = (usableW - 2 * labelW) / 2;
+      if (y + 24 + rowH * 3 > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 4;
+      doc.font(FONT_BOLD).fontSize(10).fillColor("#000");
+      doc.text("Scanning Details", MARGIN, y);
+      y += 16;
+      const scanPairs: Array<[string, string | null]> = [
+        ["Calibration Block (DAC Block)", utReport.utCalibrationBlock],
+        ["Extent of Examination", utReport.utExtentOfExamination],
+        ["Surface Condition", utReport.utSurfaceCondition],
+        ["Reference Level", utReport.utReferenceLevel],
+        ["Flaw Sizing Technique", utReport.utFlawSizingTechnique],
+        ["", null],
+      ];
+      for (let i = 0; i < scanPairs.length; i += 2) {
+        if (y + rowH > pageMaxY) { addNewPage(); y = MARGIN; }
+        const left = scanPairs[i];
+        const right = scanPairs[i + 1] ?? ["", null];
+        // Left label
+        doc.rect(MARGIN, y, labelW, rowH).fill("#eff6ff");
+        doc.font(FONT_BOLD).fontSize(7).fillColor("#000");
+        doc.text(left[0], MARGIN + 3, y + 5, { width: labelW - 6 });
+        // Left value
+        doc.rect(MARGIN + labelW, y, valueW, rowH).fill("#ffffff");
+        doc.font(FONT_REGULAR).fontSize(7);
+        const lv = left[1] && String(left[1]).trim() ? String(left[1]).trim() : "—";
+        doc.text(lv, MARGIN + labelW + 3, y + 5, { width: valueW - 6 });
+        // Right label
+        doc.rect(MARGIN + labelW + valueW, y, labelW, rowH).fill("#eff6ff");
+        doc.font(FONT_BOLD).fontSize(7);
+        doc.text(right[0], MARGIN + labelW + valueW + 3, y + 5, { width: labelW - 6 });
+        // Right value
+        doc.rect(MARGIN + 2 * labelW + valueW, y, valueW, rowH).fill("#ffffff");
+        doc.font(FONT_REGULAR).fontSize(7);
+        const rv = right[1] && String(right[1]).trim() ? String(right[1]).trim() : "—";
+        doc.text(rv, MARGIN + 2 * labelW + valueW + 3, y + 5, { width: valueW - 6 });
+        // Borders
+        doc.rect(MARGIN, y, usableW, rowH).stroke(TABLE_OUTER_BORDER);
+        doc.moveTo(MARGIN + labelW, y).lineTo(MARGIN + labelW, y + rowH).stroke(TABLE_INNER_BORDER);
+        doc.moveTo(MARGIN + labelW + valueW, y).lineTo(MARGIN + labelW + valueW, y + rowH).stroke(TABLE_INNER_BORDER);
+        doc.moveTo(MARGIN + 2 * labelW + valueW, y).lineTo(MARGIN + 2 * labelW + valueW, y + rowH).stroke(TABLE_INNER_BORDER);
+        y += rowH;
+      }
+      doc.fillColor("#000");
+      y += 4;
+    }
+
+    // 6. Test Results
+    drawMultiColTable(
+      "Test Results",
+      ["Sl. No", "Description", "Beam ID", "No. of Joints", "Thickness", "Weld Type", "MOC", "Total Meter", "Results"],
+      ["description", "beamId", "noOfJoints", "thickness", "weldType", "moc", "totalMeter", "results"],
+      utReport.utTestResultRows ?? "[]",
+    );
+
+    // 7. Inspection Note
+    {
+      const text = (utReport.utInspectionNote ?? "").trim();
+      if (y + 24 + 30 > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 4;
+      doc.font(FONT_BOLD).fontSize(10).fillColor("#000");
+      doc.text("Inspection Note", MARGIN, y);
+      y += 16;
+      if (text) {
+        doc.font(FONT_REGULAR).fontSize(8);
+        const h = doc.heightOfString(text, { width: usableW });
+        if (y + h > pageMaxY) { addNewPage(); y = MARGIN; }
+        doc.text(text, MARGIN, y, { width: usableW });
+        y += h + 4;
+      } else {
+        doc.font(FONT_REGULAR).fontSize(7).fillColor("#999");
+        doc.text("—", MARGIN, y);
+        y += 14;
+      }
+      doc.fillColor("#000");
     }
   } else if (reportType === "PIPELINE_WELD_SCAN") {
     // ─── WELD SCAN PLACEHOLDER ───

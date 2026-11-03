@@ -24,6 +24,7 @@ import {
   CheckCircle2,
   RefreshCw,
   Magnet,
+  Waves,
 } from "lucide-react";
 import {
   Card,
@@ -112,6 +113,14 @@ const REPORT_TYPE_INFO: Record<PipelineReportType, {
     step2Label: "Weld Scan Observations",
     accent: "border-cyan-500 text-cyan-700",
     comingSoon: true,
+  },
+  PIPELINE_UT: {
+    title: "ULTRASONIC TEST REPORT",
+    shortLabel: "UT",
+    formHeading: "New Ultrasonic Test Report",
+    formDescription: "Ultrasonic test with equipment, probes, scanning details, test results, and sign-off.",
+    step2Label: "UT Details",
+    accent: "border-blue-500 text-blue-700",
   },
 };
 
@@ -247,6 +256,27 @@ interface ReportHeader {
   mptWhiteContrast: string;
   mptWetParticleIronInk: string;
   mptCustomColumns: string;
+  // ─── UT (ULTRASONIC TEST) FIELDS ───
+  utSubContract: string;
+  utProject: string;
+  utJobLocation: string;
+  utJobDescription: string;
+  utMaterial: string;
+  utCouplant: string;
+  utReferenceDocuments: string;
+  utProcedureNo: string;
+  utAcceptanceStandard: string;
+  utUfdDetails: string;
+  utCalibrationBlock: string;
+  utExtentOfExamination: string;
+  utSurfaceCondition: string;
+  utReferenceLevel: string;
+  utFlawSizingTechnique: string;
+  utInspectionNote: string;
+  utEquipmentRows: string;
+  utProbeRows: string;
+  utTestResultRows: string;
+  utCustomColumns: string;
   // Condition fields default empty
   pipelineAgeYears: string;
   serviceFluid: string;
@@ -339,6 +369,27 @@ const EMPTY_HEADER: ReportHeader = {
   mptWhiteContrast: "",
   mptWetParticleIronInk: "",
   mptCustomColumns: "[]",
+  // UT fields default empty
+  utSubContract: "",
+  utProject: "",
+  utJobLocation: "",
+  utJobDescription: "",
+  utMaterial: "",
+  utCouplant: "",
+  utReferenceDocuments: "",
+  utProcedureNo: "",
+  utAcceptanceStandard: "",
+  utUfdDetails: "",
+  utCalibrationBlock: "",
+  utExtentOfExamination: "",
+  utSurfaceCondition: "",
+  utReferenceLevel: "",
+  utFlawSizingTechnique: "",
+  utInspectionNote: "",
+  utEquipmentRows: "[]",
+  utProbeRows: "[]",
+  utTestResultRows: "[]",
+  utCustomColumns: "[]",
   // Condition fields default empty
   pipelineAgeYears: "",
   serviceFluid: "",
@@ -650,6 +701,27 @@ export function PipelineReportFormView() {
           mptWhiteContrast: r.mptWhiteContrast ?? "",
           mptWetParticleIronInk: r.mptWetParticleIronInk ?? "",
           mptCustomColumns: r.mptCustomColumns ?? "[]",
+          // UT fields
+          utSubContract: r.utSubContract ?? "",
+          utProject: r.utProject ?? "",
+          utJobLocation: r.utJobLocation ?? "",
+          utJobDescription: r.utJobDescription ?? "",
+          utMaterial: r.utMaterial ?? "",
+          utCouplant: r.utCouplant ?? "",
+          utReferenceDocuments: r.utReferenceDocuments ?? "",
+          utProcedureNo: r.utProcedureNo ?? "",
+          utAcceptanceStandard: r.utAcceptanceStandard ?? "",
+          utUfdDetails: r.utUfdDetails ?? "",
+          utCalibrationBlock: r.utCalibrationBlock ?? "",
+          utExtentOfExamination: r.utExtentOfExamination ?? "",
+          utSurfaceCondition: r.utSurfaceCondition ?? "",
+          utReferenceLevel: r.utReferenceLevel ?? "",
+          utFlawSizingTechnique: r.utFlawSizingTechnique ?? "",
+          utInspectionNote: r.utInspectionNote ?? "",
+          utEquipmentRows: r.utEquipmentRows ?? "[]",
+          utProbeRows: r.utProbeRows ?? "[]",
+          utTestResultRows: r.utTestResultRows ?? "[]",
+          utCustomColumns: r.utCustomColumns ?? "[]",
           // Condition fields (only populated for PIPELINE_CONDITION reports)
           pipelineAgeYears: r.pipelineAgeYears != null ? String(r.pipelineAgeYears) : "",
           serviceFluid: r.serviceFluid ?? "",
@@ -1123,7 +1195,7 @@ export function PipelineReportFormView() {
       await saveHeader();
       // For Weld Scan placeholders, jump straight to Step 3
       // (Findings & Photos) since there's no inspection table yet.
-      // MPT now has its own procedure + observation table on Step 2.
+      // MPT and UT now have their own procedure + observation tables on Step 2.
       if (header.reportType === "PIPELINE_WELD_SCAN") {
         setStep(3);
       } else {
@@ -3566,6 +3638,377 @@ export function PipelineReportFormView() {
               </tbody>
             </table>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Step 2 navigation */}
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" onClick={goPrevious}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> Previous
+        </Button>
+        <Button variant="ghost" onClick={saveDraft} disabled={saving}>
+          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+          Save Draft
+        </Button>
+        <Button onClick={proceedToNext} disabled={saving}>
+          Proceed to Next <ArrowRight className="ml-2 h-4 w-4" />
+        </Button>
+      </div>
+      </>
+      )}
+
+      {/* ═══ STEP 2 (UT): ULTRASONIC TEST REPORT ═══ */}
+      {step === 2 && header.reportType === "PIPELINE_UT" && (
+      <>
+      {/* Report Identification Details */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Waves className="h-4 w-4 text-blue-700" />
+            Report Identification Details
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <tbody>
+                {([
+                  ["Client", "clientId", "select"],
+                  ["Test Report No.", "reportNumber", "text"],
+                  ["Sub Contract", "utSubContract", "text"],
+                  ["Test Date", "fromDate", "date"],
+                  ["Project", "utProject", "text"],
+                  ["Job Location", "utJobLocation", "text"],
+                  ["Material", "utMaterial", "text"],
+                  ["Job Description", "utJobDescription", "text"],
+                  ["Couplant", "utCouplant", "text"],
+                  ["Reference Documents", "utReferenceDocuments", "text"],
+                  ["UT Procedure No.", "utProcedureNo", "text"],
+                  ["Acceptance Standard", "utAcceptanceStandard", "text"],
+                ] as const).map(([label, fieldKey, inputType]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-blue-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/3">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      {fieldKey === "clientId" ? (
+                        <Select value={header.clientId} onValueChange={onClientChange}>
+                          <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select client" /></SelectTrigger>
+                          <SelectContent>
+                            {clients.map((c) => (
+                              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : inputType === "date" ? (
+                        <Input type="date" className="h-8 text-sm"
+                          value={header[fieldKey as keyof ReportHeader] as string}
+                          onChange={(e) => updateHeader(fieldKey as keyof ReportHeader, e.target.value)}
+                        />
+                      ) : (
+                        <Input className="h-8 text-sm"
+                          value={header[fieldKey as keyof ReportHeader] as string}
+                          onChange={(e) => updateHeader(fieldKey as keyof ReportHeader, e.target.value)}
+                        />
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* UFD Details */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">UFD Details</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Textarea rows={3} className="text-sm"
+            value={header.utUfdDetails}
+            onChange={(e) => updateHeader("utUfdDetails", e.target.value)}
+            placeholder="Enter UFD details..."
+          />
+        </CardContent>
+      </Card>
+
+      {/* Equipment Details */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base">Equipment Details</CardTitle>
+              <CardDescription>UFD equipment used for the inspection.</CardDescription>
+            </div>
+            <Button onClick={() => {
+              const rows = JSON.parse(header.utEquipmentRows || "[]");
+              rows.push({ equipmentType: "", machineMake: "", model: "", mcSrNo: "", calibrationDueDate: "" });
+              setHeader((h) => ({ ...h, utEquipmentRows: JSON.stringify(rows) }));
+            }} size="sm">
+              <Plus className="mr-1 h-4 w-4" /> Add Row
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-blue-700 text-white">
+                <tr>
+                  <th className="border border-blue-800 px-2 py-2 text-center">Equipment Type</th>
+                  <th className="border border-blue-800 px-2 py-2 text-center">Machine Make</th>
+                  <th className="border border-blue-800 px-2 py-2 text-center">Model</th>
+                  <th className="border border-blue-800 px-2 py-2 text-center">M/c Sr. No.</th>
+                  <th className="border border-blue-800 px-2 py-2 text-center">Calibration Due Date</th>
+                  <th className="border border-blue-800 px-2 py-2 text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  try {
+                    const rows = JSON.parse(header.utEquipmentRows || "[]");
+                    if (rows.length === 0) return (
+                      <tr><td colSpan={6} className="text-center py-4 text-muted-foreground border border-zinc-300">No equipment rows. Click Add Row.</td></tr>
+                    );
+                    return rows.map((row: any, idx: number) => (
+                      <tr key={idx} className="hover:bg-muted/30">
+                        {(["equipmentType", "machineMake", "model", "mcSrNo"] as const).map((field) => (
+                          <td key={field} className="border border-zinc-300 p-1">
+                            <Input className="h-8 text-xs" value={row[field] ?? ""}
+                              onChange={(e) => {
+                                const next = [...rows]; next[idx] = { ...row, [field]: e.target.value };
+                                setHeader((h) => ({ ...h, utEquipmentRows: JSON.stringify(next) }));
+                              }}
+                            />
+                          </td>
+                        ))}
+                        <td className="border border-zinc-300 p-1">
+                          <Input type="date" className="h-8 text-xs" value={row.calibrationDueDate ?? ""}
+                            onChange={(e) => {
+                              const next = [...rows]; next[idx] = { ...row, calibrationDueDate: e.target.value };
+                              setHeader((h) => ({ ...h, utEquipmentRows: JSON.stringify(next) }));
+                            }}
+                          />
+                        </td>
+                        <td className="border border-zinc-300 p-1 text-center">
+                          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-600"
+                            onClick={() => {
+                              const next = rows.filter((_: any, i: number) => i !== idx);
+                              setHeader((h) => ({ ...h, utEquipmentRows: JSON.stringify(next) }));
+                            }}
+                          ><Trash2 className="h-3 w-3" /></Button>
+                        </td>
+                      </tr>
+                    ));
+                  } catch { return null; }
+                })()}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Test Probe Details */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base">Test Probe Details</CardTitle>
+            </div>
+            <Button onClick={() => {
+              const rows = JSON.parse(header.utProbeRows || "[]");
+              rows.push({ probeType: "", probeAngle: "", frequency: "", size: "", probeNo: "", range: "", referenceDb: "", scanningDb: "" });
+              setHeader((h) => ({ ...h, utProbeRows: JSON.stringify(rows) }));
+            }} size="sm">
+              <Plus className="mr-1 h-4 w-4" /> Add Row
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-blue-700 text-white">
+                <tr>
+                  <th className="border border-blue-800 px-2 py-2 text-center">Probe Type</th>
+                  <th className="border border-blue-800 px-2 py-2 text-center">Probe Angle</th>
+                  <th className="border border-blue-800 px-2 py-2 text-center">Frequency</th>
+                  <th className="border border-blue-800 px-2 py-2 text-center">Size</th>
+                  <th className="border border-blue-800 px-2 py-2 text-center">Probe No.</th>
+                  <th className="border border-blue-800 px-2 py-2 text-center">Range</th>
+                  <th className="border border-blue-800 px-2 py-2 text-center">Reference dB</th>
+                  <th className="border border-blue-800 px-2 py-2 text-center">Scanning dB</th>
+                  <th className="border border-blue-800 px-2 py-2 text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  try {
+                    const rows = JSON.parse(header.utProbeRows || "[]");
+                    if (rows.length === 0) return (
+                      <tr><td colSpan={9} className="text-center py-4 text-muted-foreground border border-zinc-300">No probe rows. Click Add Row.</td></tr>
+                    );
+                    return rows.map((row: any, idx: number) => (
+                      <tr key={idx} className="hover:bg-muted/30">
+                        {(["probeType", "probeAngle", "frequency", "size", "probeNo", "range", "referenceDb", "scanningDb"] as const).map((field) => (
+                          <td key={field} className="border border-zinc-300 p-1">
+                            <Input className="h-8 text-xs" value={row[field] ?? ""}
+                              onChange={(e) => {
+                                const next = [...rows]; next[idx] = { ...row, [field]: e.target.value };
+                                setHeader((h) => ({ ...h, utProbeRows: JSON.stringify(next) }));
+                              }}
+                            />
+                          </td>
+                        ))}
+                        <td className="border border-zinc-300 p-1 text-center">
+                          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-600"
+                            onClick={() => {
+                              const next = rows.filter((_: any, i: number) => i !== idx);
+                              setHeader((h) => ({ ...h, utProbeRows: JSON.stringify(next) }));
+                            }}
+                          ><Trash2 className="h-3 w-3" /></Button>
+                        </td>
+                      </tr>
+                    ));
+                  } catch { return null; }
+                })()}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Scanning Details */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Scanning Details</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <tbody>
+                {([
+                  ["Calibration Block (DAC Block)", "utCalibrationBlock", "Reference Level", "utReferenceLevel"],
+                  ["Extent of Examination", "utExtentOfExamination", "Flaw Sizing Technique", "utFlawSizingTechnique"],
+                  ["Surface Condition", "utSurfaceCondition", "", ""],
+                ] as const).map(([label1, field1, label2, field2]) => (
+                  <tr key={label1} className="border-b border-zinc-200">
+                    <td className="bg-blue-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/4">{label1}</td>
+                    <td className="px-2 py-1.5 border-r border-zinc-200">
+                      <Input className="h-8 text-sm" value={header[field1 as keyof ReportHeader] as string}
+                        onChange={(e) => updateHeader(field1 as keyof ReportHeader, e.target.value)}
+                      />
+                    </td>
+                    {field2 ? (
+                      <>
+                        <td className="bg-blue-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/4">{label2}</td>
+                        <td className="px-2 py-1.5">
+                          <Input className="h-8 text-sm" value={header[field2 as keyof ReportHeader] as string}
+                            onChange={(e) => updateHeader(field2 as keyof ReportHeader, e.target.value)}
+                          />
+                        </td>
+                      </>
+                    ) : (
+                      <td colSpan={2} className="px-2 py-1.5 bg-zinc-50" />
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Test Results */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base">Test Results</CardTitle>
+            </div>
+            <Button onClick={() => {
+              const rows = JSON.parse(header.utTestResultRows || "[]");
+              rows.push({ description: "", beamId: "", noOfJoints: "", thickness: "", weldType: "", moc: "", totalMeter: "", results: "" });
+              setHeader((h) => ({ ...h, utTestResultRows: JSON.stringify(rows) }));
+            }} size="sm">
+              <Plus className="mr-1 h-4 w-4" /> Add Row
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-blue-700 text-white">
+                <tr>
+                  <th className="border border-blue-800 px-2 py-2 text-center" style={{ minWidth: 30 }}>Sl. No</th>
+                  <th className="border border-blue-800 px-2 py-2 text-center" style={{ minWidth: 180 }}>Description</th>
+                  <th className="border border-blue-800 px-2 py-2 text-center" style={{ minWidth: 60 }}>Beam ID</th>
+                  <th className="border border-blue-800 px-2 py-2 text-center" style={{ minWidth: 50 }}>No. of Joints</th>
+                  <th className="border border-blue-800 px-2 py-2 text-center" style={{ minWidth: 60 }}>Thickness</th>
+                  <th className="border border-blue-800 px-2 py-2 text-center" style={{ minWidth: 60 }}>Weld Type</th>
+                  <th className="border border-blue-800 px-2 py-2 text-center" style={{ minWidth: 40 }}>MOC</th>
+                  <th className="border border-blue-800 px-2 py-2 text-center" style={{ minWidth: 50 }}>Total Meter</th>
+                  <th className="border border-blue-800 px-2 py-2 text-center" style={{ minWidth: 70 }}>Results</th>
+                  <th className="border border-blue-800 px-2 py-2 text-center" style={{ minWidth: 60 }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  try {
+                    const rows = JSON.parse(header.utTestResultRows || "[]");
+                    if (rows.length === 0) return (
+                      <tr><td colSpan={10} className="text-center py-4 text-muted-foreground border border-zinc-300">No test result rows. Click Add Row.</td></tr>
+                    );
+                    return rows.map((row: any, idx: number) => (
+                      <tr key={idx} className="hover:bg-muted/30">
+                        <td className="border border-zinc-300 p-1 text-center font-mono">{idx + 1}</td>
+                        <td className="border border-zinc-300 p-1">
+                          <Textarea rows={1} className="text-xs min-h-[32px] py-1" value={row.description ?? ""}
+                            onChange={(e) => {
+                              const next = [...rows]; next[idx] = { ...row, description: e.target.value };
+                              setHeader((h) => ({ ...h, utTestResultRows: JSON.stringify(next) }));
+                            }}
+                          />
+                        </td>
+                        {(["beamId", "noOfJoints", "thickness", "weldType", "moc", "totalMeter", "results"] as const).map((field) => (
+                          <td key={field} className="border border-zinc-300 p-1">
+                            <Input className="h-8 text-xs" value={row[field] ?? ""}
+                              onChange={(e) => {
+                                const next = [...rows]; next[idx] = { ...row, [field]: e.target.value };
+                                setHeader((h) => ({ ...h, utTestResultRows: JSON.stringify(next) }));
+                              }}
+                            />
+                          </td>
+                        ))}
+                        <td className="border border-zinc-300 p-1 text-center">
+                          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-600"
+                            onClick={() => {
+                              const next = rows.filter((_: any, i: number) => i !== idx);
+                              setHeader((h) => ({ ...h, utTestResultRows: JSON.stringify(next) }));
+                            }}
+                          ><Trash2 className="h-3 w-3" /></Button>
+                        </td>
+                      </tr>
+                    ));
+                  } catch { return null; }
+                })()}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Inspection Note */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Inspection Note</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Textarea rows={2} className="text-sm"
+            value={header.utInspectionNote}
+            onChange={(e) => updateHeader("utInspectionNote", e.target.value)}
+            placeholder="e.g. No Reportable Indications Were Found."
+          />
         </CardContent>
       </Card>
 

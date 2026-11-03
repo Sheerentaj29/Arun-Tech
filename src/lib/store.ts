@@ -57,6 +57,7 @@ export type PipelineReportType =
   | "PIPELINE_DPT"
   | "PIPELINE_MPT"
   | "PIPELINE_WELD_SCAN"
+  | "PIPELINE_UT"
   | "PIPELINE_VISUAL"
   | "PIPELINE_CONDITION";
 
