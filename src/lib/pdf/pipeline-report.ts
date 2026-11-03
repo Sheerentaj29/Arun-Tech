@@ -1805,24 +1805,63 @@ export async function generatePipelineReportPdf(
       doc.fillColor("#000");
     }
   } else if (reportType === "PIPELINE_WELD_SCAN") {
-    // ─── WELD SCAN PLACEHOLDER ───
-    startBodyOnFreshPage(80);
-    if (y + 60 > pageMaxY) { addNewPage(); y = MARGIN; }
-    y += 10;
-    doc.font(FONT_BOLD).fontSize(11).fillColor("#000");
-    doc.text("Weld Scan — Inspection Procedure", MARGIN, y);
-    y += 18;
-    doc.font(FONT_REGULAR).fontSize(9).fillColor("#444");
-    const placeholderText =
-      "The detailed inspection procedure and observation table for " +
-      "Weld Scan will be added in a future update. This report contains the header " +
-      "details, inspection photographs, and certification documents recorded " +
-      "for this inspection. Please refer to the report header, photographs, " +
-      "and certificates for the inspection details.";
-    const ph = doc.heightOfString(placeholderText, { width: pageW - 2 * MARGIN });
-    doc.text(placeholderText, MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
-    y += ph + 12;
+    // ─── WELD SCAN OBSERVATION TABLE ───
+    // Reuses the same DPT observation infrastructure (the DptObservation
+    // model and API are shared between DPT, MPT, and Weld Scan reports).
+    startBodyOnFreshPage(160);
+
+    const wsReport = report as any;
+
+    // Parse custom columns (shared with DPT)
+    let wsCustomCols: Array<{ id: string; name: string; unit: string }> = [];
+    try {
+      const cc = JSON.parse(wsReport.dptCustomColumns ?? "[]");
+      if (Array.isArray(cc)) wsCustomCols = cc;
+    } catch {}
+
+    const headerH = 36;
+    const rowH = 28;
+    const slColW = 40;
+    const descColW = 200;
+    const weldColW = 80;
+    const resultColW = 60;
+    const customColW = 60;
+    const fixedW = slColW + descColW + weldColW + resultColW;
+    const customTotalW = wsCustomCols.length * customColW;
+    const remarksW = Math.max(100, pageW - 2 * MARGIN - fixedW - customTotalW);
+    const colWidths = [slColW, descColW, weldColW, resultColW, ...wsCustomCols.map(() => customColW), remarksW];
+    const colHeaders = ["Sl.\nNo", "Description", "Weld\nType", "Result", ...wsCustomCols.map(c => c.name + (c.unit ? `\n(${c.unit})` : "")), "Remarks"];
+
+    // Section heading
+    if (y + 24 + headerH + rowH > pageMaxY) { addNewPage(); y = MARGIN; }
+    y += 4;
+    doc.font(FONT_BOLD).fontSize(11).fillColor("#155e63");
+    doc.text("Weld Scan Inspection Results", MARGIN, y);
     doc.fillColor("#000");
+    y += 16;
+
+    if (y + headerH + rowH > pageMaxY) { addNewPage(); y = MARGIN; }
+    drawDptTableHeader(doc, colHeaders, colWidths, y, pageW);
+    y += headerH;
+
+    const wsObs = wsReport.dptObservations ?? [];
+    for (const obs of wsObs) {
+      if (y + rowH > pageMaxY) {
+        addNewPage();
+        drawDptTableHeader(doc, colHeaders, colWidths, MARGIN, pageW);
+        y = MARGIN + headerH;
+      }
+      drawDptRow(doc, obs, colHeaders, colWidths, y, wsCustomCols);
+      y += rowH;
+    }
+
+    if (wsObs.length === 0) {
+      doc.font(FONT_REGULAR).fontSize(8).fillColor("#666");
+      doc.rect(MARGIN, y, pageW - 2 * MARGIN, rowH).stroke("#bbb");
+      doc.text("No Weld Scan observations recorded.", MARGIN + 4, y + 9, { width: pageW - 2 * MARGIN - 8, align: "center" });
+      doc.fillColor("#000");
+      y += rowH;
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════

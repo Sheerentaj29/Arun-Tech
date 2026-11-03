@@ -58,16 +58,13 @@ const OPTIONS: TypeOption[] = [
   {
     type: "PIPELINE_WELD_SCAN",
     title: "Weld Scan",
-    subtitle: "Weld scan inspection (coming soon)",
+    subtitle: "Weld scan inspection with Accept/Reject results",
     description:
       "Weld Scan report for systematic weld inspection along a pipeline or " +
-      "vessel. The detailed Weld Scan workflow — including scan parameters, " +
-      "weld map references, and observation table — will be available " +
-      "shortly. You can create a placeholder report now and complete the " +
-      "inspection details later.",
+      "vessel. Includes an editable observation table with auto-serial " +
+      "numbers, custom columns, and Accept / Reject results.",
     icon: Zap,
     accent: "border-cyan-500 bg-cyan-50 hover:bg-cyan-100",
-    comingSoon: true,
   },
   {
     type: "PIPELINE_THICKNESS",

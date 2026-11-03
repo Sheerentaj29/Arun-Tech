@@ -109,10 +109,9 @@ const REPORT_TYPE_INFO: Record<PipelineReportType, {
     title: "WELD SCAN REPORT",
     shortLabel: "Weld Scan",
     formHeading: "New Weld Scan Report",
-    formDescription: "Systematic weld scan inspection along a pipeline or vessel.",
+    formDescription: "Weld scan inspection with observation table and Accept/Reject results.",
     step2Label: "Weld Scan Observations",
     accent: "border-cyan-500 text-cyan-700",
-    comingSoon: true,
   },
   PIPELINE_UT: {
     title: "ULTRASONIC TEST REPORT",
@@ -1193,14 +1192,9 @@ export function PipelineReportFormView() {
       // report and sets editingPipelineReportId. For existing reports,
       // it updates the header.
       await saveHeader();
-      // For Weld Scan placeholders, jump straight to Step 3
-      // (Findings & Photos) since there's no inspection table yet.
-      // MPT and UT now have their own procedure + observation tables on Step 2.
-      if (header.reportType === "PIPELINE_WELD_SCAN") {
-        setStep(3);
-      } else {
-        setStep(2);
-      }
+      // For Weld Scan, MPT, and UT now have their own Step 2 content.
+      // No report type skips Step 2 anymore.
+      setStep(2);
     } else if (step === 2) {
       validateStep2();
       // For PIPELINE_THICKNESS reports, persist the custom columns JSON
@@ -1232,14 +1226,8 @@ export function PipelineReportFormView() {
       } else if (header.reportType === "PIPELINE_MPT") {
         setHeader((h) => ({ ...h, mptCustomColumns: JSON.stringify(mptCustomColumns) }));
       }
-      // For Weld Scan, Step 2 is skipped (they go 1 → 3), so going
-      // back from Step 3 lands on Step 1.
-      // MPT now goes through Step 2, so it uses the normal 3 → 2 → 1 flow.
-      if (header.reportType === "PIPELINE_WELD_SCAN") {
-        setStep(1);
-      } else {
-        setStep((step - 1) as 1 | 2 | 3);
-      }
+      // All report types now go through Step 2, so the normal 3 → 2 → 1 flow applies.
+      setStep((step - 1) as 1 | 2 | 3);
       if (typeof window !== "undefined") {
         window.scrollTo({ top: 0, behavior: "smooth" });
       }
@@ -1861,15 +1849,9 @@ export function PipelineReportFormView() {
       <div className="flex items-center gap-2 rounded-md border bg-muted/30 p-3 flex-wrap">
         {[
           { num: 1, label: "Report Details" },
-          { num: 2, label: header.reportType === "PIPELINE_WELD_SCAN" ? "Findings & Photos" : "Inspection Findings" },
+          { num: 2, label: "Inspection Findings" },
           { num: 3, label: "Findings & Photos" },
-        ].filter(s => header.reportType !== "PIPELINE_WELD_SCAN" || s.num !== 2).map((s) => {
-          // For Weld Scan, only show steps 1 and 3 (skipping step 2)
-          // Renumber: step 3 becomes display #2
-          let displayNum = s.num;
-          if (header.reportType === "PIPELINE_WELD_SCAN") {
-            if (s.num === 3) displayNum = 2;
-          }
+        ].map((s) => {
           const isActive = step === s.num;
           const isDone = step > s.num;
           return (
@@ -1879,7 +1861,7 @@ export function PipelineReportFormView() {
                   isActive ? "bg-amber-600 text-white" : isDone ? "bg-emerald-600 text-white" : "bg-zinc-200 text-zinc-500"
                 }`}
               >
-                {isDone ? "✓" : displayNum}
+                {isDone ? "✓" : s.num}
               </div>
               <span className={`text-sm font-medium ${isActive ? "text-amber-700" : "text-muted-foreground"}`}>
                 {s.label}
@@ -4028,30 +4010,149 @@ export function PipelineReportFormView() {
       </>
       )}
 
-      {/* ═══ STEP 2 PLACEHOLDER: WELD SCAN (only) ═══ */}
+      {/* ═══ STEP 2 (WELD SCAN): WELD SCAN OBSERVATION TABLE ═══ */}
       {step === 2 && header.reportType === "PIPELINE_WELD_SCAN" && (
       <>
-        <Alert className="border-amber-200 bg-amber-50">
-          <ShieldAlert className="h-4 w-4 text-amber-700" />
-          <AlertTitle className="text-amber-900">
-            Weld Scan report workflow — coming soon
-          </AlertTitle>
-          <AlertDescription className="text-amber-900">
-            The detailed inspection workflow for Weld Scan is
-            not yet available. You can still fill in the report header
-            (Step 1), upload photographs and certificates (Step 3), and
-            submit the report for review. The full inspection procedure
-            and observation table will be added in a future update.
-          </AlertDescription>
-        </Alert>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" onClick={goPrevious}>
-            <ArrowLeft className="mr-2 h-4 w-4" /> Previous
-          </Button>
-          <Button onClick={proceedToNext} disabled={saving}>
-            Proceed to Findings & Photos <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
-        </div>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base">Weld Scan Inspection Results</CardTitle>
+              <CardDescription>
+                Add one row per inspection point. Serial numbers are auto-generated.
+                Select Accept or Reject for each row.
+              </CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={addDptObservation} size="sm">
+                <Plus className="mr-1 h-4 w-4" /> Add Row
+              </Button>
+              <Button onClick={addDptCustomColumn} size="sm" variant="outline">
+                <Columns3 className="mr-1 h-4 w-4" /> Add Column
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-cyan-700 text-white">
+                <tr>
+                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 40 }}>Sl. No</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 200 }}>Description</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 100 }}>Weld Type</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 80 }}>Result</th>
+                  {dptCustomColumns.map((cc) => (
+                    <th key={cc.id} className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 90 }}>
+                      <div className="flex items-center justify-center gap-1">
+                        <span>{cc.name}</span>
+                        {cc.unit && <span className="text-[9px] opacity-70">({cc.unit})</span>}
+                        <button onClick={() => deleteDptCustomColumn(cc.id)} className="ml-1 text-cyan-300 hover:text-cyan-100" title={`Delete "${cc.name}"`}>
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </th>
+                  ))}
+                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 200 }}>Remarks</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 80 }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dptObservations.length === 0 && (
+                  <tr>
+                    <td colSpan={6 + dptCustomColumns.length} className="text-center py-6 text-muted-foreground border border-zinc-300">
+                      No Weld Scan observations yet. Click <strong>Add Row</strong> to begin.
+                    </td>
+                  </tr>
+                )}
+                {dptObservations.map((obs, idx) => (
+                  <tr key={idx} className="hover:bg-muted/30">
+                    <td className="border border-zinc-300 p-1 text-center font-mono tabular-nums">{obs.serialNo}</td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input className="h-8 text-xs" value={obs.description}
+                        onChange={(e) => updateDptObservation(idx, { description: e.target.value })}
+                        placeholder="Description of inspected area"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input className="h-8 text-xs" value={obs.weldType}
+                        onChange={(e) => updateDptObservation(idx, { weldType: e.target.value })}
+                        placeholder="e.g. Butt Weld"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Select value={obs.result}
+                        onValueChange={(v) => updateDptObservation(idx, { result: v as "Accept" | "Reject" })}
+                      >
+                        <SelectTrigger className={`h-8 text-xs font-bold ${obs.result === "Reject" ? "text-red-700" : "text-emerald-700"}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Accept" className="text-emerald-700">Accept</SelectItem>
+                          <SelectItem value="Reject" className="text-red-700">Reject</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    {dptCustomColumns.map((cc) => (
+                      <td key={cc.id} className="border border-zinc-300 p-1 text-center">
+                        <Input type="text" className="h-8 text-xs text-center"
+                          value={getDptCustomColumnValue(obs, cc.id)}
+                          onChange={(e) => setDptCustomColumnValue(idx, cc.id, e.target.value)}
+                          placeholder={cc.unit || "—"}
+                        />
+                      </td>
+                    ))}
+                    <td className="border border-zinc-300 p-1">
+                      <Textarea rows={1} className="text-xs min-h-[32px] py-1"
+                        value={obs.remarks}
+                        onChange={(e) => updateDptObservation(idx, { remarks: e.target.value })}
+                        placeholder="Observations, details..."
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <div className="flex flex-col gap-1">
+                        <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]"
+                          onClick={() => saveDptObservation(idx)} disabled={saving} title="Save row"
+                        >
+                          <Save className="h-3 w-3" />
+                        </Button>
+                        <Button size="sm" variant="ghost"
+                          className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+                          onClick={() => deleteDptObservationApi(idx)} title="Delete row"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="bg-zinc-50">
+        <CardContent className="p-4 text-xs text-muted-foreground space-y-1">
+          <div><strong>Weld Scan Inspection:</strong> each row records one inspection point with Accept / Reject result.</div>
+          <div><strong>Serial numbers:</strong> auto-generated (1, 2, 3…) and renumbered when rows are added or deleted.</div>
+          <div><strong>Custom columns:</strong> click <strong>Add Column</strong> to add a new column. System columns (Sl. No, Description, Weld Type, Result, Remarks) cannot be deleted.</div>
+        </CardContent>
+      </Card>
+
+      {/* Step 2 navigation */}
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" onClick={goPrevious}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> Previous
+        </Button>
+        <Button variant="ghost" onClick={saveDraft} disabled={saving}>
+          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+          Save Draft
+        </Button>
+        <Button onClick={proceedToNext} disabled={saving}>
+          Proceed to Next <ArrowRight className="ml-2 h-4 w-4" />
+        </Button>
+      </div>
       </>
       )}
 
