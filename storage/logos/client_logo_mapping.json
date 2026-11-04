@@ -1,8 +1,8 @@
 {
   "aruntech": "aruntech.png",
   "kothari": "kothari_petrochemicals.png",
+  "l&t geo": "lt.png",
   "l&t": "lt.png",
-  "lt": "lt.png",
   "larsen": "lt.png",
   "pcbl": "pcbl_chemical.png",
   "carbon black": "pcbl_chemical.png",
@@ -11,7 +11,7 @@
   "raftaar": "raftaar_terminals.png",
   "thirumalai": "thirumalai_chemicals.png",
   "tuv": "tuv_india.png",
-  "t\u00fcv": "tuv_india.png",
+  "tüv": "tuv_india.png",
   "tata": "tata.png",
   "tq cert": "tq_cert.png",
   "vaaman": "vaaman_engineers.png",
