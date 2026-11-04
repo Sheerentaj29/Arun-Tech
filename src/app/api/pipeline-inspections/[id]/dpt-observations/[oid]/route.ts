@@ -29,6 +29,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string;
     data: {
       description: body.description !== undefined ? (body.description?.trim() || null) : undefined,
       weldType: body.weldType !== undefined ? (body.weldType?.trim() || null) : undefined,
+      indicationSize: body.indicationSize !== undefined ? (body.indicationSize?.trim() || null) : undefined,
       result: body.result !== undefined ? (body.result === "Reject" ? "Reject" : "Accept") : undefined,
       remarks: body.remarks !== undefined ? (body.remarks?.trim() || null) : undefined,
       sortOrder: body.sortOrder !== undefined ? Number(body.sortOrder) : undefined,

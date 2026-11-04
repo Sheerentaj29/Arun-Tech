@@ -754,6 +754,7 @@ model DptObservation {
 
   description           String?  // Description of the inspected area/component
   weldType              String?  // Weld type (Butt Weld, Fillet Weld, etc.)
+  indicationSize        String?  // Indication Size (mm) — typeable
   result                String   @default("Accept") // Accept | Reject
   remarks               String?  // Additional observations/remarks
 

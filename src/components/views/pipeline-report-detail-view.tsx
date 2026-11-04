@@ -1104,11 +1104,11 @@ export function PipelineReportDetailView() {
           </div>
         )}
 
-        {/* Equipment / Instrument Certificates */}
+        {/* Instrument Calibration */}
         {report.certificates && report.certificates.filter(c => c.category === "EQUIPMENT").length > 0 && (
           <div className="mt-6">
             <h3 className="text-xs font-bold text-zinc-700 mb-2 border-b border-zinc-300 pb-1">
-              Equipment / Instrument Certificates ({report.certificates.filter(c => c.category === "EQUIPMENT").length})
+              Instrument Calibration ({report.certificates.filter(c => c.category === "EQUIPMENT").length})
             </h3>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {report.certificates.filter(c => c.category === "EQUIPMENT").map((cert) => {
@@ -1143,14 +1143,20 @@ export function PipelineReportDetailView() {
           </div>
         )}
 
-        {/* Personnel / Inspector Certificates */}
-        {report.certificates && report.certificates.filter(c => c.category === "PERSONNEL").length > 0 && (
+        {/* Inspector Certificates — NDT Level 3 (optional) first, then NDT Level 2 */}
+        {report.certificates && report.certificates.filter(c => c.category === "PERSONNEL").length > 0 && (() => {
+          const personnel = report.certificates!.filter(c => c.category === "PERSONNEL");
+          const ndtLevel3 = personnel.filter(c => (c.title || "").includes("NDT Level 3"));
+          const ndtLevel2 = personnel.filter(c => (c.title || "").includes("NDT Level 2"));
+          const others = personnel.filter(c => !ndtLevel3.includes(c) && !ndtLevel2.includes(c));
+          const ordered = [...ndtLevel3, ...ndtLevel2, ...others];
+          return (
           <div className="mt-6">
             <h3 className="text-xs font-bold text-zinc-700 mb-2 border-b border-zinc-300 pb-1">
-              Personnel / Inspector Certificates ({report.certificates.filter(c => c.category === "PERSONNEL").length})
+              Inspector Certificates ({ordered.length})
             </h3>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-              {report.certificates.filter(c => c.category === "PERSONNEL").map((cert) => {
+              {ordered.map((cert) => {
                 const ext = (cert.fileExtension || "").toLowerCase();
                 const isImage = [".png", ".jpg", ".jpeg"].includes(ext);
                 const rawUrl = `/api/pipeline-inspections/${report.id}/certificates/${cert.id}/raw`;
@@ -1180,7 +1186,8 @@ export function PipelineReportDetailView() {
               })}
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* Summary Of Site Observations */}
         {report.siteObservationSummary && (

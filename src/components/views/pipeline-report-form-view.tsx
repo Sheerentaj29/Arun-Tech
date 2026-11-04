@@ -491,11 +491,13 @@ interface DptObservationRow {
   sortOrder: number;
   description: string;
   weldType: string;
+  indicationSize: string;
   result: "Accept" | "Reject";
   remarks: string;
   customColumnValues: string;
   _isNew?: boolean;
 }
+const WELD_TYPE_OPTIONS = ["Butt Weld", "Fillet Weld"];
 const CORROSION_LEVELS = ["None", "Light", "Moderate", "Severe", "N/A"];
 const CONDITION_RATINGS = ["Good", "Fair", "Poor", "Critical", "N/A"];
 const RISK_LEVELS = ["Low", "Medium", "High", "Critical"];
@@ -861,6 +863,7 @@ export function PipelineReportFormView() {
             sortOrder: o.sortOrder,
             description: o.description ?? "",
             weldType: o.weldType ?? "",
+            indicationSize: o.indicationSize ?? "",
             result: o.result === "Reject" ? "Reject" : "Accept",
             remarks: o.remarks ?? "",
             customColumnValues: o.customColumnValues ?? "{}",
@@ -1700,6 +1703,7 @@ export function PipelineReportFormView() {
           sortOrder: arr.length,
           description: "",
           weldType: "",
+          indicationSize: "",
           result: "Accept",
           remarks: "",
           customColumnValues: "{}",
@@ -1941,7 +1945,7 @@ export function PipelineReportFormView() {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Inspection Area</Label>
+            <Label>Unit Name</Label>
             <Input
               value={header.inspectionArea}
               onChange={(e) => updateHeader("inspectionArea", e.target.value)}
@@ -3226,6 +3230,7 @@ export function PipelineReportFormView() {
                   <th className="border border-purple-900 px-2 py-2 text-center" style={{ minWidth: 40 }}>Sl. No</th>
                   <th className="border border-purple-900 px-2 py-2 text-center" style={{ minWidth: 200 }}>Description</th>
                   <th className="border border-purple-900 px-2 py-2 text-center" style={{ minWidth: 100 }}>Weld Type</th>
+                  <th className="border border-purple-900 px-2 py-2 text-center" style={{ minWidth: 80 }}>Indication<br />Size (mm)</th>
                   <th className="border border-purple-900 px-2 py-2 text-center" style={{ minWidth: 80 }}>Result</th>
                   {dptCustomColumns.map((cc) => (
                     <th key={cc.id} className="border border-purple-900 px-2 py-2 text-center" style={{ minWidth: 90 }}>
@@ -3249,7 +3254,7 @@ export function PipelineReportFormView() {
               <tbody>
                 {dptObservations.length === 0 && (
                   <tr>
-                    <td colSpan={6 + dptCustomColumns.length} className="text-center py-6 text-muted-foreground border border-zinc-300">
+                    <td colSpan={7 + dptCustomColumns.length} className="text-center py-6 text-muted-foreground border border-zinc-300">
                       No DPT observations yet. Click <strong>Add Row</strong> to begin.
                     </td>
                   </tr>
@@ -3266,11 +3271,25 @@ export function PipelineReportFormView() {
                       />
                     </td>
                     <td className="border border-zinc-300 p-1">
+                      <Select
+                        value={obs.weldType || ""}
+                        onValueChange={(v) => updateDptObservation(idx, { weldType: v })}
+                      >
+                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
+                        <SelectContent>
+                          {WELD_TYPE_OPTIONS.map((w) => (
+                            <SelectItem key={w} value={w}>{w}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="border border-zinc-300 p-1">
                       <Input
-                        className="h-8 text-xs"
-                        value={obs.weldType}
-                        onChange={(e) => updateDptObservation(idx, { weldType: e.target.value })}
-                        placeholder="e.g. Butt Weld"
+                        type="text"
+                        className="h-8 text-xs text-center"
+                        value={obs.indicationSize}
+                        onChange={(e) => updateDptObservation(idx, { indicationSize: e.target.value })}
+                        placeholder="—"
                       />
                     </td>
                     <td className="border border-zinc-300 p-1">
@@ -3532,6 +3551,7 @@ export function PipelineReportFormView() {
                   <th className="border border-orange-800 px-2 py-2 text-center" style={{ minWidth: 40 }}>Sl. No</th>
                   <th className="border border-orange-800 px-2 py-2 text-center" style={{ minWidth: 200 }}>Description</th>
                   <th className="border border-orange-800 px-2 py-2 text-center" style={{ minWidth: 100 }}>Weld Type</th>
+                  <th className="border border-orange-800 px-2 py-2 text-center" style={{ minWidth: 80 }}>Indication<br />Size (mm)</th>
                   <th className="border border-orange-800 px-2 py-2 text-center" style={{ minWidth: 80 }}>Result</th>
                   {mptCustomColumns.map((cc) => (
                     <th key={cc.id} className="border border-orange-800 px-2 py-2 text-center" style={{ minWidth: 90 }}>
@@ -3551,7 +3571,7 @@ export function PipelineReportFormView() {
               <tbody>
                 {dptObservations.length === 0 && (
                   <tr>
-                    <td colSpan={6 + mptCustomColumns.length} className="text-center py-6 text-muted-foreground border border-zinc-300">
+                    <td colSpan={7 + mptCustomColumns.length} className="text-center py-6 text-muted-foreground border border-zinc-300">
                       No MPT observations yet. Click <strong>Add Row</strong> to begin.
                     </td>
                   </tr>
@@ -3566,9 +3586,22 @@ export function PipelineReportFormView() {
                       />
                     </td>
                     <td className="border border-zinc-300 p-1">
-                      <Input className="h-8 text-xs" value={obs.weldType}
-                        onChange={(e) => updateDptObservation(idx, { weldType: e.target.value })}
-                        placeholder="e.g. Butt Weld"
+                      <Select value={obs.weldType || ""}
+                        onValueChange={(v) => updateDptObservation(idx, { weldType: v })}
+                      >
+                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
+                        <SelectContent>
+                          {WELD_TYPE_OPTIONS.map((w) => (
+                            <SelectItem key={w} value={w}>{w}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input type="text" className="h-8 text-xs text-center"
+                        value={obs.indicationSize}
+                        onChange={(e) => updateDptObservation(idx, { indicationSize: e.target.value })}
+                        placeholder="—"
                       />
                     </td>
                     <td className="border border-zinc-300 p-1">
@@ -4041,6 +4074,7 @@ export function PipelineReportFormView() {
                   <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 40 }}>Sl. No</th>
                   <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 200 }}>Description</th>
                   <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 100 }}>Weld Type</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 80 }}>Indication<br />Size (mm)</th>
                   <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 80 }}>Result</th>
                   {dptCustomColumns.map((cc) => (
                     <th key={cc.id} className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 90 }}>
@@ -4060,7 +4094,7 @@ export function PipelineReportFormView() {
               <tbody>
                 {dptObservations.length === 0 && (
                   <tr>
-                    <td colSpan={6 + dptCustomColumns.length} className="text-center py-6 text-muted-foreground border border-zinc-300">
+                    <td colSpan={7 + dptCustomColumns.length} className="text-center py-6 text-muted-foreground border border-zinc-300">
                       No Weld Scan observations yet. Click <strong>Add Row</strong> to begin.
                     </td>
                   </tr>
@@ -4075,9 +4109,22 @@ export function PipelineReportFormView() {
                       />
                     </td>
                     <td className="border border-zinc-300 p-1">
-                      <Input className="h-8 text-xs" value={obs.weldType}
-                        onChange={(e) => updateDptObservation(idx, { weldType: e.target.value })}
-                        placeholder="e.g. Butt Weld"
+                      <Select value={obs.weldType || ""}
+                        onValueChange={(v) => updateDptObservation(idx, { weldType: v })}
+                      >
+                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
+                        <SelectContent>
+                          {WELD_TYPE_OPTIONS.map((w) => (
+                            <SelectItem key={w} value={w}>{w}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input type="text" className="h-8 text-xs text-center"
+                        value={obs.indicationSize}
+                        onChange={(e) => updateDptObservation(idx, { indicationSize: e.target.value })}
+                        placeholder="—"
                       />
                     </td>
                     <td className="border border-zinc-300 p-1">
@@ -4376,12 +4423,12 @@ export function PipelineReportFormView() {
           </CardContent>
         </Card>
 
-        {/* ─── Equipment / Instrument Certificates ─── */}
+        {/* ─── Instrument Calibration ─── */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-base">Equipment / Instrument Certificates</CardTitle>
+                <CardTitle className="text-base">Instrument Calibration</CardTitle>
                 <CardDescription>Calibration certificates for instruments and equipment used during the inspection.</CardDescription>
               </div>
               <label className="cursor-pointer">
@@ -4411,39 +4458,83 @@ export function PipelineReportFormView() {
           <CardContent><CertificateList reportId={editingPipelineReportId} category="EQUIPMENT" /></CardContent>
         </Card>
 
-        {/* ─── Personnel / Inspector Certificates ─── */}
+        {/* ─── Inspector Certificates ───
+            Two subsections:
+              1. NDT Level 3 Certificate (Optional)
+              2. NDT Level 2 Certificate
+            NDT Level 3 appears first and is optional.
+            Both use the PERSONNEL category for storage.
+        */}
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-base">Personnel / Inspector Certificates</CardTitle>
-                <CardDescription>Certificates associated with inspectors or personnel involved in the inspection.</CardDescription>
-              </div>
-              <label className="cursor-pointer">
-                <input type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" multiple className="hidden"
-                  onChange={async (e) => {
-                    if (!e.target.files || !editingPipelineReportId) return;
-                    const token = typeof window !== "undefined" ? window.localStorage.getItem("ira_session_token") : null;
-                    for (const file of Array.from(e.target.files)) {
-                      try {
-                        const fd = new FormData(); fd.append("file", file); fd.append("category", "PERSONNEL");
-                        fd.append("title", file.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim());
-                        const res = await fetch(`/api/pipeline-inspections/${editingPipelineReportId}/certificates`, {
-                          method: "POST", body: fd, credentials: "include",
-                          headers: token ? { Authorization: `Bearer ${token}` } : {},
-                        });
-                        if (!res.ok) throw new Error("Upload failed");
-                        toast.success(`Uploaded "${file.name}"`);
-                      } catch { toast.error(`Failed to upload "${file.name}"`); }
-                    }
-                    e.target.value = ""; refresh();
-                  }}
-                />
-                <Button size="sm" asChild disabled={!editingPipelineReportId}><span><Plus className="mr-1 h-4 w-4" /> Add Certificate</span></Button>
-              </label>
-            </div>
+            <CardTitle className="text-base">Inspector Certificates</CardTitle>
+            <CardDescription>NDT certification documents for inspectors involved in the inspection.</CardDescription>
           </CardHeader>
-          <CardContent><CertificateList reportId={editingPipelineReportId} category="PERSONNEL" /></CardContent>
+          <CardContent className="space-y-4">
+            {/* NDT Level 3 Certificate (Optional) */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <h4 className="text-sm font-semibold">NDT Level 3 Certificate</h4>
+                  <p className="text-xs text-muted-foreground">Optional — upload if available.</p>
+                </div>
+                <label className="cursor-pointer">
+                  <input type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" multiple className="hidden"
+                    onChange={async (e) => {
+                      if (!e.target.files || !editingPipelineReportId) return;
+                      const token = typeof window !== "undefined" ? window.localStorage.getItem("ira_session_token") : null;
+                      for (const file of Array.from(e.target.files)) {
+                        try {
+                          const fd = new FormData(); fd.append("file", file); fd.append("category", "PERSONNEL");
+                          fd.append("title", "NDT Level 3 — " + file.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim());
+                          const res = await fetch(`/api/pipeline-inspections/${editingPipelineReportId}/certificates`, {
+                            method: "POST", body: fd, credentials: "include",
+                            headers: token ? { Authorization: `Bearer ${token}` } : {},
+                          });
+                          if (!res.ok) throw new Error("Upload failed");
+                          toast.success(`Uploaded "${file.name}"`);
+                        } catch { toast.error(`Failed to upload "${file.name}"`); }
+                      }
+                      e.target.value = ""; refresh();
+                    }}
+                  />
+                  <Button size="sm" asChild variant="outline" disabled={!editingPipelineReportId}><span><Plus className="mr-1 h-4 w-4" /> Add NDT Level 3</span></Button>
+                </label>
+              </div>
+              <CertificateList reportId={editingPipelineReportId} category="PERSONNEL" titleFilter="NDT Level 3" />
+            </div>
+            {/* NDT Level 2 Certificate */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <h4 className="text-sm font-semibold">NDT Level 2 Certificate</h4>
+                </div>
+                <label className="cursor-pointer">
+                  <input type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" multiple className="hidden"
+                    onChange={async (e) => {
+                      if (!e.target.files || !editingPipelineReportId) return;
+                      const token = typeof window !== "undefined" ? window.localStorage.getItem("ira_session_token") : null;
+                      for (const file of Array.from(e.target.files)) {
+                        try {
+                          const fd = new FormData(); fd.append("file", file); fd.append("category", "PERSONNEL");
+                          fd.append("title", "NDT Level 2 — " + file.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim());
+                          const res = await fetch(`/api/pipeline-inspections/${editingPipelineReportId}/certificates`, {
+                            method: "POST", body: fd, credentials: "include",
+                            headers: token ? { Authorization: `Bearer ${token}` } : {},
+                          });
+                          if (!res.ok) throw new Error("Upload failed");
+                          toast.success(`Uploaded "${file.name}"`);
+                        } catch { toast.error(`Failed to upload "${file.name}"`); }
+                      }
+                      e.target.value = ""; refresh();
+                    }}
+                  />
+                  <Button size="sm" asChild disabled={!editingPipelineReportId}><span><Plus className="mr-1 h-4 w-4" /> Add NDT Level 2</span></Button>
+                </label>
+              </div>
+              <CertificateList reportId={editingPipelineReportId} category="PERSONNEL" titleFilter="NDT Level 2" excludeTitleFilter="NDT Level 3" />
+            </div>
+          </CardContent>
         </Card>
 
         {/* Step 2 navigation */}
@@ -5023,7 +5114,7 @@ function PrimaryPhotoUploader({
 // Supports image previews (via AuthImage) and PDF file icons.
 // Allows deletion.
 
-function CertificateList({ reportId, category }: { reportId: string | null; category: string }) {
+function CertificateList({ reportId, category, titleFilter, excludeTitleFilter }: { reportId: string | null; category: string; titleFilter?: string; excludeTitleFilter?: string }) {
   const [items, setItems] = useState<Array<{
     id: string; title: string; fileName: string; fileExtension: string; fileSize: number;
   }>>([]);
@@ -5034,10 +5125,19 @@ function CertificateList({ reportId, category }: { reportId: string | null; cate
     if (!reportId) return;
     setLoading(true);
     apiFetch<{ items: any[] }>(`/api/pipeline-inspections/${reportId}/certificates`)
-      .then((r) => setItems(r.items.filter((c) => c.category === category)))
+      .then((r) => {
+        let filtered = r.items.filter((c) => c.category === category);
+        if (titleFilter) {
+          filtered = filtered.filter((c) => (c.title || "").includes(titleFilter));
+        }
+        if (excludeTitleFilter) {
+          filtered = filtered.filter((c) => !(c.title || "").includes(excludeTitleFilter));
+        }
+        setItems(filtered);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [reportId, category, refreshKey]);
+  }, [reportId, category, titleFilter, excludeTitleFilter, refreshKey]);
 
   if (!reportId) return <p className="text-xs text-muted-foreground">Save the report first.</p>;
   if (loading) return <p className="text-xs text-muted-foreground">Loading…</p>;

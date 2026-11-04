@@ -57,6 +57,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       sortOrder: nextSort,
       description: body.description?.trim() || null,
       weldType: body.weldType?.trim() || null,
+      indicationSize: body.indicationSize?.trim() || null,
       result: body.result === "Reject" ? "Reject" : "Accept",
       remarks: body.remarks?.trim() || null,
       customColumnValues: body.customColumnValues ?? "{}",

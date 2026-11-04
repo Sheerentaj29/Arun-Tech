@@ -592,7 +592,7 @@ export async function generatePipelineReportPdf(
     ["Client", report.client.name],
     ["Location", report.plant.location],
     ["Plant Name", report.plant.name],
-    ["Inspection Area", report.inspectionArea],
+    ["Unit Name", report.inspectionArea],
     ["Pipeline Description", report.pipelineDescription],
     ["Pipeline Identification No.", report.pipelineIdentificationNumber],
     ["Isometric Drawing No.", report.isometricDrawingNumber],
@@ -1333,15 +1333,16 @@ export async function generatePipelineReportPdf(
     const slColW = 40;
     const descColW = 200;
     const weldColW = 80;
+    const indicationSizeColW = 60;
     const resultColW = 60;
     const customColW = 60;
 
     // Calculate column widths
-    const dptFixedW = slColW + descColW + weldColW + resultColW;
+    const dptFixedW = slColW + descColW + weldColW + indicationSizeColW + resultColW;
     const dptCustomTotalW = dptCustomCols.length * customColW;
     const dptRemarksW = Math.max(100, pageW - 2 * MARGIN - dptFixedW - dptCustomTotalW);
-    const dptColWidths = [slColW, descColW, weldColW, resultColW, ...dptCustomCols.map(() => customColW), dptRemarksW];
-    const dptColHeaders = ["Sl.\nNo", "Description", "Weld\nType", "Result", ...dptCustomCols.map(c => c.name + (c.unit ? `\n(${c.unit})` : "")), "Remarks"];
+    const dptColWidths = [slColW, descColW, weldColW, indicationSizeColW, resultColW, ...dptCustomCols.map(() => customColW), dptRemarksW];
+    const dptColHeaders = ["Sl.\nNo", "Description", "Weld\nType", "Indication\nSize\n(mm)", "Result", ...dptCustomCols.map(c => c.name + (c.unit ? `\n(${c.unit})` : "")), "Remarks"];
 
     // Section heading — ensure heading + table header + first row fit together
     // (a heading must never appear alone at the bottom of a page).
@@ -1508,13 +1509,14 @@ export async function generatePipelineReportPdf(
       const slColW = 40;
       const descColW = 200;
       const weldColW = 80;
+      const indicationSizeColW = 60;
       const resultColW = 60;
       const customColW = 60;
-      const fixedW = slColW + descColW + weldColW + resultColW;
+      const fixedW = slColW + descColW + weldColW + indicationSizeColW + resultColW;
       const customTotalW = mptCustomCols.length * customColW;
       const remarksW = Math.max(100, pageW - 2 * MARGIN - fixedW - customTotalW);
-      const colWidths = [slColW, descColW, weldColW, resultColW, ...mptCustomCols.map(() => customColW), remarksW];
-      const colHeaders = ["Sl.\nNo", "Description", "Weld\nType", "Result", ...mptCustomCols.map(c => c.name + (c.unit ? `\n(${c.unit})` : "")), "Remarks"];
+      const colWidths = [slColW, descColW, weldColW, indicationSizeColW, resultColW, ...mptCustomCols.map(() => customColW), remarksW];
+      const colHeaders = ["Sl.\nNo", "Description", "Weld\nType", "Indication\nSize\n(mm)", "Result", ...mptCustomCols.map(c => c.name + (c.unit ? `\n(${c.unit})` : "")), "Remarks"];
 
       // Section heading — ensure heading + table header + first row fit together
       if (y + 24 + headerH + rowH > pageMaxY) { addNewPage(); y = MARGIN; }
@@ -1824,13 +1826,14 @@ export async function generatePipelineReportPdf(
     const slColW = 40;
     const descColW = 200;
     const weldColW = 80;
+    const indicationSizeColW = 60;
     const resultColW = 60;
     const customColW = 60;
-    const fixedW = slColW + descColW + weldColW + resultColW;
+    const fixedW = slColW + descColW + weldColW + indicationSizeColW + resultColW;
     const customTotalW = wsCustomCols.length * customColW;
     const remarksW = Math.max(100, pageW - 2 * MARGIN - fixedW - customTotalW);
-    const colWidths = [slColW, descColW, weldColW, resultColW, ...wsCustomCols.map(() => customColW), remarksW];
-    const colHeaders = ["Sl.\nNo", "Description", "Weld\nType", "Result", ...wsCustomCols.map(c => c.name + (c.unit ? `\n(${c.unit})` : "")), "Remarks"];
+    const colWidths = [slColW, descColW, weldColW, indicationSizeColW, resultColW, ...wsCustomCols.map(() => customColW), remarksW];
+    const colHeaders = ["Sl.\nNo", "Description", "Weld\nType", "Indication\nSize\n(mm)", "Result", ...wsCustomCols.map(c => c.name + (c.unit ? `\n(${c.unit})` : "")), "Remarks"];
 
     // Section heading
     if (y + 24 + headerH + rowH > pageMaxY) { addNewPage(); y = MARGIN; }
@@ -2012,7 +2015,7 @@ export async function generatePipelineReportPdf(
       }
     };
 
-    // Equipment / Instrument Certificates
+    // Instrument Calibration
     if (equipCerts.length > 0) {
       // Start a new page for the certification section — ensures the
       // heading is never alone at the bottom of the measurement table page.
@@ -2021,7 +2024,7 @@ export async function generatePipelineReportPdf(
       doc.font(FONT_BOLD).fontSize(14).fillColor("#000");
       doc.text("Certification", MARGIN, MARGIN, { width: usableW });
       doc.font(FONT_BOLD).fontSize(11);
-      doc.text(`Equipment / Instrument Certificates (${equipCerts.length})`, MARGIN, MARGIN + 20, { width: usableW });
+      doc.text(`Instrument Calibration (${equipCerts.length})`, MARGIN, MARGIN + 20, { width: usableW });
 
       // First certificate on THIS page (below the headings)
       // Subsequent certificates on new pages
@@ -2079,18 +2082,25 @@ export async function generatePipelineReportPdf(
       }
     }
 
-    // Personnel / Inspector Certificates
-    if (personnelCerts.length > 0) {
+    // Inspector Certificates — split into NDT Level 3 (optional) and NDT Level 2
+    // NDT Level 3 certificates appear first, then NDT Level 2.
+    const ndtLevel3Certs = personnelCerts.filter((c) => (c.title || "").includes("NDT Level 3"));
+    const ndtLevel2Certs = personnelCerts.filter((c) => (c.title || "").includes("NDT Level 2"));
+    const otherPersonnelCerts = personnelCerts.filter((c) => !ndtLevel3Certs.includes(c) && !ndtLevel2Certs.includes(c));
+    // Combine in order: NDT Level 3 first, then NDT Level 2, then any others
+    const orderedPersonnelCerts = [...ndtLevel3Certs, ...ndtLevel2Certs, ...otherPersonnelCerts];
+
+    if (orderedPersonnelCerts.length > 0) {
       // Always start on a new page
       addNewPage();
       doc.font(FONT_BOLD).fontSize(11).fillColor("#000");
-      doc.text(`Personnel / Inspector Certificates (${personnelCerts.length})`, MARGIN, MARGIN, { width: usableW });
+      doc.text(`Inspector Certificates (${orderedPersonnelCerts.length})`, MARGIN, MARGIN, { width: usableW });
 
       // First certificate on THIS page (below the heading)
-      for (let i = 0; i < personnelCerts.length; i++) {
+      for (let i = 0; i < orderedPersonnelCerts.length; i++) {
         if (i > 0) addNewPage();
         if (i === 0) {
-          const cert = personnelCerts[i];
+          const cert = orderedPersonnelCerts[i];
           const ext = (cert.fileExtension || "").toLowerCase();
           const certHeaderY = MARGIN + 20;
           const certY = certHeaderY + 30; // 30pt gap for title + file name
@@ -2132,7 +2142,7 @@ export async function generatePipelineReportPdf(
             }
           }
         } else {
-          await renderCertificateOnPage(personnelCerts[i]);
+          await renderCertificateOnPage(orderedPersonnelCerts[i]);
         }
       }
     }
@@ -2556,7 +2566,7 @@ function drawDptTableHeader(doc: Doc, headers: string[], colWidths: number[], y:
 
 function drawDptRow(
   doc: Doc,
-  obs: { serialNo: number; description: string | null; weldType: string | null; result: string; remarks: string | null; customColumnValues: string | null },
+  obs: { serialNo: number; description: string | null; weldType: string | null; indicationSize?: string | null; result: string; remarks: string | null; customColumnValues: string | null },
   headers: string[],
   colWidths: number[],
   y: number,
@@ -2570,10 +2580,13 @@ function drawDptRow(
   const cellPad = 4;
   doc.font(FONT_REGULAR).fontSize(8).fillColor("#000");
 
-  // First pass: fill the Result cell background (so the border drawn on
-  // top of it is crisp). The Result cell is at index 3.
+  // The Result column is now at index 4 (after Sl.No, Description, WeldType, IndicationSize).
+  const resultIdx = 4;
+  const systemColCount = 5; // Sl.No, Description, WeldType, IndicationSize, Result
+
+  // First pass: fill the Result cell background
   for (let i = 0; i < headers.length; i++) {
-    if (i === 3) {
+    if (i === resultIdx) {
       const w = colWidths[i];
       if (obs.result === "Reject") {
         doc.rect(x, y, w, rowH).fill(DPT_RESULT_REJECT_BG);
@@ -2593,14 +2606,15 @@ function drawDptRow(
     if (i === 0) text = String(obs.serialNo);
     else if (i === 1) text = obs.description ?? "—";
     else if (i === 2) text = obs.weldType ?? "—";
-    else if (i === 3) {
+    else if (i === 3) text = obs.indicationSize ?? "—";
+    else if (i === resultIdx) {
       text = obs.result;
       isResult = true;
     } else if (i === headers.length - 1) {
       text = obs.remarks ?? "—";
     } else {
       // Custom column
-      const colIdx = i - 4; // offset by the 4 system columns
+      const colIdx = i - systemColCount;
       if (colIdx >= 0 && colIdx < customCols.length) {
         try {
           const vals = JSON.parse(obs.customColumnValues || "{}");
@@ -2628,7 +2642,7 @@ function drawDptRow(
       ? text.slice(0, Math.floor((maxW / Math.max(1, doc.widthOfString(text))) * text.length)) + "…"
       : text;
     doc.text(wrapped, x + cellPad, y + (rowH - 10) / 2, {
-      width: maxW, align: i === 0 || i === 3 ? "center" : "left",
+      width: maxW, align: i === 0 || i === resultIdx ? "center" : "left",
     });
     x += w;
   }
