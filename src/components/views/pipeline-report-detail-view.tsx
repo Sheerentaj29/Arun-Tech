@@ -157,7 +157,7 @@ interface FullReport {
   isDemo: boolean;
   createdAt: string;
   updatedAt: string;
-  client: { id: string; name: string };
+  client: { id: string; name: string; logoPath?: string | null };
   plant: { id: string; name: string; location: string | null; address: string | null };
   inspector: { id: string; name: string; email: string };
   approver: { id: string; name: string; email: string } | null;
@@ -612,29 +612,80 @@ export function PipelineReportDetailView() {
           </p>
         </div>
 
-        {/* Logo placeholders — Aruntech (left) + Client (right)
-            Both use flexbox centering with object-fit: contain behavior.
-            Logos are fetched via AuthImage so they work cross-origin. */}
+        {/* Logo section — Aruntech (left, permanent) + Client (right, dynamic)
+            The client logo is resolved using the logo mapping file based on
+            the client name, since most clients don't have logoPath set in DB.
+            Uses AuthImage for cross-origin auth support. */}
         <div className="mb-4 flex items-start justify-between">
-          <div className="flex h-16 w-36 items-center justify-center border border-zinc-400 overflow-hidden">
+          {/* Left: Aruntech logo (permanent) */}
+          <div className="flex h-16 w-36 items-center justify-center border border-zinc-400 overflow-hidden bg-white">
             <AuthImage
               src="/api/settings/service-logo"
               alt="Aruntech Logo"
               className="max-w-full max-h-full w-auto h-auto object-contain"
             />
           </div>
-          <div className="flex h-16 w-36 items-center justify-center border border-zinc-400 overflow-hidden">
-            {report.client.logoPath ? (
-              <AuthImage
-                src={`/api/clients/${report.clientId}/logo`}
-                alt={`${report.client.name} Logo`}
-                className="max-w-full max-h-full w-auto h-auto object-contain"
-              />
-            ) : (
-              <span className="text-[10px] text-zinc-500 text-center">
-                {report.client.name.slice(0, 24)}<br />Client Logo
-              </span>
-            )}
+          {/* Right: Client logo (dynamic, based on client name) */}
+          <div className="flex h-16 w-36 items-center justify-center border border-zinc-400 overflow-hidden bg-white">
+            {(() => {
+              // Resolve the client logo path using the mapping
+              const clientName = (report.client.name || "").toLowerCase();
+              const logoMapping: Record<string, string> = {
+                "aruntech": "aruntech.png",
+                "kothari": "kothari_petrochemicals.png",
+                "l&t geo": "lt.png",
+                "l&t": "lt.png",
+                "larsen": "lt.png",
+                "pcbl": "pcbl_chemical.png",
+                "carbon black": "pcbl_chemical.png",
+                "pidilite": "pidilite.png",
+                "raj petro": "raj_petro.png",
+                "raftaar": "raftaar_terminals.png",
+                "thirumalai": "thirumalai_chemicals.png",
+                "tuv": "tuv_india.png",
+                "tüv": "tuv_india.png",
+                "tata": "tata.png",
+                "tq cert": "tq_cert.png",
+                "vaaman": "vaaman_engineers.png",
+                "valspar": "valspar.png",
+                "vedanta": "vedanta_aluminium.png",
+                "jetyre": "jetyre.png",
+                "jk tyre": "jetyre.png",
+              };
+              let logoSlug: string | null = null;
+              for (const [keyword, logoFile] of Object.entries(logoMapping)) {
+                if (clientName.includes(keyword)) {
+                  logoSlug = logoFile;
+                  break;
+                }
+              }
+
+              if (logoSlug) {
+                // Use a dedicated API endpoint to serve client logos by slug
+                return (
+                  <AuthImage
+                    src={`/api/client-logo/${logoSlug}`}
+                    alt={`${report.client.name} Logo`}
+                    className="max-w-full max-h-full w-auto h-auto object-contain"
+                  />
+                );
+              } else if (report.client.logoPath) {
+                // Fall back to the client's uploaded logo path
+                return (
+                  <AuthImage
+                    src={`/api/clients/${report.clientId}/logo`}
+                    alt={`${report.client.name} Logo`}
+                    className="max-w-full max-h-full w-auto h-auto object-contain"
+                  />
+                );
+              } else {
+                return (
+                  <span className="text-[10px] text-zinc-500 text-center">
+                    {report.client.name.slice(0, 24)}<br />Client Logo
+                  </span>
+                );
+              }
+            })()}
           </div>
         </div>
 
