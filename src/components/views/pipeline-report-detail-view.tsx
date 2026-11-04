@@ -41,6 +41,7 @@ import {
 import { useAppStore } from "@/lib/store";
 import { apiFetch } from "@/lib/api-client";
 import { AuthImage } from "@/components/auth-image";
+import { resolveClientLogo } from "@/lib/client-logo-mapping";
 import { toast } from "sonner";
 
 interface FullReport {
@@ -636,49 +637,27 @@ export function PipelineReportDetailView() {
             style={{ width: "140px", height: "70px" }}
           >
             {(() => {
-              // Resolve the client logo path using the mapping
-              const clientName = (report.client.name || "").toLowerCase();
-              const logoMapping: Record<string, string> = {
-                "aruntech": "aruntech.png",
-                "kothari": "kothari_petrochemicals.png",
-                "l&t geo": "lt.png",
-                "l&t": "lt.png",
-                "larsen": "lt.png",
-                "pcbl": "pcbl_chemical.png",
-                "carbon black": "pcbl_chemical.png",
-                "pidilite": "pidilite.png",
-                "raj petro": "raj_petro.png",
-                "raftaar": "raftaar_terminals.png",
-                "thirumalai": "thirumalai_chemicals.png",
-                "tuv": "tuv_india.png",
-                "tüv": "tuv_india.png",
-                "tata": "tata.png",
-                "tq cert": "tq_cert.png",
-                "vaaman": "vaaman_engineers.png",
-                "valspar": "valspar.png",
-                "vedanta": "vedanta_aluminium.png",
-                "jetyre": "jetyre.png",
-                "jk tyre": "jetyre.png",
-              };
-              let logoSlug: string | null = null;
-              for (const [keyword, logoFile] of Object.entries(logoMapping)) {
-                if (clientName.includes(keyword)) {
-                  logoSlug = logoFile;
-                  break;
-                }
-              }
+              // Resolve the client logo using the SHARED, EXACT-match
+              // resolver in @/lib/client-logo-mapping.
+              //   Priority:
+              //     1. If the client has its own uploaded logo (logoPath),
+              //        use that — it's their real brand asset.
+              //     2. Else, look up the normalized-name → logo-file map.
+              //     3. Else, show a text placeholder — NEVER another
+              //        company's logo.
+              const mappedLogoFile = resolveClientLogo(report.client.name);
 
-              if (logoSlug) {
-                // Use a dedicated API endpoint to serve client logos by slug
+              if (mappedLogoFile) {
+                // Served by the dedicated client-logo API endpoint.
                 return (
                   <AuthImage
-                    src={`/api/client-logo/${logoSlug}`}
+                    src={`/api/client-logo/${mappedLogoFile}`}
                     alt={`${report.client.name} Logo`}
                     className="max-w-[92%] max-h-[88%] w-auto h-auto object-contain"
                   />
                 );
               } else if (report.client.logoPath) {
-                // Fall back to the client's uploaded logo path
+                // Fall back to the client's own uploaded logo path.
                 return (
                   <AuthImage
                     src={`/api/clients/${report.clientId}/logo`}

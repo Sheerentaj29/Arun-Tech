@@ -40,6 +40,10 @@ import { promisify } from "util";
 import { tmpdir } from "os";
 import { join } from "path";
 import { mkdtempSync, readdirSync, unlinkSync, rmdirSync } from "fs";
+import {
+  resolveClientLogo,
+  CLIENT_LOGO_DIR,
+} from "@/lib/client-logo-mapping";
 
 const execFileAsync = promisify(execFile);
 
@@ -536,25 +540,26 @@ export async function generatePipelineReportPdf(
   const logoH = 70;
   const logoW = 130;
   const serviceLogoPath = findServiceLogo();
-  // Try to find a client logo from the logo mapping if client.logoPath is not set
+  // Resolve the client logo via the SHARED, EXACT-match resolver.
+  //   Priority:
+  //     1. If the client has its own uploaded logo (logoPath) and the file
+  //        exists, use that — it's their real brand asset.
+  //     2. Else, look up the normalized-name → logo-file map and join
+  //        with the logos directory.
+  //     3. Else, leave it as null — the placeholder text will be drawn
+  //        instead. NEVER substitute another company's logo.
   let clientLogoPath = report.client.logoPath ?? null;
   if (!clientLogoPath || !existsSync(clientLogoPath)) {
-    const clientNameLower = (report.client.name || "").toLowerCase();
-    const logoDir = "/home/z/my-project/storage/logos/clients";
-    const mappingPath = "/home/z/my-project/storage/logos/client_logo_mapping.json";
-    if (existsSync(mappingPath)) {
-      try {
-        const mapping = JSON.parse(readFileSync(mappingPath, "utf-8"));
-        for (const [keyword, logoFile] of Object.entries(mapping)) {
-          if (clientNameLower.includes(keyword)) {
-            const logoPath = join(logoDir, logoFile as string);
-            if (existsSync(logoPath)) {
-              clientLogoPath = logoPath;
-              break;
-            }
-          }
-        }
-      } catch {}
+    const mappedFile = resolveClientLogo(report.client.name);
+    if (mappedFile) {
+      const candidate = join(CLIENT_LOGO_DIR, mappedFile);
+      if (existsSync(candidate)) {
+        clientLogoPath = candidate;
+      } else {
+        clientLogoPath = null;
+      }
+    } else {
+      clientLogoPath = null;
     }
   }
 
