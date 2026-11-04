@@ -614,19 +614,27 @@ export function PipelineReportDetailView() {
 
         {/* Logo section — Aruntech (left, permanent) + Client (right, dynamic)
             The client logo is resolved using the logo mapping file based on
-            the client name, since most clients don't have logoPath set in DB.
-            Uses AuthImage for cross-origin auth support. */}
-        <div className="mb-4 flex items-start justify-between">
+            the client name. Uses AuthImage for cross-origin auth support.
+            Logo containers use flexbox with object-fit: contain so logos
+            of any aspect ratio (square, wide, tall) are properly scaled
+            and centered without distortion. */}
+        <div className="mb-4 flex items-center justify-between">
           {/* Left: Aruntech logo (permanent) */}
-          <div className="flex h-16 w-36 items-center justify-center border border-zinc-400 overflow-hidden bg-white">
+          <div
+            className="flex items-center justify-center border border-zinc-300 overflow-hidden bg-white"
+            style={{ width: "140px", height: "70px" }}
+          >
             <AuthImage
               src="/api/settings/service-logo"
               alt="Aruntech Logo"
-              className="max-w-full max-h-full w-auto h-auto object-contain"
+              className="max-w-[92%] max-h-[88%] w-auto h-auto object-contain"
             />
           </div>
           {/* Right: Client logo (dynamic, based on client name) */}
-          <div className="flex h-16 w-36 items-center justify-center border border-zinc-400 overflow-hidden bg-white">
+          <div
+            className="flex items-center justify-center border border-zinc-300 overflow-hidden bg-white"
+            style={{ width: "140px", height: "70px" }}
+          >
             {(() => {
               // Resolve the client logo path using the mapping
               const clientName = (report.client.name || "").toLowerCase();
@@ -666,7 +674,7 @@ export function PipelineReportDetailView() {
                   <AuthImage
                     src={`/api/client-logo/${logoSlug}`}
                     alt={`${report.client.name} Logo`}
-                    className="max-w-full max-h-full w-auto h-auto object-contain"
+                    className="max-w-[92%] max-h-[88%] w-auto h-auto object-contain"
                   />
                 );
               } else if (report.client.logoPath) {
@@ -675,7 +683,7 @@ export function PipelineReportDetailView() {
                   <AuthImage
                     src={`/api/clients/${report.clientId}/logo`}
                     alt={`${report.client.name} Logo`}
-                    className="max-w-full max-h-full w-auto h-auto object-contain"
+                    className="max-w-[92%] max-h-[88%] w-auto h-auto object-contain"
                   />
                 );
               } else {

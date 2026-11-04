@@ -529,11 +529,12 @@ export async function generatePipelineReportPdf(
   // ── LOGOS (positioned strictly below subtitle) ──
   // Left: Aruntech service company logo — permanently fixed.
   // Right: selected client/company logo — changes based on client name.
-  // Both logos preserve aspect ratio using pdfkit's `fit` option which
-  // scales the image to fit entirely within the box without stretching
-  // or cropping. The image is centered both horizontally and vertically.
-  const logoH = 50;
-  const logoW = 140;
+  // Both logos preserve aspect ratio and are dynamically scaled to fill
+  // the available container space (object-fit: contain behaviour).
+  // The container uses 90% of available width and 85% of available height
+  // for the image, with the image centered both horizontally and vertically.
+  const logoH = 70;
+  const logoW = 130;
   const serviceLogoPath = findServiceLogo();
   // Try to find a client logo from the logo mapping if client.logoPath is not set
   let clientLogoPath = report.client.logoPath ?? null;
@@ -558,33 +559,33 @@ export async function generatePipelineReportPdf(
   }
 
   // Helper: draw a logo inside a fixed container, preserving aspect ratio.
-  // Uses pdfkit's `fit` which is equivalent to CSS object-fit: contain —
-  // the image is scaled to fit entirely within the box, centered, with
-  // no stretching or cropping.
+  // The image is scaled to fill as much of the container as possible while
+  // keeping its original proportions (object-fit: contain).
+  // Uses 92% of container width and 88% of container height as the
+  // available image area, then centers the image within that area.
   const drawLogoInBox = (logoPath: string | null, boxX: number, boxY: number, boxW: number, boxH: number, fallbackText: string) => {
-    // Draw the container border
-    doc.rect(boxX, boxY, boxW, boxH).stroke("#ccc");
+    // Draw the container border (light grey)
+    doc.rect(boxX, boxY, boxW, boxH).stroke("#ddd");
     if (logoPath && existsSync(logoPath)) {
       try {
         const logoBuf = readFileSync(logoPath);
-        // Get intrinsic image dimensions to compute the correct fit
+        // Get intrinsic image dimensions
         const dims = imageSize(logoBuf, doc);
         if (dims.w > 0 && dims.h > 0) {
-          // Compute the scale ratio that fits the image entirely inside the box
-          // (equivalent to object-fit: contain)
-          const pad = 4;
-          const availW = boxW - 2 * pad;
-          const availH = boxH - 2 * pad;
+          // Available area inside the container (92% width, 88% height)
+          const availW = boxW * 0.92;
+          const availH = boxH * 0.88;
+          // Scale ratio: fit entirely within available area (object-fit: contain)
           const ratio = Math.min(availW / dims.w, availH / dims.h);
           const drawW = dims.w * ratio;
           const drawH = dims.h * ratio;
-          // Center the image inside the box
+          // Center the image inside the container
           const drawX = boxX + (boxW - drawW) / 2;
           const drawY = boxY + (boxH - drawH) / 2;
           doc.image(logoBuf, drawX, drawY, { width: drawW, height: drawH });
         } else {
           // Fallback: use pdfkit's fit if dimensions can't be read
-          doc.image(logoBuf, boxX + 2, boxY + 2, { fit: [boxW - 4, boxH - 4], align: "center", valign: "center" });
+          doc.image(logoBuf, boxX + 4, boxY + 4, { fit: [boxW - 8, boxH - 8], align: "center", valign: "center" });
         }
       } catch {
         doc.fontSize(7).fillColor("#999").font(FONT_REGULAR);
