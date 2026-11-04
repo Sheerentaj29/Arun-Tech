@@ -4295,7 +4295,7 @@ export function PipelineReportFormView() {
                         <Select value={header[field1 as keyof ReportHeader] as string} onValueChange={(v) => updateHeader(field1 as keyof ReportHeader, v)}>
                           <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select" /></SelectTrigger>
                           <SelectContent>
-                            {["Clean & Smooth", "Rough Surface", "Painted Rough Surface"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                            {["Clean & Smooth", "Rough Surface", "Painted Surface"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
                           </SelectContent>
                         </Select>
                       ) : label1 ? (

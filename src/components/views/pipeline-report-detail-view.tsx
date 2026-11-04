@@ -612,13 +612,29 @@ export function PipelineReportDetailView() {
           </p>
         </div>
 
-        {/* Logo placeholders */}
+        {/* Logo placeholders — Aruntech (left) + Client (right)
+            Both use flexbox centering with object-fit: contain behavior.
+            Logos are fetched via AuthImage so they work cross-origin. */}
         <div className="mb-4 flex items-start justify-between">
-          <div className="flex h-14 w-28 items-center justify-center border border-zinc-400 text-[10px] text-zinc-500">
-            SERVICE COMPANY<br />LOGO
+          <div className="flex h-16 w-36 items-center justify-center border border-zinc-400 overflow-hidden">
+            <AuthImage
+              src="/api/settings/service-logo"
+              alt="Aruntech Logo"
+              className="max-w-full max-h-full w-auto h-auto object-contain"
+            />
           </div>
-          <div className="flex h-14 w-28 items-center justify-center border border-zinc-400 text-[10px] text-zinc-500 text-center">
-            {report.client.name.slice(0, 24)}<br />CLIENT LOGO
+          <div className="flex h-16 w-36 items-center justify-center border border-zinc-400 overflow-hidden">
+            {report.client.logoPath ? (
+              <AuthImage
+                src={`/api/clients/${report.clientId}/logo`}
+                alt={`${report.client.name} Logo`}
+                className="max-w-full max-h-full w-auto h-auto object-contain"
+              />
+            ) : (
+              <span className="text-[10px] text-zinc-500 text-center">
+                {report.client.name.slice(0, 24)}<br />Client Logo
+              </span>
+            )}
           </div>
         </div>
 

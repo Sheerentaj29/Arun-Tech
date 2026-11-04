@@ -527,16 +527,17 @@ export async function generatePipelineReportPdf(
   cursorY += subtitleHeight + 10;  // explicit 10pt gap below subtitle
 
   // ── LOGOS (positioned strictly below subtitle) ──
-  // Left: service company logo (if uploaded), otherwise a text placeholder.
-  // Right: client company logo (if uploaded), otherwise a text placeholder.
-  // Both logos preserve aspect ratio and fit within a fixed-size box.
-  const logoH = 40;
-  const logoW = 120;
+  // Left: Aruntech service company logo — permanently fixed.
+  // Right: selected client/company logo — changes based on client name.
+  // Both logos preserve aspect ratio using pdfkit's `fit` option which
+  // scales the image to fit entirely within the box without stretching
+  // or cropping. The image is centered both horizontally and vertically.
+  const logoH = 50;
+  const logoW = 140;
   const serviceLogoPath = findServiceLogo();
   // Try to find a client logo from the logo mapping if client.logoPath is not set
   let clientLogoPath = report.client.logoPath ?? null;
   if (!clientLogoPath || !existsSync(clientLogoPath)) {
-    // Try to find a client logo based on the client name
     const clientNameLower = (report.client.name || "").toLowerCase();
     const logoDir = "/home/z/my-project/storage/logos/clients";
     const mappingPath = "/home/z/my-project/storage/logos/client_logo_mapping.json";
@@ -556,46 +557,55 @@ export async function generatePipelineReportPdf(
     }
   }
 
-  // Left logo box (service company)
-  doc.rect(MARGIN, cursorY, logoW, logoH).stroke("#ccc");
-  if (serviceLogoPath && existsSync(serviceLogoPath)) {
-    try {
-      const logoBuf = readFileSync(serviceLogoPath);
-      doc.image(logoBuf, MARGIN, cursorY, { fit: [logoW - 4, logoH - 4], align: "center", valign: "center" });
-    } catch {
+  // Helper: draw a logo inside a fixed container, preserving aspect ratio.
+  // Uses pdfkit's `fit` which is equivalent to CSS object-fit: contain —
+  // the image is scaled to fit entirely within the box, centered, with
+  // no stretching or cropping.
+  const drawLogoInBox = (logoPath: string | null, boxX: number, boxY: number, boxW: number, boxH: number, fallbackText: string) => {
+    // Draw the container border
+    doc.rect(boxX, boxY, boxW, boxH).stroke("#ccc");
+    if (logoPath && existsSync(logoPath)) {
+      try {
+        const logoBuf = readFileSync(logoPath);
+        // Get intrinsic image dimensions to compute the correct fit
+        const dims = imageSize(logoBuf, doc);
+        if (dims.w > 0 && dims.h > 0) {
+          // Compute the scale ratio that fits the image entirely inside the box
+          // (equivalent to object-fit: contain)
+          const pad = 4;
+          const availW = boxW - 2 * pad;
+          const availH = boxH - 2 * pad;
+          const ratio = Math.min(availW / dims.w, availH / dims.h);
+          const drawW = dims.w * ratio;
+          const drawH = dims.h * ratio;
+          // Center the image inside the box
+          const drawX = boxX + (boxW - drawW) / 2;
+          const drawY = boxY + (boxH - drawH) / 2;
+          doc.image(logoBuf, drawX, drawY, { width: drawW, height: drawH });
+        } else {
+          // Fallback: use pdfkit's fit if dimensions can't be read
+          doc.image(logoBuf, boxX + 2, boxY + 2, { fit: [boxW - 4, boxH - 4], align: "center", valign: "center" });
+        }
+      } catch {
+        doc.fontSize(7).fillColor("#999").font(FONT_REGULAR);
+        doc.text(fallbackText, boxX, boxY + (boxH - 14) / 2, { width: boxW, align: "center" });
+      }
+    } else {
       doc.fontSize(7).fillColor("#999").font(FONT_REGULAR);
-      doc.text("Service Company\nLogo", MARGIN, cursorY + 10, { width: logoW, align: "center" });
+      doc.text(fallbackText, boxX, boxY + (boxH - 14) / 2, { width: boxW, align: "center" });
     }
-  } else {
-    doc.fontSize(7).fillColor("#999").font(FONT_REGULAR);
-    doc.text("Service Company\nLogo", MARGIN, cursorY + 10, { width: logoW, align: "center" });
-  }
+    doc.fillColor("#000");
+  };
 
-  // Right logo box (client)
-  doc.rect(pageW - MARGIN - logoW, cursorY, logoW, logoH).stroke("#ccc");
-  if (clientLogoPath && existsSync(clientLogoPath)) {
-    try {
-      const logoBuf = readFileSync(clientLogoPath);
-      doc.image(logoBuf, pageW - MARGIN - logoW, cursorY, { fit: [logoW - 4, logoH - 4], align: "center", valign: "center" });
-    } catch {
-      const clientShort = report.client.name.length > 28
-        ? report.client.name.slice(0, 28)
-        : report.client.name;
-      doc.fontSize(7).fillColor("#999").font(FONT_REGULAR);
-      doc.text(`${clientShort}\nClient Logo`, pageW - MARGIN - logoW, cursorY + 10, {
-        width: logoW, align: "center",
-      });
-    }
-  } else {
-    const clientShort = report.client.name.length > 28
-      ? report.client.name.slice(0, 28)
-      : report.client.name;
-    doc.fontSize(7).fillColor("#999").font(FONT_REGULAR);
-    doc.text(`${clientShort}\nClient Logo`, pageW - MARGIN - logoW, cursorY + 10, {
-      width: logoW, align: "center",
-    });
-  }
-  doc.fillColor("#000");
+  // Left logo: Aruntech (service company) — permanently fixed
+  drawLogoInBox(serviceLogoPath, MARGIN, cursorY, logoW, logoH, "ARUNTECH\nLogo");
+
+  // Right logo: selected client's logo — dynamically determined
+  const clientShort = report.client.name.length > 28
+    ? report.client.name.slice(0, 28)
+    : report.client.name;
+  drawLogoInBox(clientLogoPath, pageW - MARGIN - logoW, cursorY, logoW, logoH, `${clientShort}\nClient Logo`);
+
   cursorY += logoH + 10;  // explicit 10pt gap below logos
 
   // ── HEADER INFO GRID ──
@@ -1661,8 +1671,8 @@ export async function generatePipelineReportPdf(
           } else {
             const fieldIdx = heading.includes("Test Results") ? i - 1 : i;
             const field = rowFields[fieldIdx];
-            val = dataRows[r][field] ?? "—";
-            if (dateFields.includes(field) && val && val !== "—") {
+            val = dataRows[r][field] ?? "";
+            if (dateFields.includes(field) && val) {
               try { val = new Date(val).toISOString().slice(0, 10); } catch {}
             }
           }
@@ -1885,15 +1895,15 @@ export async function generatePipelineReportPdf(
           } else {
             const fieldIdx = heading.includes("Test Results") ? i - 1 : i;
             const field = rowFields[fieldIdx];
-            val = dataRows[r][field] ?? "—";
-            if (dateFields.includes(field) && val && val !== "—") {
+            val = dataRows[r][field] ?? "";
+            if (dateFields.includes(field) && val) {
               try { val = new Date(val).toISOString().slice(0, 10); } catch {}
             }
           }
           doc.rect(x, y, colW, rowH).stroke(TABLE_INNER_BORDER);
           doc.font(FONT_REGULAR).fontSize(6.5).fillColor("#000");
           let disp = String(val);
-          if (doc.widthOfString(disp) > colW - 4) {
+          if (disp && doc.widthOfString(disp) > colW - 4) {
             const c = Math.floor((colW - 4) / Math.max(1, doc.widthOfString(disp)) * disp.length);
             disp = disp.slice(0, Math.max(1, c - 1)) + "…";
           }
@@ -1938,14 +1948,14 @@ export async function generatePipelineReportPdf(
         doc.text(left[0], MARGIN + 3, y + 5, { width: labelW - 6 });
         doc.rect(MARGIN + labelW, y, valueW, rowH).fill("#ffffff");
         doc.font(FONT_REGULAR).fontSize(7);
-        const lv = left[1] && String(left[1]).trim() ? String(left[1]).trim() : "—";
+        const lv = left[1] && String(left[1]).trim() ? String(left[1]).trim() : "";
         doc.text(lv, MARGIN + labelW + 3, y + 5, { width: valueW - 6 });
         doc.rect(MARGIN + labelW + valueW, y, labelW, rowH).fill("#ecfeff");
         doc.font(FONT_BOLD).fontSize(7);
         doc.text(right[0], MARGIN + labelW + valueW + 3, y + 5, { width: labelW - 6 });
         doc.rect(MARGIN + 2 * labelW + valueW, y, valueW, rowH).fill("#ffffff");
         doc.font(FONT_REGULAR).fontSize(7);
-        const rv = right[1] && String(right[1]).trim() ? String(right[1]).trim() : "—";
+        const rv = right[1] && String(right[1]).trim() ? String(right[1]).trim() : "";
         doc.text(rv, MARGIN + 2 * labelW + valueW + 3, y + 5, { width: valueW - 6 });
         doc.rect(MARGIN, y, usableW, rowH).stroke(TABLE_OUTER_BORDER);
         doc.moveTo(MARGIN + labelW, y).lineTo(MARGIN + labelW, y + rowH).stroke(TABLE_INNER_BORDER);
