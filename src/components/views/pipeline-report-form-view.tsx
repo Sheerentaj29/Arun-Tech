@@ -405,7 +405,12 @@ const EMPTY_HEADER: ReportHeader = {
   wsScanningSurfaceCondition: "",
   wsScanningFlawSizingTechnique: "",
   wsInstrumentRows: "[]",
-  wsProbeRows: "[]",
+  wsProbeRows: JSON.stringify([
+    { probeType: "Shear Wave", probeAngle: "45°", frequency: "", size: "", probeNo: "", range: "", referenceDb: "", scanningDb: "" },
+    { probeType: "Shear Wave", probeAngle: "60°", frequency: "", size: "", probeNo: "", range: "", referenceDb: "", scanningDb: "" },
+    { probeType: "Shear Wave", probeAngle: "70°", frequency: "", size: "", probeNo: "", range: "", referenceDb: "", scanningDb: "" },
+    { probeType: "Longitudinal Wave", probeAngle: "0°", frequency: "", size: "", probeNo: "", range: "", referenceDb: "", scanningDb: "" },
+  ]),
   wsTestResultRows: "[]",
   // Condition fields default empty
   pipelineAgeYears: "",
@@ -4136,9 +4141,14 @@ export function PipelineReportFormView() {
                             onChange={(e) => { const n = [...rows]; n[idx] = { ...row, calibrationDueDate: e.target.value }; setHeader((h) => ({ ...h, wsInstrumentRows: JSON.stringify(n) })); }} />
                         </td>
                         <td className="border border-zinc-300 p-1 text-center">
-                          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-600"
+                          <div className="flex flex-col gap-1">
+                            <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => saveHeader()} disabled={saving} title="Save row">
+                              <Save className="h-3 w-3" />
+                            </Button>
+                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-600"
                             onClick={() => { const n = rows.filter((_: any, i: number) => i !== idx); setHeader((h) => ({ ...h, wsInstrumentRows: JSON.stringify(n) })); }}>
                             <Trash2 className="h-3 w-3" /></Button>
+                          </div>
                         </td>
                       </tr>
                     ));
@@ -4157,7 +4167,7 @@ export function PipelineReportFormView() {
             <CardTitle className="text-base">Test Probe Details</CardTitle>
             <Button onClick={() => {
               const rows = JSON.parse(header.wsProbeRows || "[]");
-              rows.push({ probeType: "", probeAngle: "", frequency: "", size: "", probeNo: "", range: "", referenceDb: "", scanningDb: "" });
+              rows.push({ probeType: "Shear Wave", probeAngle: "", frequency: "", size: "", probeNo: "", range: "", referenceDb: "", scanningDb: "" });
               setHeader((h) => ({ ...h, wsProbeRows: JSON.stringify(rows) }));
             }} size="sm"><Plus className="mr-1 h-4 w-4" /> Add Row</Button>
           </div>
@@ -4184,8 +4194,8 @@ export function PipelineReportFormView() {
                     const rows = JSON.parse(header.wsProbeRows || "[]");
                     if (rows.length === 0) return <tr><td colSpan={9} className="text-center py-4 text-muted-foreground border border-zinc-300">No probe rows. Click Add Row.</td></tr>;
                     // Dynamic size options based on probe type
-                    const shearWaveSizes = ["8 × 9 mm", "20 × 25 mm", "Other / Custom"];
-                    const longWaveSizes = ["5 mm", "7.5 mm", "10 mm", "12 mm", "15 mm", "20 mm", "22 mm", "24 mm", "Other / Custom"];
+                    const shearWaveSizes = ["8 × 9 mm", "10 × 10 mm", "14 × 14 mm", "15 × 15 mm", "20 × 20 mm", "20 × 22 mm", "20 × 25 mm", "Custom / Other"];
+                    const longWaveSizes = ["5 mm", "6 mm", "7.5 mm", "10 mm", "12 mm", "13 mm", "15 mm", "20 mm", "22 mm", "24 mm", "25 mm", "Custom / Other"];
                     return rows.map((row: any, idx: number) => {
                       const sizeOptions = row.probeType === "Shear Wave" ? shearWaveSizes : row.probeType === "Longitudinal Wave" ? longWaveSizes : [];
                       return (
@@ -4218,12 +4228,23 @@ export function PipelineReportFormView() {
                           </td>
                           <td className="border border-zinc-300 p-1">
                             {sizeOptions.length > 0 ? (
-                              <Select value={row.size ?? ""} onValueChange={(v) => { const n = [...rows]; n[idx] = { ...row, size: v }; setHeader((h) => ({ ...h, wsProbeRows: JSON.stringify(n) })); }}>
-                                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
-                                <SelectContent>
-                                  {sizeOptions.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
+                              <div className="flex flex-col gap-1">
+                                <Select value={row.size ?? ""} onValueChange={(v) => {
+                                  const n = [...rows];
+                                  n[idx] = { ...row, size: v === "Custom / Other" ? "" : v, _sizeCustom: v === "Custom / Other" ? true : false };
+                                  setHeader((h) => ({ ...h, wsProbeRows: JSON.stringify(n) }));
+                                }}>
+                                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
+                                  <SelectContent>
+                                    {sizeOptions.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                                {row._sizeCustom && (
+                                  <Input className="h-7 text-xs" value={row.size ?? ""}
+                                    onChange={(e) => { const n = [...rows]; n[idx] = { ...row, size: e.target.value }; setHeader((h) => ({ ...h, wsProbeRows: JSON.stringify(n) })); }}
+                                    placeholder="Enter custom size" />
+                                )}
+                              </div>
                             ) : (
                               <p className="text-[10px] text-muted-foreground text-center py-2">Select Probe Type first</p>
                             )}
@@ -4235,9 +4256,14 @@ export function PipelineReportFormView() {
                             </td>
                           ))}
                           <td className="border border-zinc-300 p-1 text-center">
-                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-600"
-                              onClick={() => { const n = rows.filter((_: any, i: number) => i !== idx); setHeader((h) => ({ ...h, wsProbeRows: JSON.stringify(n) })); }}>
-                              <Trash2 className="h-3 w-3" /></Button>
+                            <div className="flex flex-col gap-1">
+                              <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => saveHeader()} disabled={saving} title="Save row">
+                                <Save className="h-3 w-3" />
+                              </Button>
+                              <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-600"
+                                onClick={() => { const n = rows.filter((_: any, i: number) => i !== idx); setHeader((h) => ({ ...h, wsProbeRows: JSON.stringify(n) })); }}>
+                                <Trash2 className="h-3 w-3" /></Button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -4269,7 +4295,7 @@ export function PipelineReportFormView() {
                         <Select value={header[field1 as keyof ReportHeader] as string} onValueChange={(v) => updateHeader(field1 as keyof ReportHeader, v)}>
                           <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select" /></SelectTrigger>
                           <SelectContent>
-                            {["Clean & Smooth", "Rough Surface", "Painted Surface"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                            {["Clean & Smooth", "Rough Surface", "Painted Rough Surface"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
                           </SelectContent>
                         </Select>
                       ) : label1 ? (
@@ -4280,12 +4306,31 @@ export function PipelineReportFormView() {
                     <td className="bg-cyan-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/5">{label2}</td>
                     <td className="px-2 py-1.5 w-1/4">
                       {type2 === "select" ? (
-                        <Select value={header[field2 as keyof ReportHeader] as string} onValueChange={(v) => updateHeader(field2 as keyof ReportHeader, v)}>
-                          <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select" /></SelectTrigger>
-                          <SelectContent>
-                            {["6 dB Drop", "12 dB Drop", "18 dB Drop"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
+                        (() => {
+                          const val2 = header[field2 as keyof ReportHeader] as string;
+                          const isPreset = val2 === "6 dB Drop" || val2 === "12 dB Drop" || val2 === "18 dB Drop";
+                          return (
+                            <div className="flex flex-col gap-1">
+                              <Select value={isPreset ? val2 : "Other / Custom"} onValueChange={(v) => {
+                                if (v === "Other / Custom") {
+                                  updateHeader(field2 as keyof ReportHeader, "");
+                                } else {
+                                  updateHeader(field2 as keyof ReportHeader, v);
+                                }
+                              }}>
+                                <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select" /></SelectTrigger>
+                                <SelectContent>
+                                  {["6 dB Drop", "12 dB Drop", "18 dB Drop", "Other / Custom"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                              {!isPreset && (
+                                <Input className="h-7 text-sm" value={val2}
+                                  onChange={(e) => updateHeader(field2 as keyof ReportHeader, e.target.value)}
+                                  placeholder="Enter custom technique" />
+                              )}
+                            </div>
+                          );
+                        })()
                       ) : label2 ? (
                         <Input className="h-8 text-sm" value={header[field2 as keyof ReportHeader] as string}
                           onChange={(e) => updateHeader(field2 as keyof ReportHeader, e.target.value)} />
@@ -4362,9 +4407,14 @@ export function PipelineReportFormView() {
                           </td>
                         ))}
                         <td className="border border-zinc-300 p-1 text-center">
-                          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-600"
+                          <div className="flex flex-col gap-1">
+                            <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => saveHeader()} disabled={saving} title="Save row">
+                              <Save className="h-3 w-3" />
+                            </Button>
+                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-600"
                             onClick={() => { const n = rows.filter((_: any, i: number) => i !== idx); setHeader((h) => ({ ...h, wsTestResultRows: JSON.stringify(n) })); }}>
                             <Trash2 className="h-3 w-3" /></Button>
+                          </div>
                         </td>
                       </tr>
                     ));

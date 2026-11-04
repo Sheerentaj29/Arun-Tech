@@ -533,7 +533,28 @@ export async function generatePipelineReportPdf(
   const logoH = 40;
   const logoW = 120;
   const serviceLogoPath = findServiceLogo();
-  const clientLogoPath = report.client.logoPath ?? null;
+  // Try to find a client logo from the logo mapping if client.logoPath is not set
+  let clientLogoPath = report.client.logoPath ?? null;
+  if (!clientLogoPath || !existsSync(clientLogoPath)) {
+    // Try to find a client logo based on the client name
+    const clientNameLower = (report.client.name || "").toLowerCase();
+    const logoDir = "/home/z/my-project/storage/logos/clients";
+    const mappingPath = "/home/z/my-project/storage/logos/client_logo_mapping.json";
+    if (existsSync(mappingPath)) {
+      try {
+        const mapping = JSON.parse(readFileSync(mappingPath, "utf-8"));
+        for (const [keyword, logoFile] of Object.entries(mapping)) {
+          if (clientNameLower.includes(keyword)) {
+            const logoPath = join(logoDir, logoFile as string);
+            if (existsSync(logoPath)) {
+              clientLogoPath = logoPath;
+              break;
+            }
+          }
+        }
+      } catch {}
+    }
+  }
 
   // Left logo box (service company)
   doc.rect(MARGIN, cursorY, logoW, logoH).stroke("#ccc");
