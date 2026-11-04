@@ -431,6 +431,18 @@ model PipelineInspection {
   utTestResultRows                  String?  // JSON: [{description, beamId, noOfJoints, thickness, weldType, moc, totalMeter, results}]
   utCustomColumns                   String?  // JSON: [{id, name, unit}] (reserved for future)
 
+  // ─── WELD SCAN SPECIFIC FIELDS ───
+  // Populated when reportType = PIPELINE_WELD_SCAN. Stored as JSON strings.
+  // Multi-row tables for instrument details, probe details, and test results.
+  wsScanningCalibrationBlock        String?  // Calibration Block (typeable)
+  wsScanningReferenceLevel          String?  // Reference Level (typeable)
+  wsScanningExtentOfExamination     String?  // Extent of Examination (typeable)
+  wsScanningSurfaceCondition        String?  // Surface Condition (dropdown)
+  wsScanningFlawSizingTechnique     String?  // Flaw Sizing Technique (dropdown)
+  wsInstrumentRows                  String?  // JSON: [{equipmentType, machineMake, model, mcSrNo, calibrationDueDate}]
+  wsProbeRows                       String?  // JSON: [{probeType, probeAngle, frequency, size, probeNo, range, referenceDb, scanningDb}]
+  wsTestResultRows                  String?  // JSON: [{description, identificationNo, weldType, probe, bp, sd, depth, echoHeight, length, observation, result}]
+
   isDemo                   Boolean  @default(false)
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt

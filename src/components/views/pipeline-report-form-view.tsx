@@ -276,6 +276,15 @@ interface ReportHeader {
   utProbeRows: string;
   utTestResultRows: string;
   utCustomColumns: string;
+  // ─── WELD SCAN SPECIFIC FIELDS ───
+  wsScanningCalibrationBlock: string;
+  wsScanningReferenceLevel: string;
+  wsScanningExtentOfExamination: string;
+  wsScanningSurfaceCondition: string;
+  wsScanningFlawSizingTechnique: string;
+  wsInstrumentRows: string;
+  wsProbeRows: string;
+  wsTestResultRows: string;
   // Condition fields default empty
   pipelineAgeYears: string;
   serviceFluid: string;
@@ -389,6 +398,15 @@ const EMPTY_HEADER: ReportHeader = {
   utProbeRows: "[]",
   utTestResultRows: "[]",
   utCustomColumns: "[]",
+  // Weld Scan fields default empty
+  wsScanningCalibrationBlock: "",
+  wsScanningReferenceLevel: "",
+  wsScanningExtentOfExamination: "",
+  wsScanningSurfaceCondition: "",
+  wsScanningFlawSizingTechnique: "",
+  wsInstrumentRows: "[]",
+  wsProbeRows: "[]",
+  wsTestResultRows: "[]",
   // Condition fields default empty
   pipelineAgeYears: "",
   serviceFluid: "",
@@ -723,6 +741,15 @@ export function PipelineReportFormView() {
           utProbeRows: r.utProbeRows ?? "[]",
           utTestResultRows: r.utTestResultRows ?? "[]",
           utCustomColumns: r.utCustomColumns ?? "[]",
+          // Weld Scan fields
+          wsScanningCalibrationBlock: r.wsScanningCalibrationBlock ?? "",
+          wsScanningReferenceLevel: r.wsScanningReferenceLevel ?? "",
+          wsScanningExtentOfExamination: r.wsScanningExtentOfExamination ?? "",
+          wsScanningSurfaceCondition: r.wsScanningSurfaceCondition ?? "",
+          wsScanningFlawSizingTechnique: r.wsScanningFlawSizingTechnique ?? "",
+          wsInstrumentRows: r.wsInstrumentRows ?? "[]",
+          wsProbeRows: r.wsProbeRows ?? "[]",
+          wsTestResultRows: r.wsTestResultRows ?? "[]",
           // Condition fields (only populated for PIPELINE_CONDITION reports)
           pipelineAgeYears: r.pipelineAgeYears != null ? String(r.pipelineAgeYears) : "",
           serviceFluid: r.serviceFluid ?? "",
@@ -4043,27 +4070,19 @@ export function PipelineReportFormView() {
       </>
       )}
 
-      {/* ═══ STEP 2 (WELD SCAN): WELD SCAN OBSERVATION TABLE ═══ */}
+      {/* ═══ STEP 2 (WELD SCAN): FULL UT/WELD SCAN REPORT ═══ */}
       {step === 2 && header.reportType === "PIPELINE_WELD_SCAN" && (
       <>
+      {/* 1. UT INSTRUMENT DETAILS */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-base">Weld Scan Inspection Results</CardTitle>
-              <CardDescription>
-                Add one row per inspection point. Serial numbers are auto-generated.
-                Select Accept or Reject for each row.
-              </CardDescription>
-            </div>
-            <div className="flex gap-2">
-              <Button onClick={addDptObservation} size="sm">
-                <Plus className="mr-1 h-4 w-4" /> Add Row
-              </Button>
-              <Button onClick={addDptCustomColumn} size="sm" variant="outline">
-                <Columns3 className="mr-1 h-4 w-4" /> Add Column
-              </Button>
-            </div>
+            <CardTitle className="text-base">UT Instrument Details</CardTitle>
+            <Button onClick={() => {
+              const rows = JSON.parse(header.wsInstrumentRows || "[]");
+              rows.push({ equipmentType: "", machineMake: "", model: "", mcSrNo: "", calibrationDueDate: "" });
+              setHeader((h) => ({ ...h, wsInstrumentRows: JSON.stringify(rows) }));
+            }} size="sm"><Plus className="mr-1 h-4 w-4" /> Add Row</Button>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -4071,105 +4090,206 @@ export function PipelineReportFormView() {
             <table className="w-full text-xs">
               <thead className="bg-cyan-700 text-white">
                 <tr>
-                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 40 }}>Sl. No</th>
-                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 200 }}>Description</th>
-                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 100 }}>Weld Type</th>
-                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 80 }}>Indication<br />Size (mm)</th>
-                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 80 }}>Result</th>
-                  {dptCustomColumns.map((cc) => (
-                    <th key={cc.id} className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 90 }}>
-                      <div className="flex items-center justify-center gap-1">
-                        <span>{cc.name}</span>
-                        {cc.unit && <span className="text-[9px] opacity-70">({cc.unit})</span>}
-                        <button onClick={() => deleteDptCustomColumn(cc.id)} className="ml-1 text-cyan-300 hover:text-cyan-100" title={`Delete "${cc.name}"`}>
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                    </th>
-                  ))}
-                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 200 }}>Remarks</th>
-                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 80 }}>Actions</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center">Equipment Type</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center">Machine Make</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center">Model</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center">M/c Sr. No.</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center">Calibration Due Date</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {dptObservations.length === 0 && (
-                  <tr>
-                    <td colSpan={7 + dptCustomColumns.length} className="text-center py-6 text-muted-foreground border border-zinc-300">
-                      No Weld Scan observations yet. Click <strong>Add Row</strong> to begin.
-                    </td>
-                  </tr>
-                )}
-                {dptObservations.map((obs, idx) => (
-                  <tr key={idx} className="hover:bg-muted/30">
-                    <td className="border border-zinc-300 p-1 text-center font-mono tabular-nums">{obs.serialNo}</td>
-                    <td className="border border-zinc-300 p-1">
-                      <Input className="h-8 text-xs" value={obs.description}
-                        onChange={(e) => updateDptObservation(idx, { description: e.target.value })}
-                        placeholder="Description of inspected area"
-                      />
-                    </td>
-                    <td className="border border-zinc-300 p-1">
-                      <Select value={obs.weldType || ""}
-                        onValueChange={(v) => updateDptObservation(idx, { weldType: v })}
-                      >
-                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
-                        <SelectContent>
-                          {WELD_TYPE_OPTIONS.map((w) => (
-                            <SelectItem key={w} value={w}>{w}</SelectItem>
+                {(() => {
+                  try {
+                    const rows = JSON.parse(header.wsInstrumentRows || "[]");
+                    if (rows.length === 0) return <tr><td colSpan={6} className="text-center py-4 text-muted-foreground border border-zinc-300">No instrument rows. Click Add Row.</td></tr>;
+                    return rows.map((row: any, idx: number) => (
+                      <tr key={idx} className="hover:bg-muted/30">
+                        <td className="border border-zinc-300 p-1">
+                          <Input className="h-8 text-xs" value={row.equipmentType ?? ""}
+                            onChange={(e) => { const n = [...rows]; n[idx] = { ...row, equipmentType: e.target.value }; setHeader((h) => ({ ...h, wsInstrumentRows: JSON.stringify(n) })); }}
+                            placeholder="e.g. A Scan Pulse Echo" />
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          <Select value={row.machineMake ?? ""} onValueChange={(v) => { const n = [...rows]; n[idx] = { ...row, machineMake: v }; setHeader((h) => ({ ...h, wsInstrumentRows: JSON.stringify(n) })); }}>
+                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
+                            <SelectContent>
+                              {["Olympus", "Krautkramer", "GE", "Sonatest", "Other / Custom"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          <Select value={row.model ?? ""} onValueChange={(v) => { const n = [...rows]; n[idx] = { ...row, model: v }; setHeader((h) => ({ ...h, wsInstrumentRows: JSON.stringify(n) })); }}>
+                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
+                            <SelectContent>
+                              {["Epoch 600", "Epoch 650", "USM Go", "MasterScan", "Other / Custom"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          <Input className="h-8 text-xs" value={row.mcSrNo ?? ""}
+                            onChange={(e) => { const n = [...rows]; n[idx] = { ...row, mcSrNo: e.target.value }; setHeader((h) => ({ ...h, wsInstrumentRows: JSON.stringify(n) })); }}
+                            placeholder="Serial No." />
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          <Input type="date" className="h-8 text-xs" value={row.calibrationDueDate ?? ""}
+                            onChange={(e) => { const n = [...rows]; n[idx] = { ...row, calibrationDueDate: e.target.value }; setHeader((h) => ({ ...h, wsInstrumentRows: JSON.stringify(n) })); }} />
+                        </td>
+                        <td className="border border-zinc-300 p-1 text-center">
+                          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-600"
+                            onClick={() => { const n = rows.filter((_: any, i: number) => i !== idx); setHeader((h) => ({ ...h, wsInstrumentRows: JSON.stringify(n) })); }}>
+                            <Trash2 className="h-3 w-3" /></Button>
+                        </td>
+                      </tr>
+                    ));
+                  } catch { return null; }
+                })()}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 2. TEST PROBE DETAILS */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">Test Probe Details</CardTitle>
+            <Button onClick={() => {
+              const rows = JSON.parse(header.wsProbeRows || "[]");
+              rows.push({ probeType: "", probeAngle: "", frequency: "", size: "", probeNo: "", range: "", referenceDb: "", scanningDb: "" });
+              setHeader((h) => ({ ...h, wsProbeRows: JSON.stringify(rows) }));
+            }} size="sm"><Plus className="mr-1 h-4 w-4" /> Add Row</Button>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-cyan-700 text-white">
+                <tr>
+                  <th className="border border-cyan-800 px-2 py-2 text-center">Probe Type</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center">Probe Angle</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center">Frequency</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center">Size</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center">Probe No.</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center">Range</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center">Reference dB</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center">Scanning dB</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  try {
+                    const rows = JSON.parse(header.wsProbeRows || "[]");
+                    if (rows.length === 0) return <tr><td colSpan={9} className="text-center py-4 text-muted-foreground border border-zinc-300">No probe rows. Click Add Row.</td></tr>;
+                    // Dynamic size options based on probe type
+                    const shearWaveSizes = ["8 × 9 mm", "20 × 25 mm", "Other / Custom"];
+                    const longWaveSizes = ["5 mm", "7.5 mm", "10 mm", "12 mm", "15 mm", "20 mm", "22 mm", "24 mm", "Other / Custom"];
+                    return rows.map((row: any, idx: number) => {
+                      const sizeOptions = row.probeType === "Shear Wave" ? shearWaveSizes : row.probeType === "Longitudinal Wave" ? longWaveSizes : [];
+                      return (
+                        <tr key={idx} className="hover:bg-muted/30">
+                          <td className="border border-zinc-300 p-1">
+                            <Select value={row.probeType ?? ""} onValueChange={(v) => {
+                              const n = [...rows]; n[idx] = { ...row, probeType: v, size: "" }; setHeader((h) => ({ ...h, wsProbeRows: JSON.stringify(n) }));
+                            }}>
+                              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
+                              <SelectContent>
+                                {["Shear Wave", "Longitudinal Wave"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </td>
+                          <td className="border border-zinc-300 p-1">
+                            <Select value={row.probeAngle ?? ""} onValueChange={(v) => { const n = [...rows]; n[idx] = { ...row, probeAngle: v }; setHeader((h) => ({ ...h, wsProbeRows: JSON.stringify(n) })); }}>
+                              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
+                              <SelectContent>
+                                {["45°", "60°", "70°", "0°"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </td>
+                          <td className="border border-zinc-300 p-1">
+                            <Select value={row.frequency ?? ""} onValueChange={(v) => { const n = [...rows]; n[idx] = { ...row, frequency: v }; setHeader((h) => ({ ...h, wsProbeRows: JSON.stringify(n) })); }}>
+                              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
+                              <SelectContent>
+                                {["1 MHz", "2 MHz", "2.5 MHz", "4 MHz", "5 MHz", "7.5 MHz", "10 MHz"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </td>
+                          <td className="border border-zinc-300 p-1">
+                            {sizeOptions.length > 0 ? (
+                              <Select value={row.size ?? ""} onValueChange={(v) => { const n = [...rows]; n[idx] = { ...row, size: v }; setHeader((h) => ({ ...h, wsProbeRows: JSON.stringify(n) })); }}>
+                                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
+                                <SelectContent>
+                                  {sizeOptions.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <p className="text-[10px] text-muted-foreground text-center py-2">Select Probe Type first</p>
+                            )}
+                          </td>
+                          {(["probeNo", "range", "referenceDb", "scanningDb"] as const).map((field) => (
+                            <td key={field} className="border border-zinc-300 p-1">
+                              <Input className="h-8 text-xs" value={row[field] ?? ""}
+                                onChange={(e) => { const n = [...rows]; n[idx] = { ...row, [field]: e.target.value }; setHeader((h) => ({ ...h, wsProbeRows: JSON.stringify(n) })); }} />
+                            </td>
                           ))}
-                        </SelectContent>
-                      </Select>
+                          <td className="border border-zinc-300 p-1 text-center">
+                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-600"
+                              onClick={() => { const n = rows.filter((_: any, i: number) => i !== idx); setHeader((h) => ({ ...h, wsProbeRows: JSON.stringify(n) })); }}>
+                              <Trash2 className="h-3 w-3" /></Button>
+                          </td>
+                        </tr>
+                      );
+                    });
+                  } catch { return null; }
+                })()}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 3. SCANNING DETAILS */}
+      <Card>
+        <CardHeader><CardTitle className="text-base">Scanning Details</CardTitle></CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <tbody>
+                {([
+                  ["Calibration Block", "wsScanningCalibrationBlock", "text" as const, "Reference Level", "wsScanningReferenceLevel", "text" as const],
+                  ["Extent of Examination", "wsScanningExtentOfExamination", "text" as const, "Surface Condition", "wsScanningSurfaceCondition", "select" as const],
+                  ["", "", "text" as const, "Flaw Sizing Technique", "wsScanningFlawSizingTechnique", "select" as const],
+                ]).map(([label1, field1, type1, label2, field2, type2], rowIdx) => (
+                  <tr key={rowIdx} className="border-b border-zinc-200">
+                    <td className="bg-cyan-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/5">{label1}</td>
+                    <td className="px-2 py-1.5 border-r border-zinc-200 w-1/4">
+                      {type1 === "select" ? (
+                        <Select value={header[field1 as keyof ReportHeader] as string} onValueChange={(v) => updateHeader(field1 as keyof ReportHeader, v)}>
+                          <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select" /></SelectTrigger>
+                          <SelectContent>
+                            {["Clean & Smooth", "Rough Surface", "Painted Surface"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      ) : label1 ? (
+                        <Input className="h-8 text-sm" value={header[field1 as keyof ReportHeader] as string}
+                          onChange={(e) => updateHeader(field1 as keyof ReportHeader, e.target.value)} />
+                      ) : <span className="text-muted-foreground">—</span>}
                     </td>
-                    <td className="border border-zinc-300 p-1">
-                      <Input type="text" className="h-8 text-xs text-center"
-                        value={obs.indicationSize}
-                        onChange={(e) => updateDptObservation(idx, { indicationSize: e.target.value })}
-                        placeholder="—"
-                      />
-                    </td>
-                    <td className="border border-zinc-300 p-1">
-                      <Select value={obs.result}
-                        onValueChange={(v) => updateDptObservation(idx, { result: v as "Accept" | "Reject" })}
-                      >
-                        <SelectTrigger className={`h-8 text-xs font-bold ${obs.result === "Reject" ? "text-red-700" : "text-emerald-700"}`}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Accept" className="text-emerald-700">Accept</SelectItem>
-                          <SelectItem value="Reject" className="text-red-700">Reject</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </td>
-                    {dptCustomColumns.map((cc) => (
-                      <td key={cc.id} className="border border-zinc-300 p-1 text-center">
-                        <Input type="text" className="h-8 text-xs text-center"
-                          value={getDptCustomColumnValue(obs, cc.id)}
-                          onChange={(e) => setDptCustomColumnValue(idx, cc.id, e.target.value)}
-                          placeholder={cc.unit || "—"}
-                        />
-                      </td>
-                    ))}
-                    <td className="border border-zinc-300 p-1">
-                      <Textarea rows={1} className="text-xs min-h-[32px] py-1"
-                        value={obs.remarks}
-                        onChange={(e) => updateDptObservation(idx, { remarks: e.target.value })}
-                        placeholder="Observations, details..."
-                      />
-                    </td>
-                    <td className="border border-zinc-300 p-1">
-                      <div className="flex flex-col gap-1">
-                        <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]"
-                          onClick={() => saveDptObservation(idx)} disabled={saving} title="Save row"
-                        >
-                          <Save className="h-3 w-3" />
-                        </Button>
-                        <Button size="sm" variant="ghost"
-                          className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
-                          onClick={() => deleteDptObservationApi(idx)} title="Delete row"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
+                    <td className="bg-cyan-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/5">{label2}</td>
+                    <td className="px-2 py-1.5 w-1/4">
+                      {type2 === "select" ? (
+                        <Select value={header[field2 as keyof ReportHeader] as string} onValueChange={(v) => updateHeader(field2 as keyof ReportHeader, v)}>
+                          <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select" /></SelectTrigger>
+                          <SelectContent>
+                            {["6 dB Drop", "12 dB Drop", "18 dB Drop"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      ) : label2 ? (
+                        <Input className="h-8 text-sm" value={header[field2 as keyof ReportHeader] as string}
+                          onChange={(e) => updateHeader(field2 as keyof ReportHeader, e.target.value)} />
+                      ) : <span className="text-muted-foreground">—</span>}
                     </td>
                   </tr>
                 ))}
@@ -4179,26 +4299,89 @@ export function PipelineReportFormView() {
         </CardContent>
       </Card>
 
-      <Card className="bg-zinc-50">
-        <CardContent className="p-4 text-xs text-muted-foreground space-y-1">
-          <div><strong>Weld Scan Inspection:</strong> each row records one inspection point with Accept / Reject result.</div>
-          <div><strong>Serial numbers:</strong> auto-generated (1, 2, 3…) and renumbered when rows are added or deleted.</div>
-          <div><strong>Custom columns:</strong> click <strong>Add Column</strong> to add a new column. System columns (Sl. No, Description, Weld Type, Result, Remarks) cannot be deleted.</div>
+      {/* 4. TEST RESULTS */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">Test Results</CardTitle>
+            <Button onClick={() => {
+              const rows = JSON.parse(header.wsTestResultRows || "[]");
+              rows.push({ description: "", identificationNo: "", weldType: "", probe: "", bp: "", sd: "", depth: "", echoHeight: "", length: "", observation: "", result: "" });
+              setHeader((h) => ({ ...h, wsTestResultRows: JSON.stringify(rows) }));
+            }} size="sm"><Plus className="mr-1 h-4 w-4" /> Add Row</Button>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-cyan-700 text-white">
+                <tr>
+                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 30 }}>Sl. No</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 120 }}>Description</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 80 }}>Identification No.</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 70 }}>Weld Type</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 60 }}>Probe</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 40 }}>BP</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 40 }}>SD</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 50 }}>Depth</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 60 }}>Echo Height</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 50 }}>Length</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 80 }}>Observation</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 60 }}>Result</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 50 }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  try {
+                    const rows = JSON.parse(header.wsTestResultRows || "[]");
+                    if (rows.length === 0) return <tr><td colSpan={13} className="text-center py-4 text-muted-foreground border border-zinc-300">No test result rows. Click Add Row.</td></tr>;
+                    return rows.map((row: any, idx: number) => (
+                      <tr key={idx} className="hover:bg-muted/30">
+                        <td className="border border-zinc-300 p-1 text-center font-mono">{idx + 1}</td>
+                        <td className="border border-zinc-300 p-1">
+                          <Textarea rows={1} className="text-xs min-h-[32px] py-1" value={row.description ?? ""}
+                            onChange={(e) => { const n = [...rows]; n[idx] = { ...row, description: e.target.value }; setHeader((h) => ({ ...h, wsTestResultRows: JSON.stringify(n) })); }} />
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          <Input className="h-8 text-xs" value={row.identificationNo ?? ""}
+                            onChange={(e) => { const n = [...rows]; n[idx] = { ...row, identificationNo: e.target.value }; setHeader((h) => ({ ...h, wsTestResultRows: JSON.stringify(n) })); }} />
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          <Select value={row.weldType ?? ""} onValueChange={(v) => { const n = [...rows]; n[idx] = { ...row, weldType: v }; setHeader((h) => ({ ...h, wsTestResultRows: JSON.stringify(n) })); }}>
+                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
+                            <SelectContent>
+                              {["Butt Weld", "Fillet Weld"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        {(["probe", "bp", "sd", "depth", "echoHeight", "length", "observation", "result"] as const).map((field) => (
+                          <td key={field} className="border border-zinc-300 p-1">
+                            <Input className="h-8 text-xs" value={row[field] ?? ""}
+                              onChange={(e) => { const n = [...rows]; n[idx] = { ...row, [field]: e.target.value }; setHeader((h) => ({ ...h, wsTestResultRows: JSON.stringify(n) })); }} />
+                          </td>
+                        ))}
+                        <td className="border border-zinc-300 p-1 text-center">
+                          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-600"
+                            onClick={() => { const n = rows.filter((_: any, i: number) => i !== idx); setHeader((h) => ({ ...h, wsTestResultRows: JSON.stringify(n) })); }}>
+                            <Trash2 className="h-3 w-3" /></Button>
+                        </td>
+                      </tr>
+                    ));
+                  } catch { return null; }
+                })()}
+              </tbody>
+            </table>
+          </div>
         </CardContent>
       </Card>
 
       {/* Step 2 navigation */}
       <div className="flex items-center gap-2">
-        <Button variant="ghost" onClick={goPrevious}>
-          <ArrowLeft className="mr-2 h-4 w-4" /> Previous
-        </Button>
+        <Button variant="ghost" onClick={goPrevious}><ArrowLeft className="mr-2 h-4 w-4" /> Previous</Button>
         <Button variant="ghost" onClick={saveDraft} disabled={saving}>
-          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-          Save Draft
-        </Button>
-        <Button onClick={proceedToNext} disabled={saving}>
-          Proceed to Next <ArrowRight className="ml-2 h-4 w-4" />
-        </Button>
+          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />} Save Draft</Button>
+        <Button onClick={proceedToNext} disabled={saving}>Proceed to Next <ArrowRight className="ml-2 h-4 w-4" /></Button>
       </div>
       </>
       )}

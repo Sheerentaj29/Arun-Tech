@@ -261,6 +261,15 @@ export async function POST(req: NextRequest) {
       utProbeRows: body.utProbeRows ?? "[]",
       utTestResultRows: body.utTestResultRows ?? "[]",
       utCustomColumns: body.utCustomColumns ?? "[]",
+      // ─── WELD SCAN FIELDS ───
+      wsScanningCalibrationBlock: body.wsScanningCalibrationBlock?.trim() || null,
+      wsScanningReferenceLevel: body.wsScanningReferenceLevel?.trim() || null,
+      wsScanningExtentOfExamination: body.wsScanningExtentOfExamination?.trim() || null,
+      wsScanningSurfaceCondition: body.wsScanningSurfaceCondition?.trim() || null,
+      wsScanningFlawSizingTechnique: body.wsScanningFlawSizingTechnique?.trim() || null,
+      wsInstrumentRows: body.wsInstrumentRows ?? "[]",
+      wsProbeRows: body.wsProbeRows ?? "[]",
+      wsTestResultRows: body.wsTestResultRows ?? "[]",
       isDemo: false,
     },
     include: {

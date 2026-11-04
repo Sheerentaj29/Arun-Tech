@@ -269,6 +269,15 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       utProbeRows: body.utProbeRows !== undefined ? body.utProbeRows : existing.utProbeRows,
       utTestResultRows: body.utTestResultRows !== undefined ? body.utTestResultRows : existing.utTestResultRows,
       utCustomColumns: body.utCustomColumns !== undefined ? body.utCustomColumns : existing.utCustomColumns,
+      // ─── WELD SCAN FIELDS ───
+      wsScanningCalibrationBlock: body.wsScanningCalibrationBlock !== undefined ? (body.wsScanningCalibrationBlock?.trim() || null) : existing.wsScanningCalibrationBlock,
+      wsScanningReferenceLevel: body.wsScanningReferenceLevel !== undefined ? (body.wsScanningReferenceLevel?.trim() || null) : existing.wsScanningReferenceLevel,
+      wsScanningExtentOfExamination: body.wsScanningExtentOfExamination !== undefined ? (body.wsScanningExtentOfExamination?.trim() || null) : existing.wsScanningExtentOfExamination,
+      wsScanningSurfaceCondition: body.wsScanningSurfaceCondition !== undefined ? (body.wsScanningSurfaceCondition?.trim() || null) : existing.wsScanningSurfaceCondition,
+      wsScanningFlawSizingTechnique: body.wsScanningFlawSizingTechnique !== undefined ? (body.wsScanningFlawSizingTechnique?.trim() || null) : existing.wsScanningFlawSizingTechnique,
+      wsInstrumentRows: body.wsInstrumentRows !== undefined ? body.wsInstrumentRows : existing.wsInstrumentRows,
+      wsProbeRows: body.wsProbeRows !== undefined ? body.wsProbeRows : existing.wsProbeRows,
+      wsTestResultRows: body.wsTestResultRows !== undefined ? body.wsTestResultRows : existing.wsTestResultRows,
     },
   });
 

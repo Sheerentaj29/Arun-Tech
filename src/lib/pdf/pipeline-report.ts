@@ -1807,64 +1807,162 @@ export async function generatePipelineReportPdf(
       doc.fillColor("#000");
     }
   } else if (reportType === "PIPELINE_WELD_SCAN") {
-    // ─── WELD SCAN OBSERVATION TABLE ───
-    // Reuses the same DPT observation infrastructure (the DptObservation
-    // model and API are shared between DPT, MPT, and Weld Scan reports).
-    startBodyOnFreshPage(160);
+    // ─── WELD SCAN / UT REPORT BODY ───
+    // Renders all 4 sections: UT Instrument Details, Test Probe Details,
+    // Scanning Details, Test Results.
+    startBodyOnFreshPage(200);
 
     const wsReport = report as any;
+    const usableW = pageW - 2 * MARGIN;
 
-    // Parse custom columns (shared with DPT)
-    let wsCustomCols: Array<{ id: string; name: string; unit: string }> = [];
-    try {
-      const cc = JSON.parse(wsReport.dptCustomColumns ?? "[]");
-      if (Array.isArray(cc)) wsCustomCols = cc;
-    } catch {}
+    // Helper: draw a multi-column data table from JSON rows
+    const drawWsMultiColTable = (heading: string, headers: string[], rowFields: string[], jsonStr: string, dateFields: string[] = []) => {
+      const headerH = 28;
+      const rowH = 22;
+      const colCount = headers.length;
+      const colW = usableW / colCount;
+      // Only render if there are rows
+      let dataRows: any[] = [];
+      try { const parsed = JSON.parse(jsonStr || "[]"); if (Array.isArray(parsed)) dataRows = parsed; } catch {}
+      if (dataRows.length === 0) return; // Skip empty tables
 
-    const headerH = 36;
-    const rowH = 28;
-    const slColW = 40;
-    const descColW = 200;
-    const weldColW = 80;
-    const indicationSizeColW = 60;
-    const resultColW = 60;
-    const customColW = 60;
-    const fixedW = slColW + descColW + weldColW + indicationSizeColW + resultColW;
-    const customTotalW = wsCustomCols.length * customColW;
-    const remarksW = Math.max(100, pageW - 2 * MARGIN - fixedW - customTotalW);
-    const colWidths = [slColW, descColW, weldColW, indicationSizeColW, resultColW, ...wsCustomCols.map(() => customColW), remarksW];
-    const colHeaders = ["Sl.\nNo", "Description", "Weld\nType", "Indication\nSize\n(mm)", "Result", ...wsCustomCols.map(c => c.name + (c.unit ? `\n(${c.unit})` : "")), "Remarks"];
-
-    // Section heading
-    if (y + 24 + headerH + rowH > pageMaxY) { addNewPage(); y = MARGIN; }
-    y += 4;
-    doc.font(FONT_BOLD).fontSize(11).fillColor("#155e63");
-    doc.text("Weld Scan Inspection Results", MARGIN, y);
-    doc.fillColor("#000");
-    y += 16;
-
-    if (y + headerH + rowH > pageMaxY) { addNewPage(); y = MARGIN; }
-    drawDptTableHeader(doc, colHeaders, colWidths, y, pageW);
-    y += headerH;
-
-    const wsObs = wsReport.dptObservations ?? [];
-    for (const obs of wsObs) {
-      if (y + rowH > pageMaxY) {
-        addNewPage();
-        drawDptTableHeader(doc, colHeaders, colWidths, MARGIN, pageW);
-        y = MARGIN + headerH;
-      }
-      drawDptRow(doc, obs, colHeaders, colWidths, y, wsCustomCols);
-      y += rowH;
-    }
-
-    if (wsObs.length === 0) {
-      doc.font(FONT_REGULAR).fontSize(8).fillColor("#666");
-      doc.rect(MARGIN, y, pageW - 2 * MARGIN, rowH).stroke("#bbb");
-      doc.text("No Weld Scan observations recorded.", MARGIN + 4, y + 9, { width: pageW - 2 * MARGIN - 8, align: "center" });
+      if (y + 24 + headerH + rowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 6;
+      doc.font(FONT_BOLD).fontSize(10).fillColor("#000");
+      doc.text(heading, MARGIN, y);
       doc.fillColor("#000");
-      y += rowH;
-    }
+      y += 16;
+
+      const drawHeader = (headerY: number) => {
+        doc.rect(MARGIN, headerY, usableW, headerH).fill(TABLE_HEADER_BG);
+        doc.rect(MARGIN, headerY, usableW, headerH).stroke(TABLE_OUTER_BORDER);
+        let x = MARGIN;
+        doc.font(FONT_BOLD).fontSize(6).fillColor(TABLE_HEADER_FG);
+        for (let i = 0; i < headers.length; i++) {
+          if (i > 0) doc.moveTo(x, headerY).lineTo(x, headerY + headerH).stroke(TABLE_INNER_BORDER);
+          doc.text(headers[i], x + 2, headerY + 8, { width: colW - 4, align: "center" });
+          x += colW;
+        }
+        doc.fillColor("#000");
+      };
+      drawHeader(y);
+      y += headerH;
+
+      for (let r = 0; r < dataRows.length; r++) {
+        if (y + rowH > pageMaxY) {
+          addNewPage();
+          y = MARGIN;
+          drawHeader(y);
+          y += headerH;
+        }
+        let x = MARGIN;
+        for (let i = 0; i < headers.length; i++) {
+          if (i > 0) doc.moveTo(x, y).lineTo(x, y + rowH).stroke(TABLE_INNER_BORDER);
+          let val = "";
+          if (i === 0 && heading.includes("Test Results")) {
+            val = String(r + 1);
+          } else {
+            const fieldIdx = heading.includes("Test Results") ? i - 1 : i;
+            const field = rowFields[fieldIdx];
+            val = dataRows[r][field] ?? "—";
+            if (dateFields.includes(field) && val && val !== "—") {
+              try { val = new Date(val).toISOString().slice(0, 10); } catch {}
+            }
+          }
+          doc.rect(x, y, colW, rowH).stroke(TABLE_INNER_BORDER);
+          doc.font(FONT_REGULAR).fontSize(6.5).fillColor("#000");
+          let disp = String(val);
+          if (doc.widthOfString(disp) > colW - 4) {
+            const c = Math.floor((colW - 4) / Math.max(1, doc.widthOfString(disp)) * disp.length);
+            disp = disp.slice(0, Math.max(1, c - 1)) + "…";
+          }
+          doc.text(disp, x + 2, y + 7, { width: colW - 4, align: "center" });
+          x += colW;
+        }
+        doc.rect(MARGIN, y, usableW, rowH).stroke(TABLE_OUTER_BORDER);
+        y += rowH;
+      }
+      y += 6;
+    };
+
+    // Helper: draw a two-column scanning details table
+    const drawWsScanningDetails = () => {
+      const rowH = 18;
+      const labelW = usableW * 0.25;
+      const valueW = (usableW - 2 * labelW) / 2;
+      const scanPairs: Array<[string, string | null]> = [
+        ["Calibration Block", wsReport.wsScanningCalibrationBlock],
+        ["Extent of Examination", wsReport.wsScanningExtentOfExamination],
+        ["", null],
+        ["Reference Level", wsReport.wsScanningReferenceLevel],
+        ["Surface Condition", wsReport.wsScanningSurfaceCondition],
+        ["Flaw Sizing Technique", wsReport.wsScanningFlawSizingTechnique],
+      ];
+      // Only render if any value is non-empty
+      const hasData = scanPairs.some(([, v]) => v && String(v).trim());
+      if (!hasData) return;
+
+      if (y + 24 + rowH * 3 > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 4;
+      doc.font(FONT_BOLD).fontSize(10).fillColor("#000");
+      doc.text("Scanning Details", MARGIN, y);
+      y += 16;
+
+      for (let i = 0; i < scanPairs.length; i += 2) {
+        if (y + rowH > pageMaxY) { addNewPage(); y = MARGIN; }
+        const left = scanPairs[i];
+        const right = scanPairs[i + 1] ?? ["", null];
+        doc.rect(MARGIN, y, labelW, rowH).fill("#ecfeff");
+        doc.font(FONT_BOLD).fontSize(7).fillColor("#000");
+        doc.text(left[0], MARGIN + 3, y + 5, { width: labelW - 6 });
+        doc.rect(MARGIN + labelW, y, valueW, rowH).fill("#ffffff");
+        doc.font(FONT_REGULAR).fontSize(7);
+        const lv = left[1] && String(left[1]).trim() ? String(left[1]).trim() : "—";
+        doc.text(lv, MARGIN + labelW + 3, y + 5, { width: valueW - 6 });
+        doc.rect(MARGIN + labelW + valueW, y, labelW, rowH).fill("#ecfeff");
+        doc.font(FONT_BOLD).fontSize(7);
+        doc.text(right[0], MARGIN + labelW + valueW + 3, y + 5, { width: labelW - 6 });
+        doc.rect(MARGIN + 2 * labelW + valueW, y, valueW, rowH).fill("#ffffff");
+        doc.font(FONT_REGULAR).fontSize(7);
+        const rv = right[1] && String(right[1]).trim() ? String(right[1]).trim() : "—";
+        doc.text(rv, MARGIN + 2 * labelW + valueW + 3, y + 5, { width: valueW - 6 });
+        doc.rect(MARGIN, y, usableW, rowH).stroke(TABLE_OUTER_BORDER);
+        doc.moveTo(MARGIN + labelW, y).lineTo(MARGIN + labelW, y + rowH).stroke(TABLE_INNER_BORDER);
+        doc.moveTo(MARGIN + labelW + valueW, y).lineTo(MARGIN + labelW + valueW, y + rowH).stroke(TABLE_INNER_BORDER);
+        doc.moveTo(MARGIN + 2 * labelW + valueW, y).lineTo(MARGIN + 2 * labelW + valueW, y + rowH).stroke(TABLE_INNER_BORDER);
+        y += rowH;
+      }
+      doc.fillColor("#000");
+      y += 4;
+    };
+
+    // 1. UT Instrument Details
+    drawWsMultiColTable(
+      "UT Instrument Details",
+      ["Equipment Type", "Machine Make", "Model", "M/c Sr. No.", "Calibration Due Date"],
+      ["equipmentType", "machineMake", "model", "mcSrNo", "calibrationDueDate"],
+      wsReport.wsInstrumentRows ?? "[]",
+      ["calibrationDueDate"],
+    );
+
+    // 2. Test Probe Details
+    drawWsMultiColTable(
+      "Test Probe Details",
+      ["Probe Type", "Probe Angle", "Frequency", "Size", "Probe No.", "Range", "Ref dB", "Scan dB"],
+      ["probeType", "probeAngle", "frequency", "size", "probeNo", "range", "referenceDb", "scanningDb"],
+      wsReport.wsProbeRows ?? "[]",
+    );
+
+    // 3. Scanning Details
+    drawWsScanningDetails();
+
+    // 4. Test Results
+    drawWsMultiColTable(
+      "Test Results",
+      ["Sl. No", "Description", "Identification No.", "Weld Type", "Probe", "BP", "SD", "Depth", "Echo Height", "Length", "Observation", "Result"],
+      ["description", "identificationNo", "weldType", "probe", "bp", "sd", "depth", "echoHeight", "length", "observation", "result"],
+      wsReport.wsTestResultRows ?? "[]",
+    );
   }
 
   // ═══════════════════════════════════════════════════════════════
