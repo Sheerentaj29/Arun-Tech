@@ -1,0 +1,161 @@
+ARUN-TECH REPOSITORY EXTRACTION - STATS
+============================================================
+Repo URL        : https://github.com/Sheerentaj29/Arun-Tech.git
+Default branch  : main
+Total commits   : 61
+Tracked files   : 1405
+Repo size       : 168 MB (incl. .git 78 MB)
+Working tree    : ~90 MB (storage 48 MB, db/staging-pg 32 MB, upload 6 MB, code ~3 MB)
+TS/TSX lines    : 33960
+Last commit     : Thu Nov 12 07:58:40 2026 +0000  741fabeb-692e-4180-95a2-ac1235833235
+
+FILES BY EXTENSION
+------------------------------------------------------------
+  (none)        1036
+  .ts             87
+  .png            82
+  .tsx            71
+  .jpg            37
+  .pdf            19
+  .sh             13
+  .txt            10
+  .bak             5
+  .json            4
+  .map             4
+  .conf            4
+  .md              3
+  .dwg             3
+  .jpeg            3
+  .pid             2
+  .sha256          2
+  .init            2
+  .mjs             2
+  .sql             2
+  .svg             2
+  .cjs             2
+  .dxf             2
+  .xlsx            2
+  .lock            1
+  .db              1
+  .prisma          1
+  .css             1
+  .webp            1
+  .doc             1
+
+API ROUTES (57 total)
+------------------------------------------------------------
+  /admin-summary
+  /audit-logs
+  /auth
+  /client-logo/[slug]
+  /clients/[id]/logo/raw
+  /clients/[id]/logo
+  /clients/[id]
+  /clients
+  /component-types/[id]
+  /component-types
+  /dashboard
+  /drawings/[id]/download
+  /drawings/[id]/preview
+  /drawings/[id]/revisions/[rid]/download
+  /drawings/[id]
+  /drawings
+  /employee-summary
+  /equipment/[id]/inspections
+  /equipment/[id]
+  /equipment/catalog
+  /equipment
+  /import-export/commit
+  /import-export/export
+  /import-export/preview
+  /import-export/template
+  /inspections
+  /pipe-standards/[id]
+  /pipe-standards
+  /pipeline-inspections/[id]/approve
+  /pipeline-inspections/[id]/certificates/[certId]/raw
+  /pipeline-inspections/[id]/certificates/[certId]
+  /pipeline-inspections/[id]/certificates
+  /pipeline-inspections/[id]/dpt-observations/[oid]
+  /pipeline-inspections/[id]/dpt-observations
+  /pipeline-inspections/[id]/drawings
+  /pipeline-inspections/[id]/measurements/[mid]
+  /pipeline-inspections/[id]/measurements
+  /pipeline-inspections/[id]/override
+  /pipeline-inspections/[id]/pdf
+  /pipeline-inspections/[id]/photos/[photoId]/raw
+  /pipeline-inspections/[id]/photos/[photoId]
+  /pipeline-inspections/[id]/photos
+  /pipeline-inspections/[id]/primary-photo
+  /pipeline-inspections/[id]/return
+  /pipeline-inspections/[id]/revise
+  /pipeline-inspections/[id]/revisions/[rid]/pdf
+  /pipeline-inspections/[id]
+  /pipeline-inspections/[id]/submit
+  /pipeline-inspections/[id]/thickness-tables/[tableId]
+  /pipeline-inspections/[id]/visual-observations/[oid]
+  /pipeline-inspections/[id]/visual-observations
+  /pipeline-inspections
+  /plants/[id]
+  /plants
+  /settings/service-logo
+  /users/[id]
+  /users
+
+PRISMA MODELS (18)
+------------------------------------------------------------
+  model User
+  model Client
+  model Plant
+  model Equipment
+  model Inspection
+  model AuditLog
+  model PipeStandard
+  model ComponentType
+  model PipelineInspection
+  model ThicknessMeasurement
+  model VisualInspectionObservation
+  model ReportRevision
+  model ReportPhoto
+  model EngineeringDrawing
+  model DrawingRevision
+  model DrawingInspectionLink
+  model InspectionCertificate
+  model DptObservation
+
+BUSINESS VIEW COMPONENTS (17)
+------------------------------------------------------------
+  admin-dashboard-view.tsx
+  audit-log-view.tsx
+  clients-view.tsx
+  dashboard-view.tsx
+  drawings-view.tsx
+  employee-dashboard-view.tsx
+  employees-view.tsx
+  equipment-detail-view.tsx
+  equipment-form-view.tsx
+  equipment-list-view.tsx
+  import-view.tsx
+  inspections-view.tsx
+  pipe-standards-view.tsx
+  pipeline-report-detail-view.tsx
+  pipeline-report-form-view.tsx
+  pipeline-report-type-selector-view.tsx
+  pipeline-reports-list-view.tsx
+
+TOP-LEVEL DIRECTORIES / SIZES
+------------------------------------------------------------
+78M	.git
+33M	db
+48M	storage
+6.0M	upload
+1.8M	src
+88K	prisma
+140K	scripts
+8.0K	docs
+16K	tests
+20K	examples
+24K	mini-services
+12K	public
+408K	tool-results
+56K	.zscripts
