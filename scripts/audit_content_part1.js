@@ -188,7 +188,7 @@ function section5() {
       ],
       [17, 16, 67], { zebra: true }
     ),
-    h3("Workflow gaps worth knowing about"),
+    h2("Workflow gaps worth knowing about"),
     bullet("No concurrent-edit protection: two users editing the same report follow last-save-wins (documented in the project worklog and consistent with the code)."),
     bullet("No notifications: submit/return/approve are not communicated by email or any channel; users must watch the dashboard queues."),
     bullet("PDF persistence is asymmetric: only approval writes a PDF artifact; on-demand downloads are never stored, so storage/pdfs holds just 2 files despite 60 reports."),

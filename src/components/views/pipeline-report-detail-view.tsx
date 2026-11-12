@@ -58,8 +58,7 @@ interface FullReport {
     | "PIPELINE_CONDITION"
     | "PIPELINE_DPT"
     | "PIPELINE_MPT"
-    | "PIPELINE_WELD_SCAN"
-    | "PIPELINE_UT";
+    | "PIPELINE_WELD_SCAN";
   clientId: string;
   plantId: string;
   inspectionArea: string | null;
@@ -323,11 +322,6 @@ const REPORT_TYPE_LABEL: Record<string, { label: string; title: string; color: s
     label: "Weld Scan",
     title: "WELD SCAN REPORT",
     color: "border-cyan-500 text-cyan-700",
-  },
-  PIPELINE_UT: {
-    label: "UT",
-    title: "ULTRASONIC TEST REPORT",
-    color: "border-blue-500 text-blue-700",
   },
 };
 
@@ -709,178 +703,6 @@ export function PipelineReportDetailView() {
             </div>
           ))}
         </div>
-
-        {/* UT-specific sections — shown only for UT reports */}
-        {report.reportType === "PIPELINE_UT" && (
-          <div className="mt-6 space-y-4">
-            {/* Report Identification Details */}
-            <div>
-              <h3 className="mb-2 text-xs font-bold uppercase text-blue-700 border-b border-blue-300 pb-1">Report Identification Details</h3>
-              <table className="w-full border-collapse text-xs">
-                <tbody>
-                  {([
-                    ["Client", report.client?.name],
-                    ["Test Report No.", report.reportNumber],
-                    ["Sub Contract", report.utSubContract],
-                    ["Test Date", report.fromDate ? new Date(report.fromDate).toISOString().slice(0, 10) : null],
-                    ["Project", report.utProject],
-                    ["Job Location", report.utJobLocation],
-                    ["Material", report.utMaterial],
-                    ["Job Description", report.utJobDescription],
-                    ["Couplant", report.utCouplant],
-                    ["Reference Documents", report.utReferenceDocuments],
-                    ["UT Procedure No.", report.utProcedureNo],
-                    ["Acceptance Standard", report.utAcceptanceStandard],
-                  ] as Array<[string, string | null | undefined]>).map(([label, value], idx) => (
-                    <tr key={idx} className="border-b border-zinc-200">
-                      <td className="bg-blue-50 border-r border-zinc-200 px-3 py-1.5 font-medium text-zinc-700 w-1/3">{label}</td>
-                      <td className="px-3 py-1.5">{value && value.trim() ? value : <span className="text-muted-foreground">—</span>}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {/* UFD Details */}
-            <div>
-              <h3 className="mb-2 text-xs font-bold uppercase text-blue-700 border-b border-blue-300 pb-1">UFD Details</h3>
-              <p className="text-xs whitespace-pre-wrap">{report.utUfdDetails || <span className="text-muted-foreground">—</span>}</p>
-            </div>
-            {/* Equipment Details */}
-            {report.utEquipmentRows && (() => {
-              let rows: any[] = [];
-              try { const p = JSON.parse(report.utEquipmentRows); if (Array.isArray(p)) rows = p; } catch {}
-              if (rows.length === 0) return null;
-              return (
-                <div>
-                  <h3 className="mb-2 text-xs font-bold uppercase text-blue-700 border-b border-blue-300 pb-1">Equipment Details</h3>
-                  <table className="w-full border-collapse text-xs">
-                    <thead><tr className="bg-blue-700 text-white">
-                      <th className="border border-blue-800 px-2 py-1">Equipment Type</th>
-                      <th className="border border-blue-800 px-2 py-1">Machine Make</th>
-                      <th className="border border-blue-800 px-2 py-1">Model</th>
-                      <th className="border border-blue-800 px-2 py-1">M/c Sr. No.</th>
-                      <th className="border border-blue-800 px-2 py-1">Calibration Due Date</th>
-                    </tr></thead>
-                    <tbody>
-                      {rows.map((row, i) => (
-                        <tr key={i} className="border border-zinc-300">
-                          <td className="border border-zinc-300 px-2 py-1">{row.equipmentType || "—"}</td>
-                          <td className="border border-zinc-300 px-2 py-1">{row.machineMake || "—"}</td>
-                          <td className="border border-zinc-300 px-2 py-1">{row.model || "—"}</td>
-                          <td className="border border-zinc-300 px-2 py-1">{row.mcSrNo || "—"}</td>
-                          <td className="border border-zinc-300 px-2 py-1">{row.calibrationDueDate || "—"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              );
-            })()}
-            {/* Test Probe Details */}
-            {report.utProbeRows && (() => {
-              let rows: any[] = [];
-              try { const p = JSON.parse(report.utProbeRows); if (Array.isArray(p)) rows = p; } catch {}
-              if (rows.length === 0) return null;
-              return (
-                <div>
-                  <h3 className="mb-2 text-xs font-bold uppercase text-blue-700 border-b border-blue-300 pb-1">Test Probe Details</h3>
-                  <table className="w-full border-collapse text-xs">
-                    <thead><tr className="bg-blue-700 text-white">
-                      <th className="border border-blue-800 px-2 py-1">Probe Type</th>
-                      <th className="border border-blue-800 px-2 py-1">Angle</th>
-                      <th className="border border-blue-800 px-2 py-1">Frequency</th>
-                      <th className="border border-blue-800 px-2 py-1">Size</th>
-                      <th className="border border-blue-800 px-2 py-1">Probe No.</th>
-                      <th className="border border-blue-800 px-2 py-1">Range</th>
-                      <th className="border border-blue-800 px-2 py-1">Ref dB</th>
-                      <th className="border border-blue-800 px-2 py-1">Scan dB</th>
-                    </tr></thead>
-                    <tbody>
-                      {rows.map((row, i) => (
-                        <tr key={i} className="border border-zinc-300">
-                          <td className="border border-zinc-300 px-2 py-1">{row.probeType || "—"}</td>
-                          <td className="border border-zinc-300 px-2 py-1">{row.probeAngle || "—"}</td>
-                          <td className="border border-zinc-300 px-2 py-1">{row.frequency || "—"}</td>
-                          <td className="border border-zinc-300 px-2 py-1">{row.size || "—"}</td>
-                          <td className="border border-zinc-300 px-2 py-1">{row.probeNo || "—"}</td>
-                          <td className="border border-zinc-300 px-2 py-1">{row.range || "—"}</td>
-                          <td className="border border-zinc-300 px-2 py-1">{row.referenceDb || "—"}</td>
-                          <td className="border border-zinc-300 px-2 py-1">{row.scanningDb || "—"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              );
-            })()}
-            {/* Scanning Details */}
-            <div>
-              <h3 className="mb-2 text-xs font-bold uppercase text-blue-700 border-b border-blue-300 pb-1">Scanning Details</h3>
-              <table className="w-full border-collapse text-xs">
-                <tbody>
-                  {([
-                    ["Calibration Block (DAC Block)", report.utCalibrationBlock],
-                    ["Extent of Examination", report.utExtentOfExamination],
-                    ["Surface Condition", report.utSurfaceCondition],
-                    ["Reference Level", report.utReferenceLevel],
-                    ["Flaw Sizing Technique", report.utFlawSizingTechnique],
-                  ] as Array<[string, string | null | undefined]>).map(([label, value], idx) => (
-                    <tr key={idx} className="border-b border-zinc-200">
-                      <td className="bg-blue-50 border-r border-zinc-200 px-3 py-1.5 font-medium text-zinc-700 w-1/3">{label}</td>
-                      <td className="px-3 py-1.5">{value && value.trim() ? value : <span className="text-muted-foreground">—</span>}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {/* Test Results */}
-            {report.utTestResultRows && (() => {
-              let rows: any[] = [];
-              try { const p = JSON.parse(report.utTestResultRows); if (Array.isArray(p)) rows = p; } catch {}
-              if (rows.length === 0) return null;
-              return (
-                <div>
-                  <h3 className="mb-2 text-xs font-bold uppercase text-blue-700 border-b border-blue-300 pb-1">Test Results</h3>
-                  <table className="w-full border-collapse text-xs">
-                    <thead><tr className="bg-blue-700 text-white">
-                      <th className="border border-blue-800 px-2 py-1">Sl. No</th>
-                      <th className="border border-blue-800 px-2 py-1">Description</th>
-                      <th className="border border-blue-800 px-2 py-1">Beam ID</th>
-                      <th className="border border-blue-800 px-2 py-1">Joints</th>
-                      <th className="border border-blue-800 px-2 py-1">Thickness</th>
-                      <th className="border border-blue-800 px-2 py-1">Weld Type</th>
-                      <th className="border border-blue-800 px-2 py-1">MOC</th>
-                      <th className="border border-blue-800 px-2 py-1">Total Meter</th>
-                      <th className="border border-blue-800 px-2 py-1">Results</th>
-                    </tr></thead>
-                    <tbody>
-                      {rows.map((row, i) => (
-                        <tr key={i} className="border border-zinc-300">
-                          <td className="border border-zinc-300 px-2 py-1 text-center">{i + 1}</td>
-                          <td className="border border-zinc-300 px-2 py-1">{row.description || "—"}</td>
-                          <td className="border border-zinc-300 px-2 py-1">{row.beamId || "—"}</td>
-                          <td className="border border-zinc-300 px-2 py-1">{row.noOfJoints || "—"}</td>
-                          <td className="border border-zinc-300 px-2 py-1">{row.thickness || "—"}</td>
-                          <td className="border border-zinc-300 px-2 py-1">{row.weldType || "—"}</td>
-                          <td className="border border-zinc-300 px-2 py-1">{row.moc || "—"}</td>
-                          <td className="border border-zinc-300 px-2 py-1">{row.totalMeter || "—"}</td>
-                          <td className="border border-zinc-300 px-2 py-1">{row.results || "—"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              );
-            })()}
-            {/* Inspection Note */}
-            {report.utInspectionNote && (
-              <div>
-                <h3 className="mb-2 text-xs font-bold uppercase text-blue-700 border-b border-blue-300 pb-1">Inspection Note</h3>
-                <p className="text-xs whitespace-pre-wrap">{report.utInspectionNote}</p>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* DPT-specific sections — shown only for DPT / DPPT reports.
             These appear BEFORE the measurement table block (which only
