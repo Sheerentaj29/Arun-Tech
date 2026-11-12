@@ -1,0 +1,1344 @@
+     1→"use client";
+     2→
+     3→import { useEffect, useState, useCallback } from "react";
+     4→import {
+     5→  ArrowLeft,
+     6→  Download,
+     7→  Loader2,
+     8→  Pencil,
+     9→  ShieldAlert,
+    10→  AlertTriangle,
+    11→  Send,
+    12→  CheckCircle2,
+    13→  RotateCcw,
+    14→  GitBranch,
+    15→  FileText,
+    16→  X,
+    17→} from "lucide-react";
+    18→import {
+    19→  Card,
+    20→  CardContent,
+    21→  CardHeader,
+    22→  CardTitle,
+    23→  CardDescription,
+    24→} from "@/components/ui/card";
+    25→import { Button } from "@/components/ui/button";
+    26→import { Badge } from "@/components/ui/badge";
+    27→import { Textarea } from "@/components/ui/textarea";
+    28→import { Label } from "@/components/ui/label";
+    29→import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+    30→import {
+    31→  Dialog,
+    32→  DialogContent,
+    33→  DialogDescription,
+    34→  DialogFooter,
+    35→  DialogHeader,
+    36→  DialogTitle,
+    37→} from "@/components/ui/dialog";
+    38→import { useAppStore } from "@/lib/store";
+    39→import { apiFetch } from "@/lib/api-client";
+    40→import { AuthImage } from "@/components/auth-image";
+    41→import { resolveClientLogo } from "@/lib/client-logo-mapping";
+    42→import {
+    43→  parseThicknessTablesConfig,
+    44→  thicknessSectionHeading,
+    45→  thicknessTableHeading,
+    46→  DEFAULT_TABLE_ID,
+    47→  type ThicknessTableConfig,
+    48→} from "@/lib/thickness-tables";
+    49→import { fmtMeasurement } from "@/lib/measurement-utils";
+    50→import { toast } from "sonner";
+    51→
+    52→interface FullReport {
+    53→  id: string;
+    54→  reportNumber: string;
+    55→  reportType:
+    56→    | "PIPELINE_THICKNESS"
+    57→    | "PIPELINE_VISUAL"
+    58→    | "PIPELINE_CONDITION"
+    59→    | "PIPELINE_DPT"
+    60→    | "PIPELINE_MPT"
+    61→    | "PIPELINE_WELD_SCAN";
+    62→  clientId: string;
+    63→  plantId: string;
+    64→  inspectionArea: string | null;
+    65→  pipelineDescription: string | null;
+    66→  pipelineIdentificationNumber: string | null;
+    67→  isometricDrawingNumber: string | null;
+    68→  materialOfConstruction: string | null;
+    69→  applicableStandard: string | null;
+    70→  standardEdition: string | null;
+    71→  // ─── PIPELINE CONDITION fields ───
+    72→  pipelineAgeYears?: number | null;
+    73→  serviceFluid?: string | null;
+    74→  operatingCondition?: string | null;
+    75→  overallConditionRating?: string | null;
+    76→  corrosionCondition?: string | null;
+    77→  damageAssessment?: string | null;
+    78→  previousInspectionRef?: string | null;
+    79→  currentInspectionFindings?: string | null;
+    80→  riskPriorityLevel?: string | null;
+    81→  recommendations?: string | null;
+    82→  nextInspectionRecommendation?: string | null;
+    83→  // ─── NEW REPORT SECTIONS + SIGN-OFF FIELDS ───
+    84→  fromDate?: string | null;
+    85→  toDate?: string | null;
+    86→  primaryPhotoPath?: string | null;
+    87→  siteObservationSummary?: string | null;
+    88→  results?: string | null;
+    89→  conclusion?: string | null;
+    90→  inspectorDesignation?: string | null;
+    91→  secondReviewedByName?: string | null;
+    92→  secondReviewedByDesignation?: string | null;
+    93→  secondReviewedAt?: string | null;
+    94→  approvedByDesignation?: string | null;
+    95→  // ─── DPT / DPPT FIELDS ───
+    96→  dptDateOfExamination?: string | null;
+    97→  dptSolventCleaner?: string | null;
+    98→  dptPenetrant?: string | null;
+    99→  dptDeveloper?: string | null;
+   100→  dptCustomColumns?: string | null;
+   101→  // ─── DYE PENETRANT PROCEDURE FIELDS (16 typeable fields) ───
+   102→  dptTestingStandard?: string | null;
+   103→  dptAcceptanceCriteria?: string | null;
+   104→  dptSurfacePreparation?: string | null;
+   105→  dptSurfaceTemperature?: string | null;
+   106→  dptPenetrantType?: string | null;
+   107→  dptPenetrantProcess?: string | null;
+   108→  dptMethodOfPreCleaning?: string | null;
+   109→  dptDryingTimeAfterPreCleaning?: string | null;
+   110→  dptMethodOfApplyingPenetrant?: string | null;
+   111→  dptPenetratingTime?: string | null;
+   112→  dptMethodOfRemovingExcessPenetrant?: string | null;
+   113→  dptMethodOfApplyingDeveloper?: string | null;
+   114→  dptDevelopmentTime?: string | null;
+   115→  dptInterpretationTime?: string | null;
+   116→  dptLightingEquipment?: string | null;
+   117→  dptPostCleaning?: string | null;
+   118→  // ─── UT (ULTRASONIC TEST) FIELDS ───
+   119→  utSubContract?: string | null;
+   120→  utProject?: string | null;
+   121→  utJobLocation?: string | null;
+   122→  utJobDescription?: string | null;
+   123→  utMaterial?: string | null;
+   124→  utCouplant?: string | null;
+   125→  utReferenceDocuments?: string | null;
+   126→  utProcedureNo?: string | null;
+   127→  utAcceptanceStandard?: string | null;
+   128→  utUfdDetails?: string | null;
+   129→  utCalibrationBlock?: string | null;
+   130→  utExtentOfExamination?: string | null;
+   131→  utSurfaceCondition?: string | null;
+   132→  utReferenceLevel?: string | null;
+   133→  utFlawSizingTechnique?: string | null;
+   134→  utInspectionNote?: string | null;
+   135→  utEquipmentRows?: string | null;
+   136→  utProbeRows?: string | null;
+   137→  utTestResultRows?: string | null;
+   138→  utCustomColumns?: string | null;
+   139→  // ─── Certificates ───
+   140→  certificates?: Array<{
+   141→    id: string; category: string; title: string; fileName: string;
+   142→    fileExtension: string; fileSize: number; mimeType: string; sortOrder: number;
+   143→  }>;
+   144→  inspectionDate: string;
+   145→  status: string;
+   146→  revisionNumber: number;
+   147→  inspectorId: string;
+   148→  inspectorName: string;
+   149→  findingsSummary: string | null;
+   150→  comments: string | null;
+   151→  inspectionDescription?: string | null;
+   152→  photos: string | null;
+   153→  // JSON array of {id,label,sortOrder} describing every Thickness
+   154→  // Pipeline table configured on this report. Null/missing → single
+   155→  // default table (legacy behaviour).
+   156→  thicknessTablesConfig?: string | null;
+   157→  overrideReason: string | null;
+   158→  overrideAppliedAt: string | null;
+   159→  approvedById: string | null;
+   160→  approvedAt: string | null;
+   161→  approvalNotes: string | null;
+   162→  returnedById: string | null;
+   163→  returnedAt: string | null;
+   164→  reviewComments: string | null;
+   165→  currentApprovedRevisionId: string | null;
+   166→  isDemo: boolean;
+   167→  createdAt: string;
+   168→  updatedAt: string;
+   169→  client: { id: string; name: string; logoPath?: string | null };
+   170→  plant: { id: string; name: string; location: string | null; address: string | null };
+   171→  inspector: { id: string; name: string; email: string };
+   172→  approver: { id: string; name: string; email: string } | null;
+   173→  returnedBy: { id: string; name: string; email: string } | null;
+   174→  // ─── Photos + Drawings (returned by the API but were missing from the
+   175→  // interface, causing images to never render during report review) ───
+   176→  reportPhotos?: Array<{
+   177→    id: string;
+   178→    fileName: string;
+   179→    filePath: string;
+   180→    fileSize: number;
+   181→    mimeType: string;
+   182→    caption: string | null;
+   183→    sortOrder: number;
+   184→    uploadedByName: string | null;
+   185→    createdAt: string;
+   186→  }>;
+   187→  drawingLinks?: Array<{
+   188→    id: string;
+   189→    drawingId: string;
+   190→    drawingRevisionId: string | null;
+   191→    createdAt: string;
+   192→    drawing: {
+   193→      id: string;
+   194→      title: string;
+   195→      drawingNumber: string;
+   196→      drawingType: string;
+   197→      client?: { id: string; name: string } | null;
+   198→      plant?: { id: string; name: string } | null;
+   199→      revisions: Array<{
+   200→        id: string;
+   201→        revisionNumber: string;
+   202→        fileName: string;
+   203→        filePath: string;
+   204→        fileExtension: string;
+   205→        mimeType: string;
+   206→        fileSize: number;
+   207→        isActive: boolean;
+   208→      }>;
+   209→    };
+   210→  }>;
+   211→  measurements: Array<{
+   212→    id: string;
+   213→    pointNo: string;
+   214→    sortOrder: number;
+   215→    /** Multi-table partition key. Defaults to "default" for rows
+   216→     *  created before this feature was added. */
+   217→    tableGroup?: string;
+   218→    pipeSizeInch: string;
+   219→    pipeSchedule: string;
+   220→    nominalThicknessMm: number | null;
+   221→    componentTypeCode: string;
+   222→    componentType?: { code: string; label: string } | null;
+   223→    northMm: number | null; northStatus: string;
+   224→    eastMm: number | null; eastStatus: string;
+   225→    southMm: number | null; southStatus: string;
+   226→    westMm: number | null; westStatus: string;
+   227→    observedMinimumMm: number | null;
+   228→    findingsComments: string | null;
+   229→    standard?: {
+   230→      standard: string; edition: string; nominalSizeInch: string;
+   231→      schedule: string; wallThicknessMm: number; isVerified: boolean;
+   232→    } | null;
+   233→  }>;
+   234→  visualObservations?: Array<{
+   235→    id: string;
+   236→    pointNo: string;
+   237→    sortOrder: number;
+   238→    location: string | null;
+   239→    pipelineCondition: string | null;
+   240→    externalSurfaceCondition: string | null;
+   241→    coatingPaintCondition: string | null;
+   242→    corrosionObserved: string | null;
+   243→    leakageObserved: string | null;
+   244→    damageOrDeformation: string | null;
+   245→    supportsHangersCondition: string | null;
+   246→    weldJointCondition: string | null;
+   247→    insulationCondition: string | null;
+   248→    findings: string | null;
+   249→    recommendations: string | null;
+   250→    inspectorComments: string | null;
+   251→  }>;
+   252→  // DPT observations — only populated for PIPELINE_DPT reports.
+   253→  dptObservations?: Array<{
+   254→    id: string;
+   255→    serialNo: number;
+   256→    sortOrder: number;
+   257→    description: string | null;
+   258→    weldType: string | null;
+   259→    result: string;
+   260→    remarks: string | null;
+   261→    customColumnValues: string | null;
+   262→  }>;
+   263→  revisions: Array<{
+   264→    id: string;
+   265→    revisionNumber: number;
+   266→    revisionDate: string;
+   267→    status: string;
+   268→    revisedByName: string | null;
+   269→    changeDescription: string | null;
+   270→    reviewComments: string | null;
+   271→    approvedByName: string | null;
+   272→    approvedAt: string | null;
+   273→    revisedBy?: { id: string; name: string } | null;
+   274→    approvedBy?: { id: string; name: string } | null;
+   275→  }>;
+   276→}
+   277→
+   278→const STATUS_COLOR: Record<string, string> = {
+   279→  Draft: "border-zinc-400 text-zinc-600",
+   280→  "Submitted for Review": "border-blue-500 text-blue-700",
+   281→  "Returned for Revision": "border-red-500 text-red-700",
+   282→  Approved: "border-emerald-500 text-emerald-700",
+   283→  "Changes Pending Review": "border-amber-500 text-amber-700",
+   284→};
+   285→
+   286→const REVISION_STATUS_COLOR: Record<string, string> = {
+   287→  Draft: "border-zinc-400 text-zinc-600",
+   288→  "Submitted for Review": "border-blue-500 text-blue-700",
+   289→  "Returned for Revision": "border-red-500 text-red-700",
+   290→  Approved: "border-emerald-500 text-emerald-700",
+   291→  "Changes Pending Review": "border-amber-500 text-amber-700",
+   292→  Superseded: "border-zinc-400 text-zinc-500",
+   293→};
+   294→
+   295→const REPORT_TYPE_LABEL: Record<string, { label: string; title: string; color: string }> = {
+   296→  PIPELINE_THICKNESS: {
+   297→    label: "Thickness",
+   298→    title: "PIPELINE THICKNESS MEASUREMENT REPORT",
+   299→    color: "border-emerald-500 text-emerald-700",
+   300→  },
+   301→  PIPELINE_VISUAL: {
+   302→    label: "Visual",
+   303→    title: "PIPELINE VISUAL INSPECTION REPORT",
+   304→    color: "border-blue-500 text-blue-700",
+   305→  },
+   306→  PIPELINE_CONDITION: {
+   307→    label: "Condition",
+   308→    title: "PIPELINE CONDITION ASSESSMENT REPORT",
+   309→    color: "border-amber-500 text-amber-700",
+   310→  },
+   311→  PIPELINE_DPT: {
+   312→    label: "DPT/DPPT",
+   313→    title: "DYE PENETRANT TESTING REPORT",
+   314→    color: "border-purple-500 text-purple-700",
+   315→  },
+   316→  PIPELINE_MPT: {
+   317→    label: "MPT",
+   318→    title: "MAGNETIC PARTICLE TESTING REPORT",
+   319→    color: "border-orange-500 text-orange-700",
+   320→  },
+   321→  PIPELINE_WELD_SCAN: {
+   322→    label: "Weld Scan",
+   323→    title: "WELD SCAN REPORT",
+   324→    color: "border-cyan-500 text-cyan-700",
+   325→  },
+   326→};
+   327→
+   328→export function PipelineReportDetailView() {
+   329→  const {
+   330→    user,
+   331→    selectedPipelineReportId,
+   332→    setView,
+   333→    openEditPipelineReport,
+   334→    refresh,
+   335→    refreshKey,
+   336→  } = useAppStore();
+   337→  const [report, setReport] = useState<FullReport | null>(null);
+   338→  const [loading, setLoading] = useState(true);
+   339→  const [error, setError] = useState<string | null>(null);
+   340→  const [acting, setActing] = useState(false);
+   341→  // Dialog state for workflow actions (submit / approve / return / revise)
+   342→  const [dialogMode, setDialogMode] = useState<null | "submit" | "approve" | "return" | "revise">(null);
+   343→  const [dialogText, setDialogText] = useState("");
+   344→  // Lightbox state — when set, the image at this URL is shown full-screen
+   345→  const [lightbox, setLightbox] = useState<{ url: string; caption: string } | null>(null);
+   346→
+   347→  const load = useCallback(() => {
+   348→    if (!selectedPipelineReportId) return;
+   349→    setLoading(true);
+   350→    apiFetch<FullReport>(`/api/pipeline-inspections/${selectedPipelineReportId}`)
+   351→      .then((r) => setReport(r))
+   352→      .catch((e) => setError(e.message))
+   353→      .finally(() => setLoading(false));
+   354→  }, [selectedPipelineReportId]);
+   355→
+   356→  useEffect(() => { load(); }, [load, refreshKey]);
+   357→
+   358→  // Role-based permissions (derived from session user + current report state)
+   359→  const isAdmin = user?.dashboardRole === "ADMIN";
+   360→  const isOwner = !!(user && report && report.inspectorId === user.id);
+   361→  const status = report?.status;
+   362→  // Employee can edit header/measurements only on their own Draft / Returned reports
+   363→  const canEditDraft =
+   364→    !!user && !!report && (
+   365→      isAdmin ||
+   366→      (isOwner && (status === "Draft" || status === "Returned for Revision"))
+   367→    );
+   368→  // Employee can submit (only their own Draft / Returned reports)
+   369→  const canSubmit =
+   370→    !!user && !!report && !isAdmin && isOwner &&
+   371→    (status === "Draft" || status === "Returned for Revision");
+   372→  // Employee can revise their own Approved report (creates new revision)
+   373→  const canRevise =
+   374→    !!user && !!report && !isAdmin && isOwner && status === "Approved";
+   375→  // Admin can approve or return when status is Submitted for Review or Changes Pending Review
+   376→  const canApproveOrReturn =
+   377→    !!user && !!report && isAdmin &&
+   378→    (status === "Submitted for Review" || status === "Changes Pending Review");
+   379→
+   380→  function openDialog(mode: "submit" | "approve" | "return" | "revise") {
+   381→    setDialogMode(mode);
+   382→    setDialogText("");
+   383→  }
+   384→
+   385→  async function executeWorkflow() {
+   386→    if (!report || !dialogMode) return;
+   387→    setActing(true);
+   388→    try {
+   389→      const body = dialogText.trim()
+   390→        ? (dialogMode === "submit"
+   391→            ? { submissionNotes: dialogText }
+   392→            : dialogMode === "approve"
+   393→              ? { approvalNotes: dialogText }
+   394→              : dialogMode === "return"
+   395→                ? { reviewComments: dialogText }
+   396→                : { changeDescription: dialogText })
+   397→        : {};
+   398→      const endpoint =
+   399→        dialogMode === "submit" ? "submit" :
+   400→        dialogMode === "approve" ? "approve" :
+   401→        dialogMode === "return" ? "return" :
+   402→        "revise";
+   403→      await apiFetch(`/api/pipeline-inspections/${report.id}/${endpoint}`, {
+   404→        method: "POST",
+   405→        body: JSON.stringify(body),
+   406→      });
+   407→      const labels: Record<string, string> = {
+   408→        submit: "Submitted for review",
+   409→        approve: "Approved",
+   410→        return: "Returned for revision",
+   411→        revise: "Revision started",
+   412→      };
+   413→      toast.success(labels[dialogMode]);
+   414→      setDialogMode(null);
+   415→      setDialogText("");
+   416→      refresh();
+   417→      load();
+   418→    } catch (e) {
+   419→      const err = e as { message?: string };
+   420→      toast.error(err.message ?? "Action failed");
+   421→    } finally {
+   422→      setActing(false);
+   423→    }
+   424→  }
+   425→
+   426→  async function downloadPdf(orientation?: "landscape" | "portrait") {
+   427→    if (!report) return;
+   428→    const orient = orientation ?? "landscape";
+   429→    try {
+   430→      // Use fetch() instead of window.open() so the Authorization header
+   431→      // (from localStorage) is sent along with the cookie. This fixes the
+   432→      // download failure caused by popup blockers and missing auth headers.
+   433→      const token = typeof window !== "undefined" ? window.localStorage.getItem("ira_session_token") : null;
+   434→      const res = await fetch(`/api/pipeline-inspections/${report.id}/pdf?orientation=${orient}`, {
+   435→        credentials: "include",
+   436→        headers: token ? { Authorization: `Bearer ${token}` } : {},
+   437→      });
+   438→      if (!res.ok) {
+   439→        const body = await res.json().catch(() => ({}));
+   440→        throw new Error(body?.error ?? `Download failed (HTTP ${res.status})`);
+   441→      }
+   442→      const blob = await res.blob();
+   443→      const url = URL.createObjectURL(blob);
+   444→      const a = document.createElement("a");
+   445→      a.href = url;
+   446→      // Build a descriptive filename
+   447→      const filename = `Inspection_Report_${report.reportNumber.replace(/[^a-zA-Z0-9-]/g, "_")}_${orient}.pdf`;
+   448→      a.download = filename;
+   449→      document.body.appendChild(a);
+   450→      a.click();
+   451→      a.remove();
+   452→      URL.revokeObjectURL(url);
+   453→      toast.success(`Downloaded ${filename}`);
+   454→    } catch (e) {
+   455→      const err = e as Error;
+   456→      toast.error(`PDF download failed: ${err.message}`);
+   457→    }
+   458→  }
+   459→
+   460→  if (loading) {
+   461→    return (
+   462→      <div className="p-8 text-muted-foreground flex items-center gap-2">
+   463→        <Loader2 className="h-4 w-4 animate-spin" /> Loading report...
+   464→      </div>
+   465→    );
+   466→  }
+   467→  if (error) {
+   468→    return (
+   469→      <Alert variant="destructive">
+   470→        <AlertTitle>Failed to load</AlertTitle>
+   471→        <AlertDescription>{error}</AlertDescription>
+   472→      </Alert>
+   473→    );
+   474→  }
+   475→  if (!report) return <p className="p-8 text-muted-foreground">No report selected.</p>;
+   476→
+   477→  const allVerified = report.measurements.every(
+   478→    (m) => m.standard?.isVerified || m.standard === null,
+   479→  );
+   480→
+   481→  const dialogTitle: Record<string, string> = {
+   482→    submit: "Submit Report for Review",
+   483→    approve: "Approve Report",
+   484→    return: "Return Report for Revision",
+   485→    revise: "Start New Revision",
+   486→  };
+   487→  const dialogDesc: Record<string, string> = {
+   488→    submit: "Submit this report to the administrator for approval. You won't be able to edit it until it's approved or returned.",
+   489→    approve: "Approve this report. The current state will be saved as an approved revision; previous approved revisions will be marked as Superseded but remain available.",
+   490→    return: "Return this report to the employee for correction. Mandatory review comments (at least 10 chars) will be visible to them.",
+   491→    revise: "Start a new revision of this approved report. The previously-approved version stays available; this new revision will need admin approval before becoming the current approved version.",
+   492→  };
+   493→  const dialogLabel: Record<string, string> = {
+   494→    submit: "Submission notes (optional)",
+   495→    approve: "Approval notes (optional)",
+   496→    return: "Review comments (REQUIRED, >= 10 chars)",
+   497→    revise: "What are you changing? (REQUIRED, >= 5 chars)",
+   498→  };
+   499→  const dialogActionLabel: Record<string, string> = {
+   500→    submit: "Submit for Review",
+   501→    approve: "Approve",
+   502→    return: "Return for Revision",
+   503→    revise: "Start Revision",
+   504→  };
+   505→
+   506→  return (
+   507→    <div className="space-y-4">
+   508→      {/* Top bar */}
+   509→      <div className="flex items-center justify-between">
+   510→        <Button variant="ghost" size="sm" onClick={() => setView("pipeline-reports")}>
+   511→          <ArrowLeft className="mr-2 h-4 w-4" /> Back to list
+   512→        </Button>
+   513→        <div className="flex gap-2">
+   514→          <Button variant="outline" size="sm" onClick={() => downloadPdf("landscape")}>
+   515→            <Download className="mr-2 h-4 w-4" /> PDF (Landscape)
+   516→          </Button>
+   517→          <Button variant="outline" size="sm" onClick={() => downloadPdf("portrait")}>
+   518→            <Download className="mr-2 h-4 w-4" /> PDF (Portrait)
+   519→          </Button>
+   520→          {canEditDraft && (
+   521→            <Button size="sm" onClick={() => openEditPipelineReport(report.id)}>
+   522→              <Pencil className="mr-2 h-4 w-4" /> Edit
+   523→            </Button>
+   524→          )}
+   525→          {canSubmit && (
+   526→            <Button size="sm" onClick={() => openDialog("submit")}>
+   527→              <Send className="mr-2 h-4 w-4" /> Submit for Review
+   528→            </Button>
+   529→          )}
+   530→          {canRevise && (
+   531→            <Button size="sm" variant="default" onClick={() => openDialog("revise")}>
+   532→              <GitBranch className="mr-2 h-4 w-4" /> Start New Revision
+   533→            </Button>
+   534→          )}
+   535→          {canApproveOrReturn && (
+   536→            <>
+   537→              <Button size="sm" variant="default" onClick={() => openDialog("approve")}>
+   538→                <CheckCircle2 className="mr-2 h-4 w-4" /> Approve
+   539→              </Button>
+   540→              <Button size="sm" variant="outline" className="text-red-700 border-red-300" onClick={() => openDialog("return")}>
+   541→                <RotateCcw className="mr-2 h-4 w-4" /> Return for Revision
+   542→              </Button>
+   543→            </>
+   544→          )}
+   545→        </div>
+   546→      </div>
+   547→
+   548→      {/* Status banner */}
+   549→      <div className="flex flex-wrap items-center gap-3">
+   550→        {/* Report type badge — derived from reportType */}
+   551→        {(() => {
+   552→          const typeInfo = REPORT_TYPE_LABEL[report.reportType] ?? REPORT_TYPE_LABEL.PIPELINE_THICKNESS;
+   553→          return (
+   554→            <Badge variant="outline" className={`text-[11px] ${typeInfo.color}`}>
+   555→              {typeInfo.label}
+   556→            </Badge>
+   557→          );
+   558→        })()}
+   559→        <Badge variant="outline" className={STATUS_COLOR[report.status] ?? ""}>
+   560→          {report.status}
+   561→        </Badge>
+   562→        {report.revisionNumber > 1 && (
+   563→          <Badge variant="outline" className="text-xs">
+   564→            Rev {report.revisionNumber}
+   565→          </Badge>
+   566→        )}
+   567→        {report.isDemo && (
+   568→          <Badge variant="outline" className="border-zinc-400 text-zinc-500">DEMO</Badge>
+   569→        )}
+   570→        {status === "Returned for Revision" && report.reviewComments && (
+   571→          <Alert className="flex-1 border-red-300 bg-red-50">
+   572→            <RotateCcw className="h-4 w-4 text-red-700" />
+   573→            <AlertTitle className="text-red-900">Admin returned this report for revision</AlertTitle>
+   574→            <AlertDescription className="text-red-900">
+   575→              <em>"{report.reviewComments}"</em>
+   576→              {report.returnedBy && (
+   577→                <div className="mt-1 text-xs">
+   578→                  — {report.returnedBy.name}
+   579→                  {report.returnedAt ? ` on ${new Date(report.returnedAt).toLocaleString()}` : ""}
+   580→                </div>
+   581→              )}
+   582→            </AlertDescription>
+   583→          </Alert>
+   584→        )}
+   585→      </div>
+   586→
+   587→      {/* Verification banner */}
+   588→      {!allVerified && (
+   589→        <Alert className="border-amber-300 bg-amber-50">
+   590→          <ShieldAlert className="h-4 w-4 text-amber-700" />
+   591→          <AlertTitle className="text-amber-900">Reference data not yet verified</AlertTitle>
+   592→          <AlertDescription className="text-amber-900">
+   593→            One or more nominal wall thickness values reference unverified ASME
+   594→            standard data. An administrator must verify them against the licensed
+   595→            ASME standard edition before this report can be used for production
+   596→            inspection decisions.
+   597→          </AlertDescription>
+   598→        </Alert>
+   599→      )}
+   600→
+   601→      {/* ---------- PRINTABLE REPORT ---------- */}
+   602→      <div className="rounded-md border border-zinc-400 bg-white p-8 print:shadow-none print:border-0" style={{ minHeight: "210mm" }}>
+   603→        {/* Header */}
+   604→        <div className="mb-6">
+   605→          <h1 className="text-center text-lg font-bold tracking-tight">
+   606→            {(REPORT_TYPE_LABEL[report.reportType] ?? REPORT_TYPE_LABEL.PIPELINE_THICKNESS).title}
+   607→          </h1>
+   608→          <p className="text-center text-xs text-zinc-700">
+   609→            Report No: <span className="font-mono">{report.reportNumber}</span>
+   610→            {"    |    "}Rev: {report.revisionNumber}
+   611→            {"    |    "}Date: {report.fromDate ? new Date(report.fromDate).toISOString().slice(0, 10) : new Date(report.inspectionDate).toISOString().slice(0, 10)}{report.toDate && report.toDate !== report.fromDate ? ` – ${new Date(report.toDate).toISOString().slice(0, 10)}` : ""}
+   612→            {"    |    "}Status: {report.status}
+   613→          </p>
+   614→        </div>
+   615→
+   616→        {/* Logo section — Aruntech (left, permanent) + Client (right, dynamic)
+   617→            The client logo is resolved via @/lib/client-logo-mapping, which is
+   618→            the single source of truth for the client-name → logo-file mapping.
+   619→            The map is currently EMPTY (clean slate) — it will be repopulated
+   620→            one entry per client after the user uploads the new uniquely-named
+   621→            logo images. Until then `resolveClientLogo()` returns null for
+   622→            every client and a clean placeholder is shown. No other company's
+   623→            logo is ever substituted. Uses AuthImage for cross-origin auth
+   624→            support. Logo containers use flexbox with object-fit: contain so
+   625→            logos of any aspect ratio (square, wide, tall) are properly scaled
+   626→            and centered without distortion. */}
+   627→        <div className="mb-4 flex items-center justify-between">
+   628→          {/* Left: Aruntech logo (permanent) */}
+   629→          <div
+   630→            className="flex items-center justify-center border border-zinc-300 overflow-hidden bg-white"
+   631→            style={{ width: "140px", height: "70px" }}
+   632→          >
+   633→            <AuthImage
+   634→              src="/api/settings/service-logo"
+   635→              alt="Aruntech Logo"
+   636→              className="max-w-[92%] max-h-[88%] w-auto h-auto object-contain"
+   637→            />
+   638→          </div>
+   639→          {/* Right: Client logo (dynamic, based on client name) */}
+   640→          <div
+   641→            className="flex items-center justify-center border border-zinc-300 overflow-hidden bg-white"
+   642→            style={{ width: "140px", height: "70px" }}
+   643→          >
+   644→            {(() => {
+   645→              // Resolve the client logo using the SHARED, EXACT-match
+   646→              // resolver in @/lib/client-logo-mapping.
+   647→              //   Priority:
+   648→              //     1. If the client has a static-map entry (currently NONE —
+   649→              //        the map is empty pending the user's new logo uploads),
+   650→              //        serve the mapped file via /api/client-logo/[slug].
+   651→              //     2. Else, if the client has its own uploaded logo
+   652→              //        (logoPath), use that — it's their real brand asset.
+   653→              //     3. Else, show a text placeholder — NEVER another
+   654→              //        company's logo.
+   655→              const mappedLogoFile = resolveClientLogo(report.client.name);
+   656→
+   657→              if (mappedLogoFile) {
+   658→                // Served by the dedicated client-logo API endpoint.
+   659→                return (
+   660→                  <AuthImage
+   661→                    src={`/api/client-logo/${mappedLogoFile}`}
+   662→                    alt={`${report.client.name} Logo`}
+   663→                    className="max-w-[92%] max-h-[88%] w-auto h-auto object-contain"
+   664→                  />
+   665→                );
+   666→              } else if (report.client.logoPath) {
+   667→                // Fall back to the client's own uploaded logo path.
+   668→                return (
+   669→                  <AuthImage
+   670→                    src={`/api/clients/${report.clientId}/logo`}
+   671→                    alt={`${report.client.name} Logo`}
+   672→                    className="max-w-[92%] max-h-[88%] w-auto h-auto object-contain"
+   673→                  />
+   674→                );
+   675→              } else {
+   676→                return (
+   677→                  <span className="text-[10px] text-zinc-500 text-center">
+   678→                    {report.client.name.slice(0, 24)}<br />Client Logo
+   679→                  </span>
+   680→                );
+   681→              }
+   682→            })()}
+   683→          </div>
+   684→        </div>
+   685→
+   686→        {/* Header info grid */}
+   687→        <div className="mb-4 grid grid-cols-2 gap-0 border border-zinc-500 text-xs">
+   688→          {[
+   689→            ["Client", report.client.name],
+   690→            ["Location", report.plant.location ?? "—"],
+   691→            ["Plant Name", report.plant.name],
+   692→            ["Inspection Area", report.inspectionArea ?? "—"],
+   693→            ["Pipeline Description", report.pipelineDescription ?? "—"],
+   694→            ["Pipeline Identification No.", report.pipelineIdentificationNumber ?? "—"],
+   695→            ["Isometric Drawing No.", report.isometricDrawingNumber ?? "—"],
+   696→            ["Material of Construction (MOC)", report.materialOfConstruction ?? "—"],
+   697→            ["Applicable Standard", `${report.applicableStandard ?? "—"} ${report.standardEdition ?? ""}`.trim()],
+   698→            ["Inspector", report.inspectorName],
+   699→          ].map(([label, value], idx) => (
+   700→            <div key={idx} className={`flex border-b border-r border-zinc-300 ${idx % 2 === 1 ? "border-r-0" : ""} ${idx >= 8 ? "border-b-0" : ""}`}>
+   701→              <div className="w-1/2 bg-zinc-100 px-2 py-1 font-semibold border-r border-zinc-300">{label}</div>
+   702→              <div className="flex-1 px-2 py-1">{value}</div>
+   703→            </div>
+   704→          ))}
+   705→        </div>
+   706→
+   707→        {/* DPT-specific sections — shown only for DPT / DPPT reports.
+   708→            These appear BEFORE the measurement table block (which only
+   709→            applies to thickness reports) so the correct content is shown
+   710→            under the correct heading for DPT reports.
+   711→        */}
+   712→        {report.reportType === "PIPELINE_DPT" && (
+   713→          <div className="mt-6 space-y-6">
+   714→            {/* 3. Dye Penetrant Procedure */}
+   715→            <div>
+   716→              <h3 className="mb-2 text-xs font-bold uppercase text-purple-700 border-b border-purple-300 pb-1">
+   717→                3. Dye Penetrant Procedure
+   718→              </h3>
+   719→              <table className="w-full border-collapse text-xs">
+   720→                <tbody>
+   721→                  {([
+   722→                    ["Date of Examination", report.dptDateOfExamination ? new Date(report.dptDateOfExamination).toISOString().slice(0, 10) : null],
+   723→                    ["Testing Standard", report.dptTestingStandard],
+   724→                    ["Acceptance Criteria", report.dptAcceptanceCriteria],
+   725→                    ["Surface Preparation", report.dptSurfacePreparation],
+   726→                    ["Surface Temperature", report.dptSurfaceTemperature],
+   727→                    ["Penetrant Type", report.dptPenetrantType],
+   728→                    ["Penetrant Process", report.dptPenetrantProcess],
+   729→                    ["Method of Pre-cleaning", report.dptMethodOfPreCleaning],
+   730→                    ["Drying Time After Pre-cleaning", report.dptDryingTimeAfterPreCleaning],
+   731→                    ["Method of Applying Penetrant", report.dptMethodOfApplyingPenetrant],
+   732→                    ["Penetrating Time", report.dptPenetratingTime],
+   733→                    ["Method of Removing Excess Penetrant", report.dptMethodOfRemovingExcessPenetrant],
+   734→                    ["Method of Applying Developer", report.dptMethodOfApplyingDeveloper],
+   735→                    ["Development Time", report.dptDevelopmentTime],
+   736→                    ["Interpretation Time", report.dptInterpretationTime],
+   737→                    ["Lighting Equipment", report.dptLightingEquipment],
+   738→                    ["Post Cleaning", report.dptPostCleaning],
+   739→                  ] as Array<[string, string | null | undefined]>).map(([label, value], idx) => (
+   740→                    <tr key={idx} className="border-b border-zinc-200">
+   741→                      <td className="bg-purple-50 border-r border-zinc-200 px-3 py-1.5 font-medium text-zinc-700 w-1/3">
+   742→                        {label}
+   743→                      </td>
+   744→                      <td className="px-3 py-1.5">
+   745→                        {value && value.trim() ? value : <span className="text-muted-foreground">—</span>}
+   746→                      </td>
+   747→                    </tr>
+   748→                  ))}
+   749→                </tbody>
+   750→              </table>
+   751→            </div>
+   752→
+   753→            {/* Consumable Details */}
+   754→            <div>
+   755→              <h3 className="mb-2 text-xs font-bold uppercase text-purple-700 border-b border-purple-300 pb-1">
+   756→                Consumable Details
+   757→              </h3>
+   758→              <table className="w-full border-collapse text-xs">
+   759→                <tbody>
+   760→                  {([
+   761→                    ["Solvent", report.dptSolventCleaner],
+   762→                    ["Penetrant", report.dptPenetrant],
+   763→                    ["Developer", report.dptDeveloper],
+   764→                  ] as Array<[string, string | null | undefined]>).map(([label, value], idx) => (
+   765→                    <tr key={idx} className="border-b border-zinc-200">
+   766→                      <td className="bg-purple-50 border-r border-zinc-200 px-3 py-1.5 font-medium text-zinc-700 w-1/3">
+   767→                        {label}
+   768→                      </td>
+   769→                      <td className="px-3 py-1.5">
+   770→                        {value && value.trim() ? value : <span className="text-muted-foreground">—</span>}
+   771→                      </td>
+   772→                    </tr>
+   773→                  ))}
+   774→                </tbody>
+   775→              </table>
+   776→            </div>
+   777→
+   778→            {/* DPT Inspection Results table */}
+   779→            {report.dptObservations && report.dptObservations.length > 0 && (() => {
+   780→              // Parse custom columns
+   781→              let dptCustomCols: Array<{ id: string; name: string; unit: string }> = [];
+   782→              try {
+   783→                const cc = JSON.parse(report.dptCustomColumns ?? "[]");
+   784→                if (Array.isArray(cc)) dptCustomCols = cc;
+   785→              } catch {}
+   786→              return (
+   787→                <div>
+   788→                  <h3 className="mb-2 text-xs font-bold uppercase text-purple-700 border-b border-purple-300 pb-1">
+   789→                    DPT Inspection Results ({report.dptObservations.length})
+   790→                  </h3>
+   791→                  <div className="overflow-x-auto">
+   792→                    <table className="w-full border-collapse text-xs">
+   793→                      <thead>
+   794→                        <tr className="bg-purple-800 text-white">
+   795→                          <th className="border border-purple-900 px-2 py-2 text-center">Sl. No</th>
+   796→                          <th className="border border-purple-900 px-2 py-2 text-center">Description</th>
+   797→                          <th className="border border-purple-900 px-2 py-2 text-center">Weld Type</th>
+   798→                          <th className="border border-purple-900 px-2 py-2 text-center">Result</th>
+   799→                          {dptCustomCols.map((cc) => (
+   800→                            <th key={cc.id} className="border border-purple-900 px-2 py-2 text-center">
+   801→                              {cc.name}{cc.unit && <span className="opacity-70"> ({cc.unit})</span>}
+   802→                            </th>
+   803→                          ))}
+   804→                          <th className="border border-purple-900 px-2 py-2 text-center">Remarks</th>
+   805→                        </tr>
+   806→                      </thead>
+   807→                      <tbody>
+   808→                        {report.dptObservations.map((obs) => (
+   809→                          <tr key={obs.id} className="hover:bg-muted/30">
+   810→                            <td className="border border-zinc-300 px-2 py-1 text-center font-mono">{obs.serialNo}</td>
+   811→                            <td className="border border-zinc-300 px-2 py-1">{obs.description ?? "—"}</td>
+   812→                            <td className="border border-zinc-300 px-2 py-1 text-center">{obs.weldType ?? "—"}</td>
+   813→                            <td className={`border border-zinc-300 px-2 py-1 text-center font-bold ${obs.result === "Reject" ? "text-red-700 bg-red-50" : "text-emerald-700 bg-emerald-50"}`}>
+   814→                              {obs.result}
+   815→                            </td>
+   816→                            {dptCustomCols.map((cc) => {
+   817→                              let val = "—";
+   818→                              try {
+   819→                                const vals = JSON.parse(obs.customColumnValues ?? "{}");
+   820→                                val = vals[cc.id] ?? "—";
+   821→                              } catch {}
+   822→                              return <td key={cc.id} className="border border-zinc-300 px-2 py-1 text-center">{val}</td>;
+   823→                            })}
+   824→                            <td className="border border-zinc-300 px-2 py-1">{obs.remarks ?? "—"}</td>
+   825→                          </tr>
+   826→                        ))}
+   827→                      </tbody>
+   828→                    </table>
+   829→                  </div>
+   830→                </div>
+   831→              );
+   832→            })()}
+   833→          </div>
+   834→        )}
+   835→
+   836→        {/* Measurement tables — ONLY for PIPELINE_THICKNESS reports.
+   837→            This must NEVER appear in DPT or other report types. The report
+   838→            type is checked explicitly (not just whether measurements exist)
+   839→            so that a Thickness report with zero rows still shows the table
+   840→            structure, while a DPT report never shows it.
+   841→
+   842→            AUTOMATIC INDEX NUMBERING:
+   843→              The section is numbered "7. Thickness Measurement" (parent).
+   844→              Each sub-table is numbered dynamically: "7.1 – Label",
+   845→              "7.2 – Label", "7.3 – Label", etc. An Index list is shown
+   846→              above the tables listing all sub-tables. When tables are
+   847→              added/deleted/renamed/reordered, the numbering updates
+   848→              automatically because it's derived from the array index. */}
+   849→        {report.reportType === "PIPELINE_THICKNESS" && (() => {
+   850→          // Parse the table-config JSON (falls back to a single default
+   851→          // table when missing/invalid). Memoize at render time.
+   852→          const tables: ThicknessTableConfig[] = parseThicknessTablesConfig(
+   853→            report.thicknessTablesConfig ?? null,
+   854→          );
+   855→          return (
+   856→            <>
+   857→              {/* ── Parent section heading: "7. Thickness Measurement" ── */}
+   858→              <h3 className="mb-2 text-sm font-bold text-zinc-800 border-b border-zinc-400 pb-1">
+   859→                {thicknessSectionHeading()}
+   860→              </h3>
+   861→
+   862→              {/* ── Index / Table of Contents for this section ── */}
+   863→              <div className="mb-4 ml-4 text-xs text-zinc-600 space-y-0.5">
+   864→                {tables.map((t, i) => (
+   865→                  <div key={t.id}>{thicknessTableHeading(i + 1, t.label)}</div>
+   866→                ))}
+   867→              </div>
+   868→
+   869→              {/* ── Render each table with its numbered heading ── */}
+   870→              {tables.map((table, tableIdx) => {
+   871→                // Partition measurements into this table.
+   872→                const tableRows = report.measurements.filter(
+   873→                  (m) => (m.tableGroup ?? DEFAULT_TABLE_ID) === table.id,
+   874→                );
+   875→                return (
+   876→                  <div key={table.id} className={tableIdx > 0 ? "mt-6" : ""}>
+   877→                    {/* Numbered table heading: "7.N – [Label]" */}
+   878→                    <h4 className="mb-2 text-xs font-bold uppercase text-emerald-800 border-b border-emerald-300 pb-1">
+   879→                      {thicknessTableHeading(tableIdx + 1, table.label)}
+   880→                    </h4>
+   881→                    <div className="overflow-x-auto">
+   882→                      <table className="w-full border-collapse text-[11px]">
+   883→                        <thead>
+   884→                          <tr className="bg-emerald-800 text-white">
+   885→                            <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 50 }}>Dia mm<br />(inch)</th>
+   886→                            <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 55 }}>Pipe<br />Schedule</th>
+   887→                            <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 55 }}>Nominal<br />Thickness<br />(mm)</th>
+   888→                            <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 60 }}>Component<br />Type</th>
+   889→                            <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 45 }}>Point<br />No</th>
+   890→                            <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 65 }}>
+   891→                              <div className="flex flex-col items-center">
+   892→                                <span>12 o'clock</span><span>North</span><span>(mm)</span>
+   893→                              </div>
+   894→                            </th>
+   895→                            <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 65 }}>
+   896→                              <div className="flex flex-col items-center">
+   897→                                <span>3 o'clock</span><span>East</span><span>(mm)</span>
+   898→                              </div>
+   899→                            </th>
+   900→                            <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 65 }}>
+   901→                              <div className="flex flex-col items-center">
+   902→                                <span>6 o'clock</span><span>South</span><span>(mm)</span>
+   903→                              </div>
+   904→                            </th>
+   905→                            <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 65 }}>
+   906→                              <div className="flex flex-col items-center">
+   907→                                <span>9 o'clock</span><span>West</span><span>(mm)</span>
+   908→                              </div>
+   909→                            </th>
+   910→                            <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 70 }}>
+   911→                              <div className="flex flex-col items-center">
+   912→                                <span>Observed</span><span>Minimum</span><span>Thickness (mm)</span>
+   913→                              </div>
+   914→                            </th>
+   915→                            <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 200 }}>Findings / Comments</th>
+   916→                          </tr>
+   917→                        </thead>
+   918→                        <tbody>
+   919→                          {tableRows.length === 0 && (
+   920→                            <tr>
+   921→                              <td colSpan={11} className="border border-zinc-400 text-center py-4 text-zinc-500">
+   922→                                No measurement rows in this table.
+   923→                              </td>
+   924→                            </tr>
+   925→                          )}
+   926→                          {tableRows.map((m) => (
+   927→                            <tr key={m.id} className="hover:bg-zinc-50">
+   928→                              <td className="border border-zinc-400 px-2 py-1 text-center font-mono">{m.pipeSizeInch}</td>
+   929→                              <td className="border border-zinc-400 px-2 py-1 text-center font-mono">{m.pipeSchedule}</td>
+   930→                              <td className="border border-zinc-400 px-2 py-1 text-center tabular-nums">
+   931→                                {m.nominalThicknessMm !== null ? m.nominalThicknessMm.toFixed(2) : "—"}
+   932→                                {m.standard && !m.standard.isVerified && (
+   933→                                  <span className="ml-1 text-[9px] text-amber-700" title="Reference data not yet verified">(unv)</span>
+   934→                                )}
+   935→                              </td>
+   936→                              <td className="border border-zinc-400 px-2 py-1 text-center">
+   937→                                {m.componentType?.label ?? m.componentTypeCode}
+   938→                              </td>
+   939→                              <td className="border border-zinc-400 px-2 py-1 text-center font-mono">{m.pointNo}</td>
+   940→                              <td className="border border-zinc-400 px-2 py-1 text-center tabular-nums">{fmtMeasurement(m.northMm, m.northStatus)}</td>
+   941→                              <td className="border border-zinc-400 px-2 py-1 text-center tabular-nums">{fmtMeasurement(m.eastMm, m.eastStatus)}</td>
+   942→                              <td className="border border-zinc-400 px-2 py-1 text-center tabular-nums">{fmtMeasurement(m.southMm, m.southStatus)}</td>
+   943→                              <td className="border border-zinc-400 px-2 py-1 text-center tabular-nums">{fmtMeasurement(m.westMm, m.westStatus)}</td>
+   944→                              <td className="border border-zinc-400 px-2 py-1 text-center font-semibold tabular-nums bg-emerald-50">
+   945→                                {m.observedMinimumMm !== null ? m.observedMinimumMm.toFixed(2) : "—"}
+   946→                              </td>
+   947→                              <td className="border border-zinc-400 px-2 py-1 text-left whitespace-pre-wrap">{m.findingsComments ?? "—"}</td>
+   948→                            </tr>
+   949→                          ))}
+   950→                        </tbody>
+   951→                      </table>
+   952→                    </div>
+   953→                  </div>
+   954→                );
+   955→              })}
+   956→            </>
+   957→          );
+   958→        })()} {/* end measurement tables — Thickness only */}
+   959→
+   960→        {/* Engineering Drawings section — shows attached drawings with previews */}
+   961→        {report.drawingLinks && report.drawingLinks.length > 0 && (
+   962→          <div className="mt-6">
+   963→            <h3 className="mb-2 text-xs font-bold uppercase text-zinc-700 border-b border-zinc-300 pb-1">
+   964→              Engineering Drawings ({report.drawingLinks.length})
+   965→            </h3>
+   966→            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+   967→              {report.drawingLinks.map((link) => {
+   968→                const drawing = link.drawing;
+   969→                const rev = drawing.revisions?.[0];
+   970→                if (!rev) return null;
+   971→                const ext = (rev.fileExtension || "").toLowerCase();
+   972→                const isImage = [".png", ".jpg", ".jpeg", ".webp"].includes(ext);
+   973→                const previewUrl = isImage && drawing.id
+   974→                  ? `/api/drawings/${drawing.id}/preview`
+   975→                  : null;
+   976→                return (
+   977→                  <div key={link.id} className="border border-zinc-300 rounded p-2 text-[10px]">
+   978→                    <div className="mb-1 font-semibold truncate" title={drawing.title}>
+   979→                      {drawing.title}
+   980→                    </div>
+   981→                    <div
+   982→                      className="relative bg-zinc-50 border border-zinc-200 rounded mb-1 flex items-center justify-center overflow-hidden"
+   983→                      style={{ minHeight: "80px" }}
+   984→                    >
+   985→                      {previewUrl ? (
+   986→                        <AuthImage
+   987→                          src={previewUrl}
+   988→                          alt={drawing.title}
+   989→                          className="w-full h-auto max-h-[120px] object-contain cursor-zoom-in"
+   990→                          onClick={() => setLightbox({
+   991→                            url: previewUrl,
+   992→                            caption: `${drawing.title} — ${drawing.drawingNumber}`,
+   993→                          })}
+   994→                        />
+   995→                      ) : ext === ".pdf" ? (
+   996→                        <div className="p-2 text-center text-zinc-500">
+   997→                          <FileText className="mx-auto h-8 w-8 mb-1" />
+   998→                          <div>PDF Document</div>
+   999→                          <div className="text-[8px]">({rev.fileName})</div>
+  1000→                        </div>
+  1001→                      ) : (
+  1002→                        <div className="p-2 text-center text-zinc-500">
+  1003→                          <FileText className="mx-auto h-8 w-8 mb-1" />
+  1004→                          <div>{ext.toUpperCase().replace(".", "")} File</div>
+  1005→                        </div>
+  1006→                      )}
+  1007→                    </div>
+  1008→                    <div className="truncate text-zinc-500" title={rev.fileName}>
+  1009→                      {rev.fileName}
+  1010→                    </div>
+  1011→                    <div className="flex items-center justify-between text-[8px] text-zinc-400">
+  1012→                      <span className="uppercase">{ext.replace(".", "")}</span>
+  1013→                      <span>{Math.round(rev.fileSize / 1024)} KB</span>
+  1014→                    </div>
+  1015→                  </div>
+  1016→                );
+  1017→              })}
+  1018→            </div>
+  1019→          </div>
+  1020→        )}
+  1021→
+  1022→        {/* Primary Inspection Photo */}
+  1023→        {report.primaryPhotoPath && (
+  1024→          <div className="mt-4">
+  1025→            <h3 className="text-xs font-bold text-zinc-700 mb-2">Primary Inspection Photo</h3>
+  1026→            <div className="border border-zinc-300 rounded overflow-hidden" style={{ maxWidth: "400px" }}>
+  1027→              <AuthImage
+  1028→                src={`/api/pipeline-inspections/${report.id}/primary-photo`}
+  1029→                alt="Primary inspection photo"
+  1030→                className="w-full h-auto max-h-[300px] object-contain"
+  1031→                onClick={() => setLightbox({
+  1032→                  url: `/api/pipeline-inspections/${report.id}/primary-photo`,
+  1033→                  caption: "Primary Inspection Photo",
+  1034→                })}
+  1035→              />
+  1036→            </div>
+  1037→          </div>
+  1038→        )}
+  1039→
+  1040→        {/* Instrument Calibration */}
+  1041→        {report.certificates && report.certificates.filter(c => c.category === "EQUIPMENT").length > 0 && (
+  1042→          <div className="mt-6">
+  1043→            <h3 className="text-xs font-bold text-zinc-700 mb-2 border-b border-zinc-300 pb-1">
+  1044→              Instrument Calibration ({report.certificates.filter(c => c.category === "EQUIPMENT").length})
+  1045→            </h3>
+  1046→            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+  1047→              {report.certificates.filter(c => c.category === "EQUIPMENT").map((cert) => {
+  1048→                const ext = (cert.fileExtension || "").toLowerCase();
+  1049→                const isImage = [".png", ".jpg", ".jpeg"].includes(ext);
+  1050→                const rawUrl = `/api/pipeline-inspections/${report.id}/certificates/${cert.id}/raw`;
+  1051→                return (
+  1052→                  <div key={cert.id} className="border border-zinc-300 rounded overflow-hidden">
+  1053→                    <div className="bg-zinc-50 flex items-center justify-center cursor-zoom-in" style={{ minHeight: "80px" }}
+  1054→                      onClick={() => isImage && setLightbox({ url: rawUrl, caption: cert.title })}>
+  1055→                      {isImage ? (
+  1056→                        <AuthImage src={rawUrl} alt={cert.title} className="w-full h-auto max-h-[120px] object-contain" />
+  1057→                      ) : (
+  1058→                        <div className="flex flex-col items-center text-muted-foreground p-2">
+  1059→                          <FileText className="h-8 w-8" />
+  1060→                          <span className="text-xs mt-1">PDF Document</span>
+  1061→                        </div>
+  1062→                      )}
+  1063→                    </div>
+  1064→                    <div className="p-2">
+  1065→                      <div className="text-xs font-medium truncate">{cert.title}</div>
+  1066→                      <div className="text-[10px] text-muted-foreground truncate">{cert.fileName}</div>
+  1067→                      <div className="flex items-center justify-between text-[8px] text-zinc-400 mt-0.5">
+  1068→                        <span className="uppercase">{ext.replace(".", "")}</span>
+  1069→                        <span>{Math.round(cert.fileSize / 1024)}KB</span>
+  1070→                      </div>
+  1071→                    </div>
+  1072→                  </div>
+  1073→                );
+  1074→              })}
+  1075→            </div>
+  1076→          </div>
+  1077→        )}
+  1078→
+  1079→        {/* Inspector Certificates — NDT Level 3 (optional) first, then NDT Level 2 */}
+  1080→        {report.certificates && report.certificates.filter(c => c.category === "PERSONNEL").length > 0 && (() => {
+  1081→          const personnel = report.certificates!.filter(c => c.category === "PERSONNEL");
+  1082→          const ndtLevel3 = personnel.filter(c => (c.title || "").includes("NDT Level 3"));
+  1083→          const ndtLevel2 = personnel.filter(c => (c.title || "").includes("NDT Level 2"));
+  1084→          const others = personnel.filter(c => !ndtLevel3.includes(c) && !ndtLevel2.includes(c));
+  1085→          const ordered = [...ndtLevel3, ...ndtLevel2, ...others];
+  1086→          return (
+  1087→          <div className="mt-6">
+  1088→            <h3 className="text-xs font-bold text-zinc-700 mb-2 border-b border-zinc-300 pb-1">
+  1089→              Inspector Certificates ({ordered.length})
+  1090→            </h3>
+  1091→            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+  1092→              {ordered.map((cert) => {
+  1093→                const ext = (cert.fileExtension || "").toLowerCase();
+  1094→                const isImage = [".png", ".jpg", ".jpeg"].includes(ext);
+  1095→                const rawUrl = `/api/pipeline-inspections/${report.id}/certificates/${cert.id}/raw`;
+  1096→                return (
+  1097→                  <div key={cert.id} className="border border-zinc-300 rounded overflow-hidden">
+  1098→                    <div className="bg-zinc-50 flex items-center justify-center cursor-zoom-in" style={{ minHeight: "80px" }}
+  1099→                      onClick={() => isImage && setLightbox({ url: rawUrl, caption: cert.title })}>
+  1100→                      {isImage ? (
+  1101→                        <AuthImage src={rawUrl} alt={cert.title} className="w-full h-auto max-h-[120px] object-contain" />
+  1102→                      ) : (
+  1103→                        <div className="flex flex-col items-center text-muted-foreground p-2">
+  1104→                          <FileText className="h-8 w-8" />
+  1105→                          <span className="text-xs mt-1">PDF Document</span>
+  1106→                        </div>
+  1107→                      )}
+  1108→                    </div>
+  1109→                    <div className="p-2">
+  1110→                      <div className="text-xs font-medium truncate">{cert.title}</div>
+  1111→                      <div className="text-[10px] text-muted-foreground truncate">{cert.fileName}</div>
+  1112→                      <div className="flex items-center justify-between text-[8px] text-zinc-400 mt-0.5">
+  1113→                        <span className="uppercase">{ext.replace(".", "")}</span>
+  1114→                        <span>{Math.round(cert.fileSize / 1024)}KB</span>
+  1115→                      </div>
+  1116→                    </div>
+  1117→                  </div>
+  1118→                );
+  1119→              })}
+  1120→            </div>
+  1121→          </div>
+  1122→          );
+  1123→        })()}
+  1124→
+  1125→        {/* Summary Of Site Observations */}
+  1126→        {report.siteObservationSummary && (
+  1127→          <div className="mt-4">
+  1128→            <h3 className="text-xs font-bold text-zinc-700">Summary Of Site Observations</h3>
+  1129→            <p className="mt-1 text-xs whitespace-pre-wrap">{report.siteObservationSummary}</p>
+  1130→          </div>
+  1131→        )}
+  1132→
+  1133→        {/* Results */}
+  1134→        {report.results && (
+  1135→          <div className="mt-3">
+  1136→            <h3 className="text-xs font-bold text-zinc-700">Results</h3>
+  1137→            <p className="mt-1 text-xs whitespace-pre-wrap">{report.results}</p>
+  1138→          </div>
+  1139→        )}
+  1140→
+  1141→        {/* Conclusion */}
+  1142→        {report.conclusion && (
+  1143→          <div className="mt-3">
+  1144→            <h3 className="text-xs font-bold text-zinc-700">Conclusion</h3>
+  1145→            <p className="mt-1 text-xs whitespace-pre-wrap">{report.conclusion}</p>
+  1146→          </div>
+  1147→        )}
+  1148→
+  1149→        {/* Inspection Photos section — shows uploaded photos as thumbnails with captions */}
+  1150→        {report.reportPhotos && report.reportPhotos.length > 0 && (
+  1151→          <div className="mt-6">
+  1152→            <h3 className="mb-2 text-xs font-bold uppercase text-zinc-700 border-b border-zinc-300 pb-1">
+  1153→              Inspection Photos ({report.reportPhotos.length})
+  1154→            </h3>
+  1155→            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+  1156→              {report.reportPhotos.map((photo) => {
+  1157→                const rawUrl = `/api/pipeline-inspections/${report.id}/photos/${photo.id}/raw`;
+  1158→                return (
+  1159→                  <div key={photo.id} className="border border-zinc-300 rounded overflow-hidden">
+  1160→                    <div
+  1161→                      className="relative bg-zinc-50 cursor-zoom-in flex items-center justify-center"
+  1162→                      style={{ minHeight: "100px" }}
+  1163→                      onClick={() => setLightbox({
+  1164→                        url: rawUrl,
+  1165→                        caption: photo.caption || photo.fileName,
+  1166→                      })}
+  1167→                    >
+  1168→                      <AuthImage
+  1169→                        src={rawUrl}
+  1170→                        alt={photo.caption || photo.fileName}
+  1171→                        className="w-full h-auto max-h-[140px] object-contain"
+  1172→                      />
+  1173→                    </div>
+  1174→                    <div className="p-1.5">
+  1175→                      <div className="text-[10px] font-medium truncate" title={photo.caption ?? ""}>
+  1176→                        {photo.caption || "(no caption)"}
+  1177→                      </div>
+  1178→                      <div className="flex items-center justify-between text-[8px] text-zinc-400 mt-0.5">
+  1179→                        <span className="truncate" title={photo.fileName}>{photo.fileName}</span>
+  1180→                        <span>{Math.round(photo.fileSize / 1024)}KB</span>
+  1181→                      </div>
+  1182→                    </div>
+  1183→                  </div>
+  1184→                );
+  1185→              })}
+  1186→            </div>
+  1187→          </div>
+  1188→        )}
+  1189→
+  1190→        {/* Sign-off */}
+  1191→        <div className="mt-6 grid grid-cols-3 gap-2">
+  1192→          {[
+  1193→            { label: "Inspected by", name: report.inspectorName, date: new Date(report.inspectionDate).toISOString().slice(0, 10) },
+  1194→            { label: "Reviewed / Approved by", name: report.approver?.name ?? "—", date: report.approvedAt?.slice(0, 10) ?? "—" },
+  1195→            { label: "Revision", name: `Rev ${report.revisionNumber}`, date: report.status },
+  1196→          ].map((b, i) => (
+  1197→            <div key={i} className="border border-zinc-400 p-2 text-xs">
+  1198→              <div className="text-[10px] text-zinc-500">{b.label}</div>
+  1199→              <div className="mt-2 font-bold">{b.name}</div>
+  1200→              <div className="mt-3 text-[10px] text-zinc-500">Date / Status: {b.date}</div>
+  1201→            </div>
+  1202→          ))}
+  1203→        </div>
+  1204→
+  1205→        {/* Override note */}
+  1206→        {report.overrideReason && (
+  1207→          <div className="mt-4 rounded-md border border-red-400 bg-red-50 p-2 text-xs text-red-900">
+  1208→            <strong>Override applied (recorded):</strong> {report.overrideReason}
+  1209→            <div className="mt-1 text-[10px]">
+  1210→              Applied at {report.overrideAppliedAt ? new Date(report.overrideAppliedAt).toLocaleString() : "—"} by an authorized administrator.
+  1211→            </div>
+  1212→          </div>
+  1213→        )}
+  1214→
+  1215→        {/* Footer */}
+  1216→        <div className="mt-6 border-t border-zinc-300 pt-2 text-center text-[10px] text-zinc-500">
+  1217→          Page 1 | Generated {new Date().toISOString().slice(0, 19).replace("T", " ")} | Inspection Report Automation System
+  1218→        </div>
+  1219→      </div>
+  1220→
+  1221→      {/* ---------- WORKFLOW DIALOG ---------- */}
+  1222→      <Dialog open={dialogMode !== null} onOpenChange={(o) => { if (!o) setDialogMode(null); }}>
+  1223→        <DialogContent>
+  1224→          <DialogHeader>
+  1225→            <DialogTitle>{dialogMode && dialogTitle[dialogMode]}</DialogTitle>
+  1226→            <DialogDescription>{dialogMode && dialogDesc[dialogMode]}</DialogDescription>
+  1227→          </DialogHeader>
+  1228→          <div className="space-y-2">
+  1229→            <Label>{dialogMode && dialogLabel[dialogMode]}</Label>
+  1230→            <Textarea
+  1231→              rows={4}
+  1232→              value={dialogText}
+  1233→              onChange={(e) => setDialogText(e.target.value)}
+  1234→              placeholder={
+  1235→                dialogMode === "return"
+  1236→                  ? "Please describe what needs to be corrected..."
+  1237→                  : dialogMode === "revise"
+  1238→                    ? "Briefly describe what's being changed in this revision..."
+  1239→                    : "Optional notes..."
+  1240→              }
+  1241→            />
+  1242→          </div>
+  1243→          <DialogFooter>
+  1244→            <Button variant="ghost" onClick={() => setDialogMode(null)}>Cancel</Button>
+  1245→            <Button onClick={executeWorkflow} disabled={acting}>
+  1246→              {acting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+  1247→              {dialogMode && dialogActionLabel[dialogMode]}
+  1248→            </Button>
+  1249→          </DialogFooter>
+  1250→        </DialogContent>
+  1251→      </Dialog>
+  1252→
+  1253→      {/* ---------- REVISION HISTORY ---------- */}
+  1254→      {report.revisions.length > 0 && (
+  1255→        <Card>
+  1256→          <CardHeader>
+  1257→            <CardTitle className="text-base flex items-center gap-2">
+  1258→              <GitBranch className="h-4 w-4" /> Revision History ({report.revisions.length})
+  1259→            </CardTitle>
+  1260→            <CardDescription>
+  1261→              Each approved version is preserved as a separate revision. The currently-approved revision is highlighted.
+  1262→            </CardDescription>
+  1263→          </CardHeader>
+  1264→          <CardContent>
+  1265→            <div className="divide-y">
+  1266→              {report.revisions.map((r) => (
+  1267→                <div key={r.id} className={`py-3 text-xs ${r.id === report.currentApprovedRevisionId ? "bg-emerald-50/50 -mx-3 px-3 rounded" : ""}`}>
+  1268→                  <div className="flex flex-wrap items-center gap-2">
+  1269→                    <Badge variant="outline" className="font-mono">Rev {r.revisionNumber}</Badge>
+  1270→                    <Badge variant="outline" className={REVISION_STATUS_COLOR[r.status] ?? ""}>
+  1271→                      {r.status}
+  1272→                    </Badge>
+  1273→                    {r.id === report.currentApprovedRevisionId && (
+  1274→                      <Badge variant="outline" className="border-emerald-500 text-emerald-700">
+  1275→                        Current Approved
+  1276→                      </Badge>
+  1277→                    )}
+  1278→                    <span className="text-muted-foreground">
+  1279→                      {new Date(r.revisionDate).toLocaleString()}
+  1280→                    </span>
+  1281→                    {r.revisedByName && (
+  1282→                      <span className="text-muted-foreground">· by {r.revisedByName}</span>
+  1283→                    )}
+  1284→                  </div>
+  1285→                  {r.changeDescription && (
+  1286→                    <p className="mt-1">{r.changeDescription}</p>
+  1287→                  )}
+  1288→                  {r.reviewComments && (
+  1289→                    <p className="mt-1 text-red-700 italic">Admin comments: "{r.reviewComments}"</p>
+  1290→                  )}
+  1291→                  {r.approvedByName && (
+  1292→                    <p className="mt-1 text-emerald-700 text-[11px]">
+  1293→                      Approved by {r.approvedByName}
+  1294→                      {r.approvedAt ? ` on ${new Date(r.approvedAt).toLocaleString()}` : ""}
+  1295→                    </p>
+  1296→                  )}
+  1297→                </div>
+  1298→              ))}
+  1299→            </div>
+  1300→          </CardContent>
+  1301→        </Card>
+  1302→      )}
+  1303→
+  1304→      <Card className="bg-muted/30">
+  1305→        <CardContent className="flex items-start gap-3 p-4">
+  1306→          <AlertTriangle className="h-5 w-5 shrink-0 text-muted-foreground" />
+  1307→          <div className="text-xs text-muted-foreground">
+  1308→            <strong className="text-foreground">Workflow summary:</strong>{" "}
+  1309→            Status <code className="rounded bg-muted px-1">{report.status}</code> ·{" "}
+  1310→            {status === "Draft" && "Employee is editing. Can submit for review when ready."}
+  1311→            {status === "Submitted for Review" && "Awaiting admin approval. Employee can't edit until admin acts."}
+  1312→            {status === "Returned for Revision" && "Admin returned with comments. Employee should fix and resubmit."}
+  1313→            {status === "Approved" && "Report is approved. Employee can start a new revision; admin can still edit directly."}
+  1314→            {status === "Changes Pending Review" && "Employee is editing a new revision of an approved report. Will need admin approval."}
+  1315→          </div>
+  1316→        </CardContent>
+  1317→      </Card>
+  1318→
+  1319→      {/* ─── Lightbox: full-screen image preview when a thumbnail is clicked ─── */}
+  1320→      {lightbox && (
+  1321→        <div
+  1322→          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+  1323→          onClick={() => setLightbox(null)}
+  1324→        >
+  1325→          <button
+  1326→            className="absolute top-4 right-4 text-white/80 hover:text-white"
+  1327→            onClick={() => setLightbox(null)}
+  1328→          >
+  1329→            <X className="h-8 w-8" />
+  1330→          </button>
+  1331→          <div className="max-h-full max-w-full" onClick={(e) => e.stopPropagation()}>
+  1332→            <AuthImage
+  1333→              src={lightbox.url}
+  1334→              alt={lightbox.caption}
+  1335→              className="max-h-[85vh] max-w-[90vw] object-contain rounded-lg shadow-2xl"
+  1336→            />
+  1337→            <p className="mt-2 text-center text-sm text-white/80">{lightbox.caption}</p>
+  1338→          </div>
+  1339→        </div>
+  1340→      )}
+  1341→    </div>
+  1342→  );
+  1343→}
+  1344→

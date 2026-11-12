@@ -168,6 +168,17 @@ export async function POST(req: NextRequest) {
       inspectionDescription: body.inspectionDescription ?? null,
       customColumns: body.customColumns ?? "[]",
       photos: body.photos ?? null,
+      // ─── MULTI-THICKNESS-TABLE CONFIG ───
+      // The form always sends this on create (serialized list of
+      // {id,label,sortOrder}). Without persisting it here, any extra
+      // Thickness tables the user configured while creating the report
+      // were silently dropped — the rows survived in their tableGroup,
+      // but the table list itself was lost, so those tables (and their
+      // rows) never appeared in the form or the Review page again.
+      thicknessTablesConfig:
+        typeof body.thicknessTablesConfig === "string"
+          ? body.thicknessTablesConfig
+          : null,
       // ─── PIPELINE CONDITION fields (only set when reportType = PIPELINE_CONDITION;
       // ignored for thickness/visual reports) ───
       pipelineAgeYears: typeof body.pipelineAgeYears === "number" ? body.pipelineAgeYears : null,

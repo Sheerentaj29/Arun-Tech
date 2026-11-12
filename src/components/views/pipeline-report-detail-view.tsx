@@ -98,6 +98,39 @@ interface FullReport {
   dptPenetrant?: string | null;
   dptDeveloper?: string | null;
   dptCustomColumns?: string | null;
+  // ─── MPT (MAGNETIC PARTICLE TESTING) FIELDS ───
+  mptDateOfExamination?: string | null;
+  mptTestingStandard?: string | null;
+  mptAcceptanceCriteria?: string | null;
+  mptSurfacePreparation?: string | null;
+  mptSurfaceTemperature?: string | null;
+  mptInstrumentSerialNo?: string | null;
+  mptCalibrationDate?: string | null;
+  mptMethod?: string | null;
+  mptTypeOfCurrent?: string | null;
+  mptAcYokeLiftingCapacity?: string | null;
+  mptContrastMedium?: string | null;
+  mptMethodOfPreCleaning?: string | null;
+  mptMethodOfApplyingWhiteContrast?: string | null;
+  mptAcYokePoleSpacing?: string | null;
+  mptMagneticMedium?: string | null;
+  mptMethodOfApplyingMagneticMedium?: string | null;
+  mptDevelopmentTime?: string | null;
+  mptInterpretationTime?: string | null;
+  mptLightingEquipment?: string | null;
+  mptPostCleaning?: string | null;
+  mptWhiteContrast?: string | null;
+  mptWetParticleIronInk?: string | null;
+  mptCustomColumns?: string | null;
+  // ─── WELD SCAN FIELDS (JSON row tables + scanning details) ───
+  wsScanningCalibrationBlock?: string | null;
+  wsScanningReferenceLevel?: string | null;
+  wsScanningExtentOfExamination?: string | null;
+  wsScanningSurfaceCondition?: string | null;
+  wsScanningFlawSizingTechnique?: string | null;
+  wsInstrumentRows?: string | null;
+  wsProbeRows?: string | null;
+  wsTestResultRows?: string | null;
   // ─── DYE PENETRANT PROCEDURE FIELDS (16 typeable fields) ───
   dptTestingStandard?: string | null;
   dptAcceptanceCriteria?: string | null;
@@ -154,6 +187,9 @@ interface FullReport {
   // Pipeline table configured on this report. Null/missing → single
   // default table (legacy behaviour).
   thicknessTablesConfig?: string | null;
+  // JSON array of {id,name,unit} — user-defined extra columns for the
+  // Thickness measurement table.
+  customColumns?: string | null;
   overrideReason: string | null;
   overrideAppliedAt: string | null;
   approvedById: string | null;
@@ -179,6 +215,9 @@ interface FullReport {
     filePath: string;
     fileSize: number;
     mimeType: string;
+    // "PRIMARY" = the dedicated primary inspection photo (rendered once
+    // above); "INSPECTION" = regular gallery photo.
+    category: string;
     caption: string | null;
     sortOrder: number;
     uploadedByName: string | null;
@@ -194,6 +233,7 @@ interface FullReport {
       title: string;
       drawingNumber: string;
       drawingType: string;
+      activeRevisionId?: string | null;
       client?: { id: string; name: string } | null;
       plant?: { id: string; name: string } | null;
       revisions: Array<{
@@ -226,6 +266,8 @@ interface FullReport {
     westMm: number | null; westStatus: string;
     observedMinimumMm: number | null;
     findingsComments: string | null;
+    // JSON object {colId: value} for user-defined extra columns
+    customColumnValues?: string | null;
     standard?: {
       standard: string; edition: string; nominalSizeInch: string;
       schedule: string; wallThicknessMm: number; isVerified: boolean;
@@ -256,6 +298,7 @@ interface FullReport {
     sortOrder: number;
     description: string | null;
     weldType: string | null;
+    indicationSize: string | null;
     result: string;
     remarks: string | null;
     customColumnValues: string | null;
@@ -704,11 +747,34 @@ export function PipelineReportDetailView() {
           ))}
         </div>
 
-        {/* DPT-specific sections — shown only for DPT / DPPT reports.
-            These appear BEFORE the measurement table block (which only
-            applies to thickness reports) so the correct content is shown
-            under the correct heading for DPT reports.
-        */}
+        {/* ─── 2. PRIMARY INSPECTION PHOTO ───
+            Rendered immediately after the cover / client details, before
+            drawings and inspection tables (required report sequence).
+            It is rendered ONLY from report.primaryPhotoPath here and is
+            excluded from the Inspection Photos gallery below — the photo
+            must never appear twice. */}
+        {report.primaryPhotoPath && (
+          <div className="mt-4">
+            <h3 className="text-xs font-bold text-zinc-700 mb-2">Primary Inspection Photo</h3>
+            <div className="border border-zinc-300 rounded overflow-hidden" style={{ maxWidth: "400px" }}>
+              <AuthImage
+                src={`/api/pipeline-inspections/${report.id}/primary-photo`}
+                alt="Primary inspection photo"
+                className="w-full h-auto max-h-[300px] object-contain"
+                onClick={() => setLightbox({
+                  url: `/api/pipeline-inspections/${report.id}/primary-photo`,
+                  caption: "Primary Inspection Photo",
+                })}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* ─── 3. REPORT DETAILS / INSPECTION INFORMATION (type-specific) ───
+            DPT procedure + consumables, MPT parameters + consumables, and
+            Weld Scan instrument/probe/scanning details are the "inspection
+            information" part of the report. Each type's results table is
+            rendered later, in the Inspection Tables section. */}
         {report.reportType === "PIPELINE_DPT" && (
           <div className="mt-6 space-y-6">
             {/* 3. Dye Penetrant Procedure */}
@@ -774,62 +840,271 @@ export function PipelineReportDetailView() {
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
 
-            {/* DPT Inspection Results table */}
-            {report.dptObservations && report.dptObservations.length > 0 && (() => {
-              // Parse custom columns
-              let dptCustomCols: Array<{ id: string; name: string; unit: string }> = [];
-              try {
-                const cc = JSON.parse(report.dptCustomColumns ?? "[]");
-                if (Array.isArray(cc)) dptCustomCols = cc;
-              } catch {}
-              return (
+        {/* ─── MPT (MAGNETIC PARTICLE TESTING) PROCEDURE + CONSUMABLES ───
+            Shown only for MPT reports. The observation rows are stored in
+            the shared DptObservation table and are rendered in the
+            Inspection Tables section below. */}
+        {report.reportType === "PIPELINE_MPT" && (
+          <div className="mt-6 space-y-6">
+            {/* 3. Magnetic Particle Testing Parameters */}
+            <div>
+              <h3 className="mb-2 text-xs font-bold uppercase text-orange-700 border-b border-orange-300 pb-1">
+                3. Magnetic Particle Testing Parameters
+              </h3>
+              <table className="w-full border-collapse text-xs">
+                <tbody>
+                  {([
+                    ["Date of Examination", report.mptDateOfExamination ? new Date(report.mptDateOfExamination).toISOString().slice(0, 10) : null],
+                    ["Testing Standard", report.mptTestingStandard],
+                    ["Acceptance Criteria", report.mptAcceptanceCriteria],
+                    ["Surface preparation", report.mptSurfacePreparation],
+                    ["Surface temperature", report.mptSurfaceTemperature],
+                    ["Type of Instrument / SI.No", report.mptInstrumentSerialNo],
+                    ["Instrument / Calibration Date", report.mptCalibrationDate ? new Date(report.mptCalibrationDate).toISOString().slice(0, 10) : null],
+                    ["MPT Method", report.mptMethod],
+                    ["Type of Current", report.mptTypeOfCurrent],
+                    ["AC Yoke Lifting Capacity", report.mptAcYokeLiftingCapacity],
+                    ["Contrast Medium", report.mptContrastMedium],
+                    ["Method of Pre cleaning", report.mptMethodOfPreCleaning],
+                    ["Method of applying White Contrast", report.mptMethodOfApplyingWhiteContrast],
+                    ["AC Yoke Pole Spacing", report.mptAcYokePoleSpacing],
+                    ["Magnetic Medium", report.mptMagneticMedium],
+                    ["Method of applying Magnetic Medium", report.mptMethodOfApplyingMagneticMedium],
+                    ["Development time", report.mptDevelopmentTime],
+                    ["Interpretation time", report.mptInterpretationTime],
+                    ["Lightning Equipment", report.mptLightingEquipment],
+                    ["Post cleaning", report.mptPostCleaning],
+                  ] as Array<[string, string | null | undefined]>).map(([label, value], idx) => (
+                    <tr key={idx} className="border-b border-zinc-200">
+                      <td className="bg-orange-50 border-r border-zinc-200 px-3 py-1.5 font-medium text-zinc-700 w-1/3">
+                        {label}
+                      </td>
+                      <td className="px-3 py-1.5">
+                        {value && String(value).trim() ? value : <span className="text-muted-foreground">—</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Consumable Details */}
+            <div>
+              <h3 className="mb-2 text-xs font-bold uppercase text-orange-700 border-b border-orange-300 pb-1">
+                Consumable Details
+              </h3>
+              <table className="w-full border-collapse text-xs">
+                <tbody>
+                  {([
+                    ["White Contrast", report.mptWhiteContrast],
+                    ["Wet Particle Iron Ink", report.mptWetParticleIronInk],
+                  ] as Array<[string, string | null | undefined]>).map(([label, value], idx) => (
+                    <tr key={idx} className="border-b border-zinc-200">
+                      <td className="bg-orange-50 border-r border-zinc-200 px-3 py-1.5 font-medium text-zinc-700 w-1/3">
+                        {label}
+                      </td>
+                      <td className="px-3 py-1.5">
+                        {value && String(value).trim() ? value : <span className="text-muted-foreground">—</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ─── WELD SCAN: INSTRUMENT + PROBE + SCANNING DETAILS ───
+            Shown only for Weld Scan reports. Data lives in JSON columns on
+            the report record (wsInstrumentRows / wsProbeRows) and in the
+            wsScanning* fields. The Test Results table is rendered in the
+            Inspection Tables section below. */}
+        {report.reportType === "PIPELINE_WELD_SCAN" && (() => {
+          let wsInstrumentRows: Array<Record<string, string>> = [];
+          let wsProbeRows: Array<Record<string, string>> = [];
+          try {
+            const parsed = JSON.parse(report.wsInstrumentRows ?? "[]");
+            if (Array.isArray(parsed)) wsInstrumentRows = parsed;
+          } catch {}
+          try {
+            const parsed = JSON.parse(report.wsProbeRows ?? "[]");
+            if (Array.isArray(parsed)) wsProbeRows = parsed;
+          } catch {}
+          const wsScanPairs: Array<[string, string | null | undefined]> = [
+            ["Calibration Block", report.wsScanningCalibrationBlock],
+            ["Reference Level", report.wsScanningReferenceLevel],
+            ["Extent of Examination", report.wsScanningExtentOfExamination],
+            ["Surface Condition", report.wsScanningSurfaceCondition],
+            ["Flaw Sizing Technique", report.wsScanningFlawSizingTechnique],
+          ];
+          return (
+            <div className="mt-6 space-y-6">
+              {/* Instrument Details */}
+              {wsInstrumentRows.length > 0 && (
                 <div>
-                  <h3 className="mb-2 text-xs font-bold uppercase text-purple-700 border-b border-purple-300 pb-1">
-                    DPT Inspection Results ({report.dptObservations.length})
+                  <h3 className="mb-2 text-xs font-bold uppercase text-cyan-700 border-b border-cyan-300 pb-1">
+                    Instrument Details
                   </h3>
                   <div className="overflow-x-auto">
                     <table className="w-full border-collapse text-xs">
                       <thead>
-                        <tr className="bg-purple-800 text-white">
-                          <th className="border border-purple-900 px-2 py-2 text-center">Sl. No</th>
-                          <th className="border border-purple-900 px-2 py-2 text-center">Description</th>
-                          <th className="border border-purple-900 px-2 py-2 text-center">Weld Type</th>
-                          <th className="border border-purple-900 px-2 py-2 text-center">Result</th>
-                          {dptCustomCols.map((cc) => (
-                            <th key={cc.id} className="border border-purple-900 px-2 py-2 text-center">
-                              {cc.name}{cc.unit && <span className="opacity-70"> ({cc.unit})</span>}
-                            </th>
-                          ))}
-                          <th className="border border-purple-900 px-2 py-2 text-center">Remarks</th>
+                        <tr className="bg-cyan-700 text-white">
+                          <th className="border border-cyan-800 px-2 py-2 text-center">Equipment Type</th>
+                          <th className="border border-cyan-800 px-2 py-2 text-center">Machine Make</th>
+                          <th className="border border-cyan-800 px-2 py-2 text-center">Model</th>
+                          <th className="border border-cyan-800 px-2 py-2 text-center">M/c Sr. No.</th>
+                          <th className="border border-cyan-800 px-2 py-2 text-center">Calibration Due Date</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {report.dptObservations.map((obs) => (
-                          <tr key={obs.id} className="hover:bg-muted/30">
-                            <td className="border border-zinc-300 px-2 py-1 text-center font-mono">{obs.serialNo}</td>
-                            <td className="border border-zinc-300 px-2 py-1">{obs.description ?? "—"}</td>
-                            <td className="border border-zinc-300 px-2 py-1 text-center">{obs.weldType ?? "—"}</td>
-                            <td className={`border border-zinc-300 px-2 py-1 text-center font-bold ${obs.result === "Reject" ? "text-red-700 bg-red-50" : "text-emerald-700 bg-emerald-50"}`}>
-                              {obs.result}
-                            </td>
-                            {dptCustomCols.map((cc) => {
-                              let val = "—";
-                              try {
-                                const vals = JSON.parse(obs.customColumnValues ?? "{}");
-                                val = vals[cc.id] ?? "—";
-                              } catch {}
-                              return <td key={cc.id} className="border border-zinc-300 px-2 py-1 text-center">{val}</td>;
-                            })}
-                            <td className="border border-zinc-300 px-2 py-1">{obs.remarks ?? "—"}</td>
+                        {wsInstrumentRows.map((row, idx) => (
+                          <tr key={idx} className="hover:bg-muted/30">
+                            <td className="border border-zinc-300 px-2 py-1">{row.equipmentType || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.machineMake || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.model || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center font-mono">{row.mcSrNo || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.calibrationDueDate || "—"}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
                 </div>
-              );
-            })()}
+              )}
+
+              {/* Test Probe Details */}
+              {wsProbeRows.length > 0 && (
+                <div>
+                  <h3 className="mb-2 text-xs font-bold uppercase text-cyan-700 border-b border-cyan-300 pb-1">
+                    Test Probe Details
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-cyan-700 text-white">
+                          <th className="border border-cyan-800 px-2 py-2 text-center">Probe Type</th>
+                          <th className="border border-cyan-800 px-2 py-2 text-center">Probe Angle</th>
+                          <th className="border border-cyan-800 px-2 py-2 text-center">Frequency</th>
+                          <th className="border border-cyan-800 px-2 py-2 text-center">Size</th>
+                          <th className="border border-cyan-800 px-2 py-2 text-center">Probe No.</th>
+                          <th className="border border-cyan-800 px-2 py-2 text-center">Range</th>
+                          <th className="border border-cyan-800 px-2 py-2 text-center">Reference dB</th>
+                          <th className="border border-cyan-800 px-2 py-2 text-center">Scanning dB</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {wsProbeRows.map((row, idx) => (
+                          <tr key={idx} className="hover:bg-muted/30">
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.probeType || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.probeAngle || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.frequency || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.size || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center font-mono">{row.probeNo || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.range || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.referenceDb || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.scanningDb || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Scanning Details */}
+              <div>
+                <h3 className="mb-2 text-xs font-bold uppercase text-cyan-700 border-b border-cyan-300 pb-1">
+                  Scanning Details
+                </h3>
+                <table className="w-full border-collapse text-xs">
+                  <tbody>
+                    {wsScanPairs.map(([label, value], idx) => (
+                      <tr key={idx} className="border-b border-zinc-200">
+                        <td className="bg-cyan-50 border-r border-zinc-200 px-3 py-1.5 font-medium text-zinc-700 w-1/3">
+                          {label}
+                        </td>
+                        <td className="px-3 py-1.5">
+                          {value && String(value).trim() ? value : <span className="text-muted-foreground">—</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ─── 4. ENGINEERING DRAWINGS ───
+            Shows the actual uploaded drawing files. Images (PNG/JPG/JPEG/
+            WEBP) are served by /api/drawings/[id]/preview directly; PDF
+            drawings are rasterized server-side (page 1 → PNG, 150 DPI) by
+            the same endpoint so the Review page shows a real visual
+            preview of every drawing instead of an empty placeholder.
+            Aspect ratio is preserved with object-contain. */}
+        {report.drawingLinks && report.drawingLinks.length > 0 && (
+          <div className="mt-6">
+            <h3 className="mb-2 text-xs font-bold uppercase text-zinc-700 border-b border-zinc-300 pb-1">
+              Engineering Drawings ({report.drawingLinks.length})
+            </h3>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {report.drawingLinks.map((link) => {
+                const drawing = link.drawing;
+                // Prefer the drawing's ACTIVE revision; fall back to the
+                // latest revision returned by the API.
+                const rev =
+                  drawing.revisions?.find((r) => r.id === (drawing as { activeRevisionId?: string | null }).activeRevisionId) ??
+                  drawing.revisions?.[0];
+                if (!rev) return null;
+                const ext = (rev.fileExtension || "").toLowerCase();
+                const isImage = [".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"].includes(ext);
+                const isPdf = ext === ".pdf";
+                // The preview endpoint serves images directly and PDF
+                // drawings as a rasterized page-1 PNG.
+                const previewUrl = (isImage || isPdf) && drawing.id
+                  ? `/api/drawings/${drawing.id}/preview`
+                  : null;
+                return (
+                  <div key={link.id} className="border border-zinc-300 rounded p-2 text-[10px]">
+                    <div className="mb-1 font-semibold truncate" title={drawing.title}>
+                      {drawing.title}
+                    </div>
+                    <div
+                      className="relative bg-zinc-50 border border-zinc-200 rounded mb-1 flex items-center justify-center overflow-hidden"
+                      style={{ minHeight: "80px" }}
+                    >
+                      {previewUrl ? (
+                        <AuthImage
+                          src={previewUrl}
+                          alt={drawing.title}
+                          className="w-full h-auto max-h-[160px] object-contain cursor-zoom-in"
+                          onClick={() => setLightbox({
+                            url: previewUrl,
+                            caption: `${drawing.title} — ${drawing.drawingNumber}`,
+                          })}
+                        />
+                      ) : (
+                        <div className="p-2 text-center text-zinc-500">
+                          <FileText className="mx-auto h-8 w-8 mb-1" />
+                          <div>{ext.toUpperCase().replace(".", "") || "FILE"} Document</div>
+                          <div className="text-[8px]">({rev.fileName})</div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="truncate text-zinc-500" title={rev.fileName}>
+                      {rev.fileName}{isPdf ? " (page 1 preview)" : ""}
+                    </div>
+                    <div className="flex items-center justify-between text-[8px] text-zinc-400">
+                      <span className="uppercase">{ext.replace(".", "")}</span>
+                      <span>{Math.round(rev.fileSize / 1024)} KB</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 
@@ -852,6 +1127,14 @@ export function PipelineReportDetailView() {
           const tables: ThicknessTableConfig[] = parseThicknessTablesConfig(
             report.thicknessTablesConfig ?? null,
           );
+          // Parse user-defined extra columns for the measurement table.
+          // Mirrors the PDF engine: custom columns are appended after the
+          // fixed system columns.
+          let thicknessCustomCols: Array<{ id: string; name: string; unit: string }> = [];
+          try {
+            const cc = JSON.parse(report.customColumns ?? "[]");
+            if (Array.isArray(cc)) thicknessCustomCols = cc;
+          } catch {}
           return (
             <>
               {/* ── Parent section heading: "7. Thickness Measurement" ── */}
@@ -913,12 +1196,17 @@ export function PipelineReportDetailView() {
                               </div>
                             </th>
                             <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 200 }}>Findings / Comments</th>
+                            {thicknessCustomCols.map((cc) => (
+                              <th key={cc.id} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 60 }}>
+                                {cc.name}{cc.unit && <span className="opacity-70"> ({cc.unit})</span>}
+                              </th>
+                            ))}
                           </tr>
                         </thead>
                         <tbody>
                           {tableRows.length === 0 && (
                             <tr>
-                              <td colSpan={11} className="border border-zinc-400 text-center py-4 text-zinc-500">
+                              <td colSpan={11 + thicknessCustomCols.length} className="border border-zinc-400 text-center py-4 text-zinc-500">
                                 No measurement rows in this table.
                               </td>
                             </tr>
@@ -945,6 +1233,14 @@ export function PipelineReportDetailView() {
                                 {m.observedMinimumMm !== null ? m.observedMinimumMm.toFixed(2) : "—"}
                               </td>
                               <td className="border border-zinc-400 px-2 py-1 text-left whitespace-pre-wrap">{m.findingsComments ?? "—"}</td>
+                              {thicknessCustomCols.map((cc) => {
+                                let val = "—";
+                                try {
+                                  const vals = JSON.parse(m.customColumnValues ?? "{}");
+                                  val = vals[cc.id] ?? "—";
+                                } catch {}
+                                return <td key={cc.id} className="border border-zinc-400 px-2 py-1 text-center">{val}</td>;
+                              })}
                             </tr>
                           ))}
                         </tbody>
@@ -957,85 +1253,274 @@ export function PipelineReportDetailView() {
           );
         })()} {/* end measurement tables — Thickness only */}
 
-        {/* Engineering Drawings section — shows attached drawings with previews */}
-        {report.drawingLinks && report.drawingLinks.length > 0 && (
+        {/* ─── 5. INSPECTION TABLES (type-specific results) ─── */}
+
+        {/* Visual Inspection Observations — shown only for PIPELINE_VISUAL
+            reports. Renders every saved observation row with all its
+            user-entered values. */}
+        {report.reportType === "PIPELINE_VISUAL" && report.visualObservations && report.visualObservations.length > 0 && (
           <div className="mt-6">
-            <h3 className="mb-2 text-xs font-bold uppercase text-zinc-700 border-b border-zinc-300 pb-1">
-              Engineering Drawings ({report.drawingLinks.length})
+            <h3 className="mb-2 text-xs font-bold uppercase text-blue-700 border-b border-blue-300 pb-1">
+              Visual Inspection Observations ({report.visualObservations.length})
             </h3>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {report.drawingLinks.map((link) => {
-                const drawing = link.drawing;
-                const rev = drawing.revisions?.[0];
-                if (!rev) return null;
-                const ext = (rev.fileExtension || "").toLowerCase();
-                const isImage = [".png", ".jpg", ".jpeg", ".webp"].includes(ext);
-                const previewUrl = isImage && drawing.id
-                  ? `/api/drawings/${drawing.id}/preview`
-                  : null;
-                return (
-                  <div key={link.id} className="border border-zinc-300 rounded p-2 text-[10px]">
-                    <div className="mb-1 font-semibold truncate" title={drawing.title}>
-                      {drawing.title}
-                    </div>
-                    <div
-                      className="relative bg-zinc-50 border border-zinc-200 rounded mb-1 flex items-center justify-center overflow-hidden"
-                      style={{ minHeight: "80px" }}
-                    >
-                      {previewUrl ? (
-                        <AuthImage
-                          src={previewUrl}
-                          alt={drawing.title}
-                          className="w-full h-auto max-h-[120px] object-contain cursor-zoom-in"
-                          onClick={() => setLightbox({
-                            url: previewUrl,
-                            caption: `${drawing.title} — ${drawing.drawingNumber}`,
-                          })}
-                        />
-                      ) : ext === ".pdf" ? (
-                        <div className="p-2 text-center text-zinc-500">
-                          <FileText className="mx-auto h-8 w-8 mb-1" />
-                          <div>PDF Document</div>
-                          <div className="text-[8px]">({rev.fileName})</div>
-                        </div>
-                      ) : (
-                        <div className="p-2 text-center text-zinc-500">
-                          <FileText className="mx-auto h-8 w-8 mb-1" />
-                          <div>{ext.toUpperCase().replace(".", "")} File</div>
-                        </div>
-                      )}
-                    </div>
-                    <div className="truncate text-zinc-500" title={rev.fileName}>
-                      {rev.fileName}
-                    </div>
-                    <div className="flex items-center justify-between text-[8px] text-zinc-400">
-                      <span className="uppercase">{ext.replace(".", "")}</span>
-                      <span>{Math.round(rev.fileSize / 1024)} KB</span>
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-[11px]">
+                <thead>
+                  <tr className="bg-blue-800 text-white">
+                    {[
+                      "Point No", "Location", "Pipeline Condition", "External Surface Condition",
+                      "Coating / Paint Condition", "Corrosion Observed", "Leakage Observed",
+                      "Damage / Deformation", "Supports / Hangers", "Weld Joint Condition",
+                      "Insulation Condition", "Findings", "Recommendations", "Inspector Comments",
+                    ].map((h) => (
+                      <th key={h} className="border border-blue-900 px-2 py-2 text-center align-middle">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.visualObservations.map((obs) => (
+                    <tr key={obs.id} className="hover:bg-muted/30">
+                      <td className="border border-zinc-300 px-2 py-1 text-center font-mono">{obs.pointNo}</td>
+                      <td className="border border-zinc-300 px-2 py-1">{obs.location ?? "—"}</td>
+                      <td className="border border-zinc-300 px-2 py-1">{obs.pipelineCondition ?? "—"}</td>
+                      <td className="border border-zinc-300 px-2 py-1">{obs.externalSurfaceCondition ?? "—"}</td>
+                      <td className="border border-zinc-300 px-2 py-1">{obs.coatingPaintCondition ?? "—"}</td>
+                      <td className="border border-zinc-300 px-2 py-1">{obs.corrosionObserved ?? "—"}</td>
+                      <td className="border border-zinc-300 px-2 py-1">{obs.leakageObserved ?? "—"}</td>
+                      <td className="border border-zinc-300 px-2 py-1">{obs.damageOrDeformation ?? "—"}</td>
+                      <td className="border border-zinc-300 px-2 py-1">{obs.supportsHangersCondition ?? "—"}</td>
+                      <td className="border border-zinc-300 px-2 py-1">{obs.weldJointCondition ?? "—"}</td>
+                      <td className="border border-zinc-300 px-2 py-1">{obs.insulationCondition ?? "—"}</td>
+                      <td className="border border-zinc-300 px-2 py-1">{obs.findings ?? "—"}</td>
+                      <td className="border border-zinc-300 px-2 py-1">{obs.recommendations ?? "—"}</td>
+                      <td className="border border-zinc-300 px-2 py-1">{obs.inspectorComments ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
 
-        {/* Primary Inspection Photo */}
-        {report.primaryPhotoPath && (
-          <div className="mt-4">
-            <h3 className="text-xs font-bold text-zinc-700 mb-2">Primary Inspection Photo</h3>
-            <div className="border border-zinc-300 rounded overflow-hidden" style={{ maxWidth: "400px" }}>
-              <AuthImage
-                src={`/api/pipeline-inspections/${report.id}/primary-photo`}
-                alt="Primary inspection photo"
-                className="w-full h-auto max-h-[300px] object-contain"
-                onClick={() => setLightbox({
-                  url: `/api/pipeline-inspections/${report.id}/primary-photo`,
-                  caption: "Primary Inspection Photo",
-                })}
-              />
+        {/* DPT Inspection Results — shown only for PIPELINE_DPT reports.
+            Renders the saved observation rows including the Indication
+            Size column and every user-defined custom column. */}
+        {report.reportType === "PIPELINE_DPT" && report.dptObservations && report.dptObservations.length > 0 && (() => {
+          let dptCustomCols: Array<{ id: string; name: string; unit: string }> = [];
+          try {
+            const cc = JSON.parse(report.dptCustomColumns ?? "[]");
+            if (Array.isArray(cc)) dptCustomCols = cc;
+          } catch {}
+          return (
+            <div className="mt-6">
+              <h3 className="mb-2 text-xs font-bold uppercase text-purple-700 border-b border-purple-300 pb-1">
+                DPT Inspection Results ({report.dptObservations.length})
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-purple-800 text-white">
+                      <th className="border border-purple-900 px-2 py-2 text-center">Sl. No</th>
+                      <th className="border border-purple-900 px-2 py-2 text-center">Description</th>
+                      <th className="border border-purple-900 px-2 py-2 text-center">Weld Type</th>
+                      <th className="border border-purple-900 px-2 py-2 text-center">Indication<br />Size (mm)</th>
+                      <th className="border border-purple-900 px-2 py-2 text-center">Result</th>
+                      {dptCustomCols.map((cc) => (
+                        <th key={cc.id} className="border border-purple-900 px-2 py-2 text-center">
+                          {cc.name}{cc.unit && <span className="opacity-70"> ({cc.unit})</span>}
+                        </th>
+                      ))}
+                      <th className="border border-purple-900 px-2 py-2 text-center">Remarks</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.dptObservations.map((obs) => (
+                      <tr key={obs.id} className="hover:bg-muted/30">
+                        <td className="border border-zinc-300 px-2 py-1 text-center font-mono">{obs.serialNo}</td>
+                        <td className="border border-zinc-300 px-2 py-1">{obs.description ?? "—"}</td>
+                        <td className="border border-zinc-300 px-2 py-1 text-center">{obs.weldType ?? "—"}</td>
+                        <td className="border border-zinc-300 px-2 py-1 text-center">{obs.indicationSize ?? "—"}</td>
+                        <td className={`border border-zinc-300 px-2 py-1 text-center font-bold ${obs.result === "Reject" ? "text-red-700 bg-red-50" : "text-emerald-700 bg-emerald-50"}`}>
+                          {obs.result}
+                        </td>
+                        {dptCustomCols.map((cc) => {
+                          let val = "—";
+                          try {
+                            const vals = JSON.parse(obs.customColumnValues ?? "{}");
+                            val = vals[cc.id] ?? "—";
+                          } catch {}
+                          return <td key={cc.id} className="border border-zinc-300 px-2 py-1 text-center">{val}</td>;
+                        })}
+                        <td className="border border-zinc-300 px-2 py-1">{obs.remarks ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
+
+        {/* MPT Inspection Results — shown only for PIPELINE_MPT reports.
+            MPT rows are stored in the shared DptObservation table (the
+            form reuses the DPT observation infrastructure), so the data
+            comes from report.dptObservations with MPT custom columns. */}
+        {report.reportType === "PIPELINE_MPT" && report.dptObservations && report.dptObservations.length > 0 && (() => {
+          let mptCustomCols: Array<{ id: string; name: string; unit: string }> = [];
+          try {
+            const cc = JSON.parse(report.mptCustomColumns ?? "[]");
+            if (Array.isArray(cc)) mptCustomCols = cc;
+          } catch {}
+          return (
+            <div className="mt-6">
+              <h3 className="mb-2 text-xs font-bold uppercase text-orange-700 border-b border-orange-300 pb-1">
+                MPT Inspection Results ({report.dptObservations.length})
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-orange-700 text-white">
+                      <th className="border border-orange-800 px-2 py-2 text-center">Sl. No</th>
+                      <th className="border border-orange-800 px-2 py-2 text-center">Description</th>
+                      <th className="border border-orange-800 px-2 py-2 text-center">Weld Type</th>
+                      <th className="border border-orange-800 px-2 py-2 text-center">Indication<br />Size (mm)</th>
+                      <th className="border border-orange-800 px-2 py-2 text-center">Result</th>
+                      {mptCustomCols.map((cc) => (
+                        <th key={cc.id} className="border border-orange-800 px-2 py-2 text-center">
+                          {cc.name}{cc.unit && <span className="opacity-70"> ({cc.unit})</span>}
+                        </th>
+                      ))}
+                      <th className="border border-orange-800 px-2 py-2 text-center">Remarks</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.dptObservations.map((obs) => (
+                      <tr key={obs.id} className="hover:bg-muted/30">
+                        <td className="border border-zinc-300 px-2 py-1 text-center font-mono">{obs.serialNo}</td>
+                        <td className="border border-zinc-300 px-2 py-1">{obs.description ?? "—"}</td>
+                        <td className="border border-zinc-300 px-2 py-1 text-center">{obs.weldType ?? "—"}</td>
+                        <td className="border border-zinc-300 px-2 py-1 text-center">{obs.indicationSize ?? "—"}</td>
+                        <td className={`border border-zinc-300 px-2 py-1 text-center font-bold ${obs.result === "Reject" ? "text-red-700 bg-red-50" : "text-emerald-700 bg-emerald-50"}`}>
+                          {obs.result}
+                        </td>
+                        {mptCustomCols.map((cc) => {
+                          let val = "—";
+                          try {
+                            const vals = JSON.parse(obs.customColumnValues ?? "{}");
+                            val = vals[cc.id] ?? "—";
+                          } catch {}
+                          return <td key={cc.id} className="border border-zinc-300 px-2 py-1 text-center">{val}</td>;
+                        })}
+                        <td className="border border-zinc-300 px-2 py-1">{obs.remarks ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Weld Scan Test Results — shown only for PIPELINE_WELD_SCAN
+            reports. Rows live in the wsTestResultRows JSON column on the
+            report record; every dynamically added row appears here. */}
+        {report.reportType === "PIPELINE_WELD_SCAN" && (() => {
+          let wsTestRows: Array<Record<string, string>> = [];
+          try {
+            const parsed = JSON.parse(report.wsTestResultRows ?? "[]");
+            if (Array.isArray(parsed)) wsTestRows = parsed;
+          } catch {}
+          if (wsTestRows.length === 0) return null;
+          return (
+            <div className="mt-6">
+              <h3 className="mb-2 text-xs font-bold uppercase text-cyan-700 border-b border-cyan-300 pb-1">
+                Weld Scan Test Results ({wsTestRows.length})
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-[11px]">
+                  <thead>
+                    <tr className="bg-cyan-700 text-white">
+                      {[
+                        "Sl. No", "Description", "Identification No.", "Weld Type", "Probe",
+                        "BP", "SD", "Depth", "Echo Height", "Length", "Observation", "Result",
+                      ].map((h) => (
+                        <th key={h} className="border border-cyan-800 px-2 py-2 text-center">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {wsTestRows.map((row, idx) => (
+                      <tr key={idx} className="hover:bg-muted/30">
+                        <td className="border border-zinc-300 px-2 py-1 text-center font-mono">{idx + 1}</td>
+                        <td className="border border-zinc-300 px-2 py-1">{row.description || "—"}</td>
+                        <td className="border border-zinc-300 px-2 py-1 text-center">{row.identificationNo || "—"}</td>
+                        <td className="border border-zinc-300 px-2 py-1 text-center">{row.weldType || "—"}</td>
+                        <td className="border border-zinc-300 px-2 py-1 text-center">{row.probe || "—"}</td>
+                        <td className="border border-zinc-300 px-2 py-1 text-center">{row.bp || "—"}</td>
+                        <td className="border border-zinc-300 px-2 py-1 text-center">{row.sd || "—"}</td>
+                        <td className="border border-zinc-300 px-2 py-1 text-center">{row.depth || "—"}</td>
+                        <td className="border border-zinc-300 px-2 py-1 text-center">{row.echoHeight || "—"}</td>
+                        <td className="border border-zinc-300 px-2 py-1 text-center">{row.length || "—"}</td>
+                        <td className="border border-zinc-300 px-2 py-1">{row.observation || "—"}</td>
+                        <td className={`border border-zinc-300 px-2 py-1 text-center font-bold ${row.result === "Reject" ? "text-red-700 bg-red-50" : row.result === "Accept" ? "text-emerald-700 bg-emerald-50" : ""}`}>
+                          {row.result || "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ─── 6. INSPECTION PHOTOS ───
+            Shows ONLY the regular inspection photos uploaded for this
+            report. The primary inspection photo is tagged category=PRIMARY
+            and is rendered once, in its dedicated position above — it must
+            never be duplicated into this gallery. */}
+        {report.reportPhotos && report.reportPhotos.filter(p => p.category !== "PRIMARY").length > 0 && (() => {
+          const galleryPhotos = report.reportPhotos.filter(p => p.category !== "PRIMARY");
+          return (
+            <div className="mt-6">
+              <h3 className="mb-2 text-xs font-bold uppercase text-zinc-700 border-b border-zinc-300 pb-1">
+                Inspection Photos ({galleryPhotos.length})
+              </h3>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                {galleryPhotos.map((photo) => {
+                  const rawUrl = `/api/pipeline-inspections/${report.id}/photos/${photo.id}/raw`;
+                  return (
+                    <div key={photo.id} className="border border-zinc-300 rounded overflow-hidden">
+                      <div
+                        className="relative bg-zinc-50 cursor-zoom-in flex items-center justify-center"
+                        style={{ minHeight: "100px" }}
+                        onClick={() => setLightbox({
+                          url: rawUrl,
+                          caption: photo.caption || photo.fileName,
+                        })}
+                      >
+                        <AuthImage
+                          src={rawUrl}
+                          alt={photo.caption || photo.fileName}
+                          className="w-full h-auto max-h-[140px] object-contain"
+                        />
+                      </div>
+                      <div className="p-1.5">
+                        <div className="text-[10px] font-medium truncate" title={photo.caption ?? ""}>
+                          {photo.caption || "(no caption)"}
+                        </div>
+                        <div className="flex items-center justify-between text-[8px] text-zinc-400 mt-0.5">
+                          <span className="truncate" title={photo.fileName}>{photo.fileName}</span>
+                          <span>{Math.round(photo.fileSize / 1024)}KB</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Instrument Calibration */}
         {report.certificates && report.certificates.filter(c => c.category === "EQUIPMENT").length > 0 && (
@@ -1143,47 +1628,6 @@ export function PipelineReportDetailView() {
           <div className="mt-3">
             <h3 className="text-xs font-bold text-zinc-700">Conclusion</h3>
             <p className="mt-1 text-xs whitespace-pre-wrap">{report.conclusion}</p>
-          </div>
-        )}
-
-        {/* Inspection Photos section — shows uploaded photos as thumbnails with captions */}
-        {report.reportPhotos && report.reportPhotos.length > 0 && (
-          <div className="mt-6">
-            <h3 className="mb-2 text-xs font-bold uppercase text-zinc-700 border-b border-zinc-300 pb-1">
-              Inspection Photos ({report.reportPhotos.length})
-            </h3>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-              {report.reportPhotos.map((photo) => {
-                const rawUrl = `/api/pipeline-inspections/${report.id}/photos/${photo.id}/raw`;
-                return (
-                  <div key={photo.id} className="border border-zinc-300 rounded overflow-hidden">
-                    <div
-                      className="relative bg-zinc-50 cursor-zoom-in flex items-center justify-center"
-                      style={{ minHeight: "100px" }}
-                      onClick={() => setLightbox({
-                        url: rawUrl,
-                        caption: photo.caption || photo.fileName,
-                      })}
-                    >
-                      <AuthImage
-                        src={rawUrl}
-                        alt={photo.caption || photo.fileName}
-                        className="w-full h-auto max-h-[140px] object-contain"
-                      />
-                    </div>
-                    <div className="p-1.5">
-                      <div className="text-[10px] font-medium truncate" title={photo.caption ?? ""}>
-                        {photo.caption || "(no caption)"}
-                      </div>
-                      <div className="flex items-center justify-between text-[8px] text-zinc-400 mt-0.5">
-                        <span className="truncate" title={photo.fileName}>{photo.fileName}</span>
-                        <span>{Math.round(photo.fileSize / 1024)}KB</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
           </div>
         )}
 
