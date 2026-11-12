@@ -49,6 +49,16 @@ import {
 import { useAppStore, type PipelineReportType } from "@/lib/store";
 import { apiFetch } from "@/lib/api-client";
 import { AuthImage } from "@/components/auth-image";
+import { resolveClientLogo } from "@/lib/client-logo-mapping";
+import {
+  parseThicknessTablesConfig,
+  serializeThicknessTablesConfig,
+  generateThicknessTableId,
+  defaultThicknessTableLabel,
+  thicknessTableHeading,
+  DEFAULT_TABLE_ID,
+  type ThicknessTableConfig,
+} from "@/lib/thickness-tables";
 import { toast } from "sonner";
 
 // ---------- REPORT TYPE METADATA ----------
@@ -128,6 +138,10 @@ const REPORT_TYPE_INFO: Record<PipelineReportType, {
 interface ClientItem {
   id: string;
   name: string;
+  // The clients API returns all scalar fields by default, including
+  // logoPath. Used by the logo banner in Step 1 as the secondary
+  // resolution tier (after the static client-name map).
+  logoPath?: string | null;
   plants: Array<{ id: string; name: string; location: string | null }>;
 }
 
@@ -151,6 +165,8 @@ interface MeasurementRow {
   id?: string;
   pointNo: string;
   sortOrder: number;
+  /** Table-group partition key. Defaults to "default" (primary table). */
+  tableGroup: string;
   pipeSizeInch: string;
   pipeSchedule: string;
   nominalThicknessMm: number | null;
@@ -564,9 +580,6 @@ export function PipelineReportFormView() {
     pendingPipelineReportType,
   } = useAppStore();
   const isEdit = !!editingPipelineReportId;
-  // Any authenticated user can create reports — they become the inspector.
-  // The detail-page permission check enforces role-based editing on existing reports.
-  const canEdit = !!user;
 
   const [header, setHeader] = useState<ReportHeader>(() => ({
     ...EMPTY_HEADER,
@@ -575,7 +588,16 @@ export function PipelineReportFormView() {
     reportType: pendingPipelineReportType ?? "PIPELINE_THICKNESS",
   }));
   const [rows, setRows] = useState<MeasurementRow[]>([]);
+  // ─── Multi-table Thickness support ───
+  // List of thickness tables configured on this report. Always contains at
+  // least one entry (the "default" primary table). Loaded from
+  // report.thicknessTablesConfig on edit; defaults to a single primary
+  // table on new reports.
+  const [thicknessTables, setThicknessTables] = useState<ThicknessTableConfig[]>([
+    { id: DEFAULT_TABLE_ID, label: defaultThicknessTableLabel(1), sortOrder: 0 },
+  ]);
   const [visualObservations, setVisualObservations] = useState<VisualObservationRow[]>([]);
+
   // DPT observations for Step 3 (PIPELINE_DPT reports)
   const [dptObservations, setDptObservations] = useState<DptObservationRow[]>([]);
   const [clients, setClients] = useState<ClientItem[]>([]);
@@ -602,8 +624,9 @@ export function PipelineReportFormView() {
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   // Drawing attachments for Step 1 (embedded as full pages in PDF)
   const [drawings, setDrawings] = useState<DrawingAttachment[]>([]);
-  // Validation errors per step
-  const [stepErrors, setStepErrors] = useState<Record<string, string>>({});
+  // Validation errors per step — not currently displayed in the UI, but
+  // the validation functions return booleans that control step navigation.
+  // (Kept as a local-only pattern; no state needed since errors aren't shown.)
 
   // ---------- INITIAL LOADS ----------
   useEffect(() => {
@@ -802,6 +825,9 @@ export function PipelineReportFormView() {
           const cc = JSON.parse(r.customColumns ?? "[]");
           if (Array.isArray(cc)) setCustomColumns(cc);
         } catch { setCustomColumns([]); }
+        // Parse thickness-tables config (multi-table Thickness Pipeline).
+        // Falls back to a single default table when missing/invalid.
+        setThicknessTables(parseThicknessTablesConfig(r.thicknessTablesConfig));
         // Parse DPT custom columns (DPT reports)
         try {
           const dcc = JSON.parse(r.dptCustomColumns ?? "[]");
@@ -845,6 +871,7 @@ export function PipelineReportFormView() {
             id: m.id,
             pointNo: m.pointNo,
             sortOrder: m.sortOrder,
+            tableGroup: m.tableGroup ?? "default",
             pipeSizeInch: m.pipeSizeInch,
             pipeSchedule: m.pipeSchedule,
             nominalThicknessMm: m.nominalThicknessMm,
@@ -958,28 +985,48 @@ export function PipelineReportFormView() {
   }
 
   // ---------- ROW OPERATIONS ----------
-  function addRow() {
-    setRows((r) => [
-      ...r,
-      {
-        pointNo: `P-${r.length + 1}`,
-        sortOrder: r.length,
-        pipeSizeInch: "2",
-        pipeSchedule: "SCH 40",
-        nominalThicknessMm: lookupNominal("2", "SCH 40"),
-        standardId: lookupStandardId("2", "SCH 40"),
-        componentTypeCode: "PIPE",
-        componentTypeId: componentTypes.find((c) => c.code === "PIPE")?.id ?? null,
-        northMm: "", northStatus: "NotMeasured",
-        eastMm: "", eastStatus: "NotMeasured",
-        southMm: "", southStatus: "NotMeasured",
-        westMm: "", westStatus: "NotMeasured",
-        observedMinimumMm: null,
-        findingsComments: "",
-        customColumnValues: "{}",
-        _isNew: true,
-      },
-    ]);
+
+  /**
+   * Append a new measurement row.
+   *
+   * @param tableGroupId  Which thickness table the row belongs to.
+   *                      Defaults to "default" (the always-present primary
+   *                      table). The id must match an entry in
+   *                      `thicknessTables` state.
+   *
+   * Multi-table behaviour:
+   *   - `pointNo` is computed per-table-group (P-1, P-2, …) so each table
+   *     has its own numbering.
+   *   - `sortOrder` is the row's index WITHIN its tableGroup, not the
+   *     global row index. This keeps ordering local to each table.
+   */
+  function addRow(tableGroupId: string = DEFAULT_TABLE_ID) {
+    setRows((r) => {
+      const groupRows = r.filter((row) => row.tableGroup === tableGroupId);
+      const nextNo = groupRows.length + 1;
+      return [
+        ...r,
+        {
+          pointNo: `P-${nextNo}`,
+          sortOrder: groupRows.length,
+          tableGroup: tableGroupId,
+          pipeSizeInch: "2",
+          pipeSchedule: "SCH 40",
+          nominalThicknessMm: lookupNominal("2", "SCH 40"),
+          standardId: lookupStandardId("2", "SCH 40"),
+          componentTypeCode: "PIPE",
+          componentTypeId: componentTypes.find((c) => c.code === "PIPE")?.id ?? null,
+          northMm: "", northStatus: "NotMeasured",
+          eastMm: "", eastStatus: "NotMeasured",
+          southMm: "", southStatus: "NotMeasured",
+          westMm: "", westStatus: "NotMeasured",
+          observedMinimumMm: null,
+          findingsComments: "",
+          customColumnValues: "{}",
+          _isNew: true,
+        },
+      ];
+    });
   }
 
   function lookupNominal(sizeInch: string, schedule: string): number | null {
@@ -1036,20 +1083,47 @@ export function PipelineReportFormView() {
     });
   }
 
+  /**
+   * Remove a row from local state and re-number sortOrder for the
+   * remaining rows IN THE SAME TABLE GROUP. Rows in other groups are
+   * untouched (their sortOrder is independent).
+   */
   function deleteRow(idx: number) {
-    setRows((rs) => rs.filter((_, i) => i !== idx).map((r, i) => ({ ...r, sortOrder: i })));
+    setRows((rs) => {
+      if (idx < 0 || idx >= rs.length) return rs;
+      const removed = rs[idx];
+      const group = removed.tableGroup;
+      // Filter out the deleted row, then re-number sortOrder for rows
+      // in the same group, leaving other groups' sortOrder unchanged.
+      const filtered = rs.filter((_, i) => i !== idx);
+      let groupIdx = 0;
+      return filtered.map((r) =>
+        r.tableGroup === group ? { ...r, sortOrder: groupIdx++ } : r,
+      );
+    });
   }
 
+  /**
+   * Swap two adjacent rows WITHIN THE SAME TABLE GROUP. The `idx`
+   * argument is the global row index (position in the flat `rows`
+   * array). If the row at `idx + dir` is in a different group, the
+   * move is a no-op (cannot move rows across tables).
+   */
   function moveRow(idx: number, dir: -1 | 1) {
     setRows((rs) => {
       const target = idx + dir;
       if (target < 0 || target >= rs.length) return rs;
+      if (rs[idx].tableGroup !== rs[target].tableGroup) return rs;
       const next = [...rs];
       const tmp = next[idx];
       next[idx] = next[target];
       next[target] = tmp;
-      // Re-number sortOrder
-      return next.map((r, i) => ({ ...r, sortOrder: i }));
+      // Re-number sortOrder within the affected group only.
+      const group = next[idx].tableGroup;
+      let groupIdx = 0;
+      return next.map((r) =>
+        r.tableGroup === group ? { ...r, sortOrder: groupIdx++ } : r,
+      );
     });
   }
 
@@ -1082,6 +1156,11 @@ export function PipelineReportFormView() {
       } else {
         payload.pipelineAgeYears = null;
       }
+
+      // Always persist the thickness-tables config so newly added tables
+      // survive across sessions. For non-thickness report types this is
+      // a no-op (the field is only read by the thickness UI).
+      payload.thicknessTablesConfig = serializeThicknessTablesConfig(thicknessTables);
 
       if (isEdit && editingPipelineReportId) {
         await apiFetch(`/api/pipeline-inspections/${editingPipelineReportId}`, {
@@ -1171,6 +1250,206 @@ export function PipelineReportFormView() {
     }
   }
 
+  // ─── MULTI-THICKNESS-TABLE OPERATIONS ───
+  // These functions let the user add, save, label-edit, and delete whole
+  // Thickness Pipeline tables (each table = a group of MeasurementRow
+  // objects sharing the same `tableGroup` id).
+  //
+  //   addThicknessTable()     — create a new empty table card
+  //   renameThicknessTable()  — update a table's label (display heading)
+  //   saveThicknessTable()    — persist every row in a table + the config
+  //   deleteThicknessTable()  — confirm + remove all rows + config entry
+  //
+  // The "default" table (id === DEFAULT_TABLE_ID) cannot be deleted
+  // through deleteThicknessTable — it is the always-present primary table.
+
+  function addThicknessTable() {
+    const next: ThicknessTableConfig = {
+      id: generateThicknessTableId(),
+      label: defaultThicknessTableLabel(thicknessTables.length + 1),
+      sortOrder: thicknessTables.length,
+    };
+    setThicknessTables((ts) => [...ts, next]);
+    toast.success(`Added ${next.label}`);
+  }
+
+  function renameThicknessTable(tableId: string, newLabel: string) {
+    const trimmed = newLabel.trim();
+    if (!trimmed) return;
+    setThicknessTables((ts) =>
+      ts.map((t) => (t.id === tableId ? { ...t, label: trimmed } : t)),
+    );
+  }
+
+  /**
+   * Persist the thickness-tables config (the list of {id,label,sortOrder})
+   * to the report header. This does NOT touch any rows — rows are saved
+   * individually via saveRow or in batch via saveThicknessTable.
+   *
+   * Returns true on success so callers can chain UX feedback.
+   */
+  async function persistThicknessTablesConfig(): Promise<boolean> {
+    if (!editingPipelineReportId) {
+      toast.error("Save the report header first");
+      return false;
+    }
+    setSaving(true);
+    try {
+      await apiFetch(`/api/pipeline-inspections/${editingPipelineReportId}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          thicknessTablesConfig: serializeThicknessTablesConfig(thicknessTables),
+        }),
+      });
+      return true;
+    } catch (e) {
+      const err = e as { message?: string };
+      toast.error(err.message ?? "Failed to save table config");
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /**
+   * Save every row in a given thickness table. Rows that are still
+   * unsaved (no id / _isNew) are POSTed; existing rows are PUT. Rows
+   * already saved but unchanged are still re-PUT (idempotent — server
+   * recomputes derived fields).
+   *
+   * Also persists the table-config so labels survive.
+   */
+  async function saveThicknessTable(tableId: string) {
+    if (!editingPipelineReportId) {
+      toast.error("Save the report header first");
+      return;
+    }
+    const tableRows = rows
+      .map((r, i) => ({ row: r, idx: i }))
+      .filter((x) => x.row.tableGroup === tableId);
+
+    if (tableRows.length === 0) {
+      // No rows yet — just persist the config so the table exists.
+      const ok = await persistThicknessTablesConfig();
+      if (ok) toast.success("Table saved (no rows yet)");
+      return;
+    }
+
+    // Validate every row first — refuse to save if any row has an
+    // unsupported pipe size / schedule combination.
+    const invalidRow = tableRows.find((x) => x.row.nominalThicknessMm === null);
+    if (invalidRow) {
+      toast.error(
+        `Cannot save table: row ${invalidRow.row.pointNo} has an unsupported ` +
+        `pipe size / schedule combination (${invalidRow.row.pipeSizeInch}" ${invalidRow.row.pipeSchedule}).`,
+      );
+      return;
+    }
+
+    setSaving(true);
+    let okCount = 0;
+    let failCount = 0;
+    try {
+      for (const { row, idx } of tableRows) {
+        try {
+          if (row._isNew || !row.id) {
+            const created = await apiFetch<{ id: string }>(
+              `/api/pipeline-inspections/${editingPipelineReportId}/measurements`,
+              { method: "POST", body: JSON.stringify(row) },
+            );
+            setRows((rs) => rs.map((r, i) =>
+              i === idx ? { ...r, id: created.id, _isNew: false } : r,
+            ));
+          } else {
+            await apiFetch(
+              `/api/pipeline-inspections/${editingPipelineReportId}/measurements/${row.id}`,
+              { method: "PUT", body: JSON.stringify(row) },
+            );
+          }
+          okCount++;
+        } catch {
+          failCount++;
+        }
+      }
+      // Persist the table config as well so labels survive.
+      await apiFetch(`/api/pipeline-inspections/${editingPipelineReportId}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          thicknessTablesConfig: serializeThicknessTablesConfig(thicknessTables),
+        }),
+      });
+      if (failCount === 0) {
+        toast.success(`Saved ${okCount} row(s) in this table`);
+      } else {
+        toast.error(`Saved ${okCount}, failed ${failCount}. See console.`);
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /**
+   * Delete an entire thickness table:
+   *   1. Confirm with the user (destructive — also removes all rows).
+   *   2. Call the dedicated DELETE endpoint that wipes every row whose
+   *      `tableGroup === tableId`.
+   *   3. Remove the table from local `rows` state.
+   *   4. Remove the table from `thicknessTables` state.
+   *   5. Persist the updated config.
+   *
+   * The primary table (id === DEFAULT_TABLE_ID) cannot be deleted.
+   */
+  async function deleteThicknessTable(tableId: string) {
+    if (tableId === DEFAULT_TABLE_ID) {
+      toast.error("The primary Thickness Pipeline Table cannot be deleted.");
+      return;
+    }
+    const table = thicknessTables.find((t) => t.id === tableId);
+    if (!table) return;
+    const rowCount = rows.filter((r) => r.tableGroup === tableId).length;
+    const msg =
+      `Delete "${table.label}"?\n\n` +
+      `This will permanently remove ${rowCount} measurement row(s) ` +
+      `from this table. This action cannot be undone.`;
+    if (!window.confirm(msg)) return;
+
+    if (!editingPipelineReportId) {
+      // Not persisted yet — just drop local state.
+      setRows((rs) => rs.filter((r) => r.tableGroup !== tableId));
+      setThicknessTables((ts) => ts.filter((t) => t.id !== tableId));
+      toast.success(`Deleted ${table.label}`);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // 1. Delete all rows in this table group via the dedicated endpoint.
+      await apiFetch(
+        `/api/pipeline-inspections/${editingPipelineReportId}/thickness-tables/${tableId}`,
+        { method: "DELETE" },
+      );
+      // 2. Remove from local state.
+      setRows((rs) => rs.filter((r) => r.tableGroup !== tableId));
+      const remaining = thicknessTables.filter((t) => t.id !== tableId);
+      // Re-number sortOrder for the remaining tables.
+      const renumbered = remaining.map((t, i) => ({ ...t, sortOrder: i }));
+      setThicknessTables(renumbered);
+      // 3. Persist the updated config.
+      await apiFetch(`/api/pipeline-inspections/${editingPipelineReportId}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          thicknessTablesConfig: serializeThicknessTablesConfig(renumbered),
+        }),
+      });
+      toast.success(`Deleted ${table.label}`);
+    } catch (e) {
+      const err = e as { message?: string };
+      toast.error(err.message ?? "Failed to delete table");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function previewPdf() {
     if (!editingPipelineReportId) {
       toast.error("Save the report first");
@@ -1185,7 +1464,6 @@ export function PipelineReportFormView() {
     if (!header.reportNumber.trim()) errs.reportNumber = "Report number is required";
     if (!header.clientId) errs.clientId = "Client is required";
     if (!header.plantId) errs.plantId = "Plant is required";
-    setStepErrors(errs);
     return Object.keys(errs).length === 0;
   }
 
@@ -1434,6 +1712,30 @@ export function PipelineReportFormView() {
     } else {
       setSelectedRowIdxs(new Set(rows.map((_, i) => i)));
     }
+  }
+
+  /**
+   * Toggle selection of every row in a single thickness table.
+   * If every row in this table is already selected, deselect them;
+   * otherwise select all rows in this table (without affecting rows
+   * selected in other tables).
+   */
+  function toggleSelectAllInTable(tableId: string) {
+    const tableIdxs = rows
+      .map((r, i) => ({ r, i }))
+      .filter((x) => x.r.tableGroup === tableId)
+      .map((x) => x.i);
+    if (tableIdxs.length === 0) return;
+    const allSelected = tableIdxs.every((i) => selectedRowIdxs.has(i));
+    setSelectedRowIdxs((s) => {
+      const next = new Set(s);
+      if (allSelected) {
+        for (const i of tableIdxs) next.delete(i);
+      } else {
+        for (const i of tableIdxs) next.add(i);
+      }
+      return next;
+    });
   }
 
   function deleteSelectedRows() {
@@ -1930,6 +2232,69 @@ export function PipelineReportFormView() {
       {/* ═══ STEP 1: HEADER ═══ */}
       {step === 1 && (
       <>
+      {/* ─── LOGO BANNER ───
+          Same layout as the review/detail page: Aruntech logo fixed on
+          the LEFT, selected client's logo on the RIGHT. Both boxes are
+          140×70px with object-contain. The client logo updates live as
+          the user changes the Client dropdown.
+
+          Resolution order:
+            1. resolveClientLogo(selectedClient.name)  → static map
+            2. selectedClient.logoPath                 → DB-uploaded logo
+            3. placeholder text — NEVER another company's logo
+      */}
+      <div className="mb-4 flex items-center justify-between">
+        <div
+          className="flex items-center justify-center border border-zinc-300 overflow-hidden bg-white"
+          style={{ width: "140px", height: "70px" }}
+        >
+          <AuthImage
+            src="/api/settings/service-logo"
+            alt="Aruntech Logo"
+            className="max-w-[92%] max-h-[88%] w-auto h-auto object-contain"
+          />
+        </div>
+        <div
+          className="flex items-center justify-center border border-zinc-300 overflow-hidden bg-white"
+          style={{ width: "140px", height: "70px" }}
+        >
+          {(() => {
+            const selectedClient = clients.find((c) => c.id === header.clientId);
+            if (!selectedClient) {
+              return (
+                <span className="text-[10px] text-zinc-500 text-center">
+                  Select a client<br />to preview logo
+                </span>
+              );
+            }
+            const mappedLogoFile = resolveClientLogo(selectedClient.name);
+            if (mappedLogoFile) {
+              return (
+                <AuthImage
+                  src={`/api/client-logo/${mappedLogoFile}`}
+                  alt={`${selectedClient.name} Logo`}
+                  className="max-w-[92%] max-h-[88%] w-auto h-auto object-contain"
+                />
+              );
+            } else if (selectedClient.logoPath) {
+              return (
+                <AuthImage
+                  src={`/api/clients/${selectedClient.id}/logo`}
+                  alt={`${selectedClient.name} Logo`}
+                  className="max-w-[92%] max-h-[88%] w-auto h-auto object-contain"
+                />
+              );
+            } else {
+              return (
+                <span className="text-[10px] text-zinc-500 text-center">
+                  {selectedClient.name.slice(0, 24)}<br />Client Logo
+                </span>
+              );
+            }
+          })()}
+        </div>
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Report Header</CardTitle>
@@ -2337,29 +2702,113 @@ export function PipelineReportFormView() {
       */}
       {step === 2 && header.reportType === "PIPELINE_THICKNESS" && (
       <>
-      <Card>
+      {/* ════════════════════════════════════════════════════════════════
+          MULTI-THICKNESS-TABLE RENDERER
+          ───────────────────────────────────────────────────────────────
+          One Card per entry in `thicknessTables`. The first entry is
+          always the "default" primary table (id="default"); additional
+          entries are tables the user added via "+ Add Another Thickness
+          Table".
+
+          Each table card has:
+            • An editable label (the table heading)
+            • "Add Row" (adds to THIS table only)
+            • "Save Table" (saves every row in this table + config)
+            • "Delete Table" (disabled for the primary table;
+              confirmation required otherwise)
+            • The standard 11-column measurement table, filtered to rows
+              whose `tableGroup === table.id`
+
+          Custom columns and bulk row-deletion are global (per-report),
+          not per-table — they appear in a separate toolbar above all the
+          table cards.
+      ════════════════════════════════════════════════════════════════ */}
+
+      {/* Global toolbar for cross-table actions */}
+      <Card className="mb-4">
+        <CardContent className="flex flex-wrap items-center justify-between gap-2 p-3">
+          <div className="text-xs text-muted-foreground">
+            <strong>{thicknessTables.length}</strong> thickness table{thicknessTables.length === 1 ? "" : "s"} configured.
+            {" "}Custom columns are shared across all tables.
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={deleteSelectedRows} size="sm" variant="outline" className="text-red-600"
+              disabled={selectedRowIdxs.size === 0}>
+              <Trash2 className="mr-1 h-4 w-4" /> Delete Selected ({selectedRowIdxs.size})
+            </Button>
+            <Button onClick={addCustomColumn} size="sm" variant="outline">
+              <Columns3 className="mr-1 h-4 w-4" /> Add Column
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Render one Card per thickness table */}
+      {thicknessTables.map((table, tableIdx) => {
+        // Filter rows belonging to THIS table, preserving the global
+        // row index so state operations (updateRow/saveRow/etc.) still
+        // target the correct row.
+        const rowsInThisTable = rows
+          .map((r, i) => ({ row: r, idx: i }))
+          .filter((x) => x.row.tableGroup === table.id);
+        const isPrimary = table.id === DEFAULT_TABLE_ID;
+
+        return (
+        <Card key={table.id} className="mb-6">
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-base">Thickness Measurement Table</CardTitle>
-              <CardDescription>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1">
+              {/* Automatic numbering preview — shows the user how this
+                  table will be numbered in the review page and PDF.
+                  The number (7.N) is derived from the table's position
+                  in the ordered list, so it updates automatically when
+                  tables are added, deleted, or reordered. */}
+              <div className="mb-1 text-xs font-medium text-emerald-700">
+                Section 7.{tableIdx + 1} — appears in report as:
+                <span className="ml-1 font-bold">
+                  {thicknessTableHeading(tableIdx + 1, table.label || `(empty label)`)}
+                </span>
+              </div>
+              {/* Editable table label — the heading the user sees on
+                  this card and in the review/PDF. */}
+              <Input
+                className="h-9 text-base font-semibold"
+                value={table.label}
+                onChange={(e) => renameThicknessTable(table.id, e.target.value)}
+                placeholder={`Thickness Pipeline Table ${tableIdx + 1}`}
+              />
+              <CardDescription className="mt-1">
                 11 columns in fixed order. The first two columns are
                 dropdown-selected; the third is auto-computed from standards;
                 the four clock-position measurements are entered manually; the
                 observed minimum is calculated excluding any missing values.
+                {!isPrimary && " This is an additional table — it can be deleted."}
               </CardDescription>
             </div>
-            <div className="flex gap-2">
-              <Button onClick={addRow} size="sm">
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={() => addRow(table.id)} size="sm">
                 <Plus className="mr-1 h-4 w-4" /> Add Row
               </Button>
-              <Button onClick={deleteSelectedRows} size="sm" variant="outline" className="text-red-600"
-                disabled={selectedRowIdxs.size === 0}>
-                <Trash2 className="mr-1 h-4 w-4" /> Delete Selected ({selectedRowIdxs.size})
+              <Button
+                onClick={() => saveThicknessTable(table.id)}
+                size="sm"
+                variant="outline"
+                disabled={saving}
+              >
+                {saving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Save className="mr-1 h-4 w-4" />}
+                Save Table
               </Button>
-              <Button onClick={addCustomColumn} size="sm" variant="outline">
-                <Columns3 className="mr-1 h-4 w-4" /> Add Column
-              </Button>
+              {!isPrimary && (
+                <Button
+                  onClick={() => deleteThicknessTable(table.id)}
+                  size="sm"
+                  variant="outline"
+                  className="text-red-600"
+                  disabled={saving}
+                >
+                  <Trash2 className="mr-1 h-4 w-4" /> Delete Table
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -2369,7 +2818,12 @@ export function PipelineReportFormView() {
               <thead className="bg-emerald-800 text-white">
                 <tr>
                   <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 40 }}>
-                    <input type="checkbox" checked={selectedRowIdxs.size === rows.length && rows.length > 0} onChange={toggleSelectAllRows} className="cursor-pointer" />
+                    <input
+                      type="checkbox"
+                      checked={rowsInThisTable.length > 0 && rowsInThisTable.every((x) => selectedRowIdxs.has(x.idx))}
+                      onChange={() => toggleSelectAllInTable(table.id)}
+                      className="cursor-pointer"
+                    />
                   </th>
                   <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 50 }}>Dia mm<br />(inch)</th>
                   <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 60 }}>Pipe<br />Schedule</th>
@@ -2419,15 +2873,20 @@ export function PipelineReportFormView() {
                 </tr>
               </thead>
               <tbody>
-                {rows.length === 0 && (
+                {rowsInThisTable.length === 0 && (
                   <tr>
-                    <td colSpan={12} className="text-center py-6 text-muted-foreground border border-zinc-300">
-                      No measurement rows yet. Click <strong>Add Row</strong> to begin.
+                    <td colSpan={12 + customColumns.length} className="text-center py-6 text-muted-foreground border border-zinc-300">
+                      No measurement rows in this table yet. Click <strong>Add Row</strong> to begin.
                     </td>
                   </tr>
                 )}
-                {rows.map((row, idx) => {
+                {rowsInThisTable.map(({ row, idx }) => {
                   const nominalMissing = row.nominalThicknessMm === null;
+                  // Disable move-up if this is the first row in this table
+                  // (rows in other tables don't count).
+                  const localPos = rowsInThisTable.findIndex((x) => x.idx === idx);
+                  const canMoveUp = localPos > 0;
+                  const canMoveDown = localPos < rowsInThisTable.length - 1 && localPos >= 0;
                   return (
                     <tr key={idx} className="hover:bg-muted/30">
                       {/* Row selection checkbox */}
@@ -2573,7 +3032,7 @@ export function PipelineReportFormView() {
                               variant="ghost"
                               className="h-6 w-6 p-0"
                               onClick={() => moveRow(idx, -1)}
-                              disabled={idx === 0}
+                              disabled={!canMoveUp}
                               title="Move up"
                             >
                               <ArrowUp className="h-3 w-3" />
@@ -2583,7 +3042,7 @@ export function PipelineReportFormView() {
                               variant="ghost"
                               className="h-6 w-6 p-0"
                               onClick={() => moveRow(idx, 1)}
-                              disabled={idx === rows.length - 1}
+                              disabled={!canMoveDown}
                               title="Move down"
                             >
                               <ArrowDown className="h-3 w-3" />
@@ -2620,6 +3079,17 @@ export function PipelineReportFormView() {
           </div>
         </CardContent>
       </Card>
+        );
+      })}
+
+      {/* "+ Add Another Thickness Table" button — always visible after
+          the last table card. Adds a new empty table that the user can
+          fill in independently. */}
+      <div className="mb-6 flex justify-center">
+        <Button onClick={addThicknessTable} variant="outline" size="sm" disabled={saving}>
+          <Plus className="mr-2 h-4 w-4" /> Add Another Thickness Table
+        </Button>
+      </div>
 
       <Card className="bg-zinc-50">
         <CardContent className="p-4 text-xs text-muted-foreground space-y-1">

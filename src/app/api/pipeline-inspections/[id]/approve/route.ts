@@ -138,7 +138,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   // The PDF is generated from the CURRENT report data (which is the
   // submitted-for-review state). Once approved, this PDF is frozen —
   // it represents the exact report the admin reviewed and approved.
-  console.log(`[approve] Generating PDF for ${existing.reportNumber} rev ${nextRevisionNumber}...`);
   const reportForPdf = {
     ...existing,
     // Override the report-level fields that should reflect the APPROVED state
@@ -177,7 +176,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     }
   }
   const pdfResult = await generateAndPersistPdf(reportForPdf, linkedDrawingsForPdf);
-  console.log(`[approve] PDF persisted: ${pdfResult.path} (${pdfResult.size} bytes)`);
 
   // Build the snapshot JSON (deterministic — computed before the transaction)
   const snapshotData = JSON.stringify({

@@ -44,6 +44,14 @@ import {
   resolveClientLogo,
   CLIENT_LOGO_DIR,
 } from "@/lib/client-logo-mapping";
+import {
+  parseThicknessTablesConfig,
+  DEFAULT_TABLE_ID,
+  thicknessSectionHeading,
+  thicknessTableHeading,
+  type ThicknessTableConfig,
+} from "@/lib/thickness-tables";
+import { fmtMeasurement } from "@/lib/measurement-utils";
 
 const execFileAsync = promisify(execFile);
 
@@ -57,10 +65,6 @@ const GEIST_MEDIUM = "/home/z/my-project/node_modules/geist/dist/fonts/geist-san
 // Fall back to Helvetica if Geist TTFs are not found (shouldn't happen)
 const FONT_REGULAR = existsSync(GEIST_REGULAR) ? "GeistSans" : "Helvetica";
 const FONT_BOLD = existsSync(GEIST_BOLD) ? "GeistSans-Bold" : "Helvetica-Bold";
-const FONT_MEDIUM = existsSync(GEIST_MEDIUM) ? "GeistSans-Medium" : "Helvetica-Bold";
-
-// Default body font size per the spec: 10.5pt
-const BODY_FONT_SIZE = 10.5;
 
 // Service company logo path (uploaded by admin via /api/settings/service-logo)
 function findServiceLogo(): string | null {
@@ -196,12 +200,6 @@ const TABLE_HEADER_BG = "#f1f5f9";        // very light grey
 const TABLE_HEADER_FG = "#1f2937";        // dark grey
 const TABLE_OUTER_BORDER = "#374151";     // dark grey outer border
 const TABLE_INNER_BORDER = "#9ca3af";     // medium grey inner borders
-const TABLE_ROW_ALT_BG = "#fafafa";       // very faint alt-row tint (readability)
-
-// Legacy aliases kept for backward compatibility with any code that still
-// references them — they now point to the clean palette.
-const HEADER_BG = TABLE_HEADER_BG;
-const HEADER_FG = TABLE_HEADER_FG;
 
 interface Column {
   key: string;
@@ -259,12 +257,6 @@ function getCustomColumnValue(measurement: any, colId: string): string {
     const vals = JSON.parse(measurement.customColumnValues || "{}");
     return vals[colId] ?? "";
   } catch { return ""; }
-}
-
-function fmtMeasurement(v: number | null, status: string): string {
-  if (status === "NotApplicable") return "N/A";
-  if (status === "NotMeasured" || v === null || v === undefined) return "—";
-  return v.toFixed(2);
 }
 
 /**
@@ -1147,18 +1139,135 @@ export async function generatePipelineReportPdf(
   };
 
   if (reportType === "PIPELINE_THICKNESS") {
-    // ─── MEASUREMENT TABLE ───
-    startBodyOnFreshPage(tableHeaderH + rowH2);
-    drawTableHeader(doc, allCols, colWidths, y, pageW);
-    y += tableHeaderH;
-    for (const m of measurements) {
-      if (y + rowH2 > pageMaxY) {
+    // ─── MULTI-TABLE MEASUREMENT RENDERER WITH AUTOMATIC INDEX NUMBERING ───
+    //
+    // Structure:
+    //   7. Thickness Measurement                        ← parent heading
+    //     7.1 – [Label of Table 1]                     ← index entry
+    //     7.2 – [Label of Table 2]                     ← index entry
+    //     7.3 – [Label of Table 3]                     ← index entry
+    //
+    //   7.1 – [Label of Table 1]                       ← table heading + data
+    //   7.2 – [Label of Table 2]                       ← table heading + data
+    //   7.3 – [Label of Table 3]                       ← table heading + data
+    //
+    // The "7" prefix is the fixed section number (THICKNESS_SECTION_NUMBER).
+    // The ".N" suffix is dynamically derived from each table's position in
+    // the ordered list — adding, deleting, or reordering tables automatically
+    // renumbers everything. The Index list mirrors the table headings so the
+    // reader sees a consistent table of contents.
+    const tables: ThicknessTableConfig[] = parseThicknessTablesConfig(
+      (report as PipelineInspection & { thicknessTablesConfig?: string | null }).thicknessTablesConfig ?? null,
+    );
+
+    // ── Draw the parent section heading: "7. Thickness Measurement" ──
+    {
+      const parentHeading = thicknessSectionHeading();
+      const parentH = 20;
+      // Ensure the parent heading + index list + at least one table header
+      // + one row all fit; otherwise start on a fresh page.
+      const indexRowH = 14;
+      const indexBlockH = tables.length * indexRowH + 8;
+      const neededH = parentH + indexBlockH + tableHeaderH + rowH2;
+      if (y + neededH > pageMaxY) {
         addNewPage();
-        drawTableHeader(doc, allCols, colWidths, MARGIN, pageW);
-        y = MARGIN + tableHeaderH;
       }
-      drawMeasurementRow(doc, m, allCols, colWidths, y, report, customCols);
-      y += rowH2;
+      doc.font(FONT_BOLD).fontSize(12).fillColor("#1f2937");
+      doc.text(parentHeading, MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
+      y += parentH;
+      // Thin divider under the parent heading.
+      doc.moveTo(MARGIN, y - 6).lineTo(pageW - MARGIN, y - 6).stroke("#374151");
+      doc.fillColor("#000");
+    }
+
+    // ── Draw the Index / Table of Contents for this section ──
+    // Lists every sub-table with its automatic number: "7.1 – Label", etc.
+    {
+      const indexRowH = 14;
+      for (let i = 0; i < tables.length; i++) {
+        const entry = thicknessTableHeading(i + 1, tables[i].label);
+        if (y + indexRowH > pageMaxY) {
+          addNewPage();
+        }
+        doc.font(FONT_REGULAR).fontSize(9).fillColor("#374151");
+        // Indent the index entries to make them visually subordinate to
+        // the parent heading.
+        doc.text(entry, MARGIN + 12, y, { width: pageW - 2 * MARGIN - 12, align: "left" });
+        y += indexRowH;
+      }
+      doc.fillColor("#000");
+      // Gap after the index block, before the first table.
+      y += 10;
+    }
+
+    // ── Render each table with its numbered heading ──
+    for (let tIdx = 0; tIdx < tables.length; tIdx++) {
+      const table = tables[tIdx];
+      const tableNumberedHeading = thicknessTableHeading(tIdx + 1, table.label);
+      // Partition measurements into THIS table.
+      const tableMeasurements = measurements.filter(
+        (m) => (m.tableGroup ?? DEFAULT_TABLE_ID) === table.id,
+      );
+
+      // Draw the numbered table heading: "7.N – [Label]"
+      {
+        // Make sure we have room for the heading + at least the table
+        // header + one row before drawing.
+        if (y + 18 + tableHeaderH + rowH2 > pageMaxY) {
+          addNewPage();
+        }
+        doc.font(FONT_BOLD).fontSize(11).fillColor("#1f2937");
+        doc.text(tableNumberedHeading, MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
+        y += 18;
+        // Thin divider under the heading.
+        doc.moveTo(MARGIN, y - 4).lineTo(pageW - MARGIN, y - 4).stroke("#9ca3af");
+        doc.fillColor("#000");
+      }
+
+      // Always start the table on a fresh page if there isn't enough
+      // room for the header + at least one row.
+      startBodyOnFreshPage(tableHeaderH + rowH2);
+      drawTableHeader(doc, allCols, colWidths, y, pageW);
+      y += tableHeaderH;
+
+      if (tableMeasurements.length === 0) {
+        // Empty table — draw a single "no rows" row.
+        if (y + rowH2 > pageMaxY) {
+          addNewPage();
+          drawTableHeader(doc, allCols, colWidths, MARGIN, pageW);
+          y = MARGIN + tableHeaderH;
+        }
+        // Render a single merged cell with the empty message.
+        doc.rect(MARGIN, y, pageW - 2 * MARGIN, rowH2).stroke(TABLE_OUTER_BORDER);
+        doc.font(FONT_REGULAR).fontSize(8).fillColor("#6b7280");
+        doc.text(
+          `No measurement rows in ${tableNumberedHeading}.`,
+          MARGIN + 4, y + (rowH2 - 10) / 2,
+          { width: pageW - 2 * MARGIN - 8, align: "center" },
+        );
+        doc.fillColor("#000");
+        y += rowH2;
+      } else {
+        for (const m of tableMeasurements) {
+          if (y + rowH2 > pageMaxY) {
+            addNewPage();
+            // Re-emit the numbered heading + table header on the new page
+            // so the reader knows which table the continuation belongs to.
+            doc.font(FONT_BOLD).fontSize(10).fillColor("#1f2937");
+            doc.text(`${tableNumberedHeading} (continued)`, MARGIN, MARGIN, { width: pageW - 2 * MARGIN, align: "left" });
+            doc.fillColor("#000");
+            drawTableHeader(doc, allCols, colWidths, MARGIN + 16, pageW);
+            y = MARGIN + 16 + tableHeaderH;
+          }
+          drawMeasurementRow(doc, m, allCols, colWidths, y, report, customCols);
+          y += rowH2;
+        }
+      }
+
+      // Small visual gap between consecutive tables.
+      if (tIdx < tables.length - 1) {
+        y += 14;
+      }
     }
   } else if (reportType === "PIPELINE_VISUAL") {
     // ─── VISUAL OBSERVATIONS TABLE ───

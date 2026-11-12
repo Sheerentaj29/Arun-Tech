@@ -12,44 +12,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { recordAudit } from "@/lib/audit";
+import {
+  parseNum,
+  computeObservedMinimum,
+  normalizeMeasurementStatus,
+} from "@/lib/measurement-utils";
 
-const MEASUREMENT_STATUSES = ["Measured", "NotMeasured", "NotApplicable"] as const;
-type MeasurementStatus = (typeof MEASUREMENT_STATUSES)[number];
-
-function parseNum(v: unknown): number | null {
-  if (v === null || v === undefined || v === "") return null;
-  const n = typeof v === "string" ? parseFloat(v) : (v as number);
-  if (Number.isNaN(n) || n < 0) return null;
-  return n;
-}
-
-/**
- * Compute observed minimum thickness from valid (Measured) clock readings.
- * Excludes missing, NotMeasured, and NotApplicable values. Returns null
- * if no valid measurements exist (never zero).
- */
-function computeObservedMinimum(args: {
-  northMm: number | null; northStatus: string;
-  eastMm: number | null; eastStatus: string;
-  southMm: number | null; southStatus: string;
-  westMm: number | null; westStatus: string;
-}): number | null {
-  const values: number[] = [];
-  for (const [val, status] of [
-    [args.northMm, args.northStatus],
-    [args.eastMm, args.eastStatus],
-    [args.southMm, args.southStatus],
-    [args.westMm, args.westStatus],
-  ] as const) {
-    if (status === "Measured" && val !== null && val !== undefined) {
-      values.push(Number(val));
-    }
-  }
-  if (values.length === 0) return null;
-  return Math.min(...values);
-}
-
-export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -57,7 +26,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   const { id } = await ctx.params;
   const items = await db.thicknessMeasurement.findMany({
     where: { pipelineInspectionId: id },
-    orderBy: { sortOrder: "asc" },
+    orderBy: [{ tableGroup: "asc" }, { sortOrder: "asc" }],
     include: {
       componentType: { select: { id: true, code: true, label: true } },
       standard: { select: { id: true, standard: true, edition: true, nominalSizeInch: true, schedule: true, wallThicknessMm: true, isVerified: true } },
@@ -170,22 +139,15 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     }
   }
 
-  // Validate measurement statuses
-  const normalizeStatus = (s: unknown): MeasurementStatus => {
-    if (typeof s === "string" && MEASUREMENT_STATUSES.includes(s as MeasurementStatus)) {
-      return s as MeasurementStatus;
-    }
-    return "NotMeasured";
-  };
-
+  // Validate measurement statuses (shared helper from @/lib/measurement-utils)
   const northMm = parseNum(body.northMm);
-  const northStatus = normalizeStatus(body.northStatus);
+  const northStatus = normalizeMeasurementStatus(body.northStatus);
   const eastMm = parseNum(body.eastMm);
-  const eastStatus = normalizeStatus(body.eastStatus);
+  const eastStatus = normalizeMeasurementStatus(body.eastStatus);
   const southMm = parseNum(body.southMm);
-  const southStatus = normalizeStatus(body.southStatus);
+  const southStatus = normalizeMeasurementStatus(body.southStatus);
   const westMm = parseNum(body.westMm);
-  const westStatus = normalizeStatus(body.westStatus);
+  const westStatus = normalizeMeasurementStatus(body.westStatus);
 
   // If a status is "Measured", the value MUST be a valid positive number.
   const invalidMeasured = (
@@ -208,9 +170,16 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     southMm, southStatus, westMm, westStatus,
   });
 
-  // Determine sortOrder — append at end if not specified
+  // Determine tableGroup for this row. Default to "default" for backward
+  // compatibility. Reject empty strings (use "default" instead).
+  const tableGroup = typeof body.tableGroup === "string" && body.tableGroup.trim()
+    ? body.tableGroup.trim()
+    : "default";
+
+  // When assigning sortOrder, scope the max-sortOrder lookup to the same
+  // tableGroup so rows in different tables don't collide on ordering.
   const maxSortOrder = await db.thicknessMeasurement.findFirst({
-    where: { pipelineInspectionId: id },
+    where: { pipelineInspectionId: id, tableGroup },
     orderBy: { sortOrder: "desc" },
     select: { sortOrder: true },
   });
@@ -221,6 +190,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       pipelineInspectionId: id,
       pointNo: body.pointNo?.trim() || `P-${sortOrder + 1}`,
       sortOrder,
+      tableGroup,
       pipeSizeInch: body.pipeSizeInch,
       pipeSchedule: body.pipeSchedule,
       // Snapshot the calculated nominal thickness at row creation time.

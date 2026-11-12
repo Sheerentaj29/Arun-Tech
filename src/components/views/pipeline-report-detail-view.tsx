@@ -6,11 +6,8 @@ import {
   Download,
   Loader2,
   Pencil,
-  ShieldCheck,
   ShieldAlert,
   AlertTriangle,
-  Calendar,
-  User as UserIcon,
   Send,
   CheckCircle2,
   RotateCcw,
@@ -42,6 +39,14 @@ import { useAppStore } from "@/lib/store";
 import { apiFetch } from "@/lib/api-client";
 import { AuthImage } from "@/components/auth-image";
 import { resolveClientLogo } from "@/lib/client-logo-mapping";
+import {
+  parseThicknessTablesConfig,
+  thicknessSectionHeading,
+  thicknessTableHeading,
+  DEFAULT_TABLE_ID,
+  type ThicknessTableConfig,
+} from "@/lib/thickness-tables";
+import { fmtMeasurement } from "@/lib/measurement-utils";
 import { toast } from "sonner";
 
 interface FullReport {
@@ -146,6 +151,10 @@ interface FullReport {
   comments: string | null;
   inspectionDescription?: string | null;
   photos: string | null;
+  // JSON array of {id,label,sortOrder} describing every Thickness
+  // Pipeline table configured on this report. Null/missing → single
+  // default table (legacy behaviour).
+  thicknessTablesConfig?: string | null;
   overrideReason: string | null;
   overrideAppliedAt: string | null;
   approvedById: string | null;
@@ -204,6 +213,9 @@ interface FullReport {
     id: string;
     pointNo: string;
     sortOrder: number;
+    /** Multi-table partition key. Defaults to "default" for rows
+     *  created before this feature was added. */
+    tableGroup?: string;
     pipeSizeInch: string;
     pipeSchedule: string;
     nominalThicknessMm: number | null;
@@ -262,12 +274,6 @@ interface FullReport {
     revisedBy?: { id: string; name: string } | null;
     approvedBy?: { id: string; name: string } | null;
   }>;
-}
-
-function fmtMeasurement(v: number | null, status: string): string {
-  if (status === "NotApplicable") return "N/A";
-  if (status === "NotMeasured" || v === null || v === undefined) return "—";
-  return v.toFixed(2);
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -998,85 +1004,129 @@ export function PipelineReportDetailView() {
           </div>
         )}
 
-        {/* Measurement table — ONLY for PIPELINE_THICKNESS reports.
+        {/* Measurement tables — ONLY for PIPELINE_THICKNESS reports.
             This must NEVER appear in DPT or other report types. The report
             type is checked explicitly (not just whether measurements exist)
             so that a Thickness report with zero rows still shows the table
-            structure, while a DPT report never shows it. */}
-        {report.reportType === "PIPELINE_THICKNESS" && (
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-[11px]">
-            <thead>
-              <tr className="bg-emerald-800 text-white">
-                <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 50 }}>Dia mm<br />(inch)</th>
-                <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 55 }}>Pipe<br />Schedule</th>
-                <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 55 }}>Nominal<br />Thickness<br />(mm)</th>
-                <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 60 }}>Component<br />Type</th>
-                <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 45 }}>Point<br />No</th>
-                <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 65 }}>
-                  <div className="flex flex-col items-center">
-                    <span>12 o'clock</span><span>North</span><span>(mm)</span>
+            structure, while a DPT report never shows it.
+
+            AUTOMATIC INDEX NUMBERING:
+              The section is numbered "7. Thickness Measurement" (parent).
+              Each sub-table is numbered dynamically: "7.1 – Label",
+              "7.2 – Label", "7.3 – Label", etc. An Index list is shown
+              above the tables listing all sub-tables. When tables are
+              added/deleted/renamed/reordered, the numbering updates
+              automatically because it's derived from the array index. */}
+        {report.reportType === "PIPELINE_THICKNESS" && (() => {
+          // Parse the table-config JSON (falls back to a single default
+          // table when missing/invalid). Memoize at render time.
+          const tables: ThicknessTableConfig[] = parseThicknessTablesConfig(
+            report.thicknessTablesConfig ?? null,
+          );
+          return (
+            <>
+              {/* ── Parent section heading: "7. Thickness Measurement" ── */}
+              <h3 className="mb-2 text-sm font-bold text-zinc-800 border-b border-zinc-400 pb-1">
+                {thicknessSectionHeading()}
+              </h3>
+
+              {/* ── Index / Table of Contents for this section ── */}
+              <div className="mb-4 ml-4 text-xs text-zinc-600 space-y-0.5">
+                {tables.map((t, i) => (
+                  <div key={t.id}>{thicknessTableHeading(i + 1, t.label)}</div>
+                ))}
+              </div>
+
+              {/* ── Render each table with its numbered heading ── */}
+              {tables.map((table, tableIdx) => {
+                // Partition measurements into this table.
+                const tableRows = report.measurements.filter(
+                  (m) => (m.tableGroup ?? DEFAULT_TABLE_ID) === table.id,
+                );
+                return (
+                  <div key={table.id} className={tableIdx > 0 ? "mt-6" : ""}>
+                    {/* Numbered table heading: "7.N – [Label]" */}
+                    <h4 className="mb-2 text-xs font-bold uppercase text-emerald-800 border-b border-emerald-300 pb-1">
+                      {thicknessTableHeading(tableIdx + 1, table.label)}
+                    </h4>
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse text-[11px]">
+                        <thead>
+                          <tr className="bg-emerald-800 text-white">
+                            <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 50 }}>Dia mm<br />(inch)</th>
+                            <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 55 }}>Pipe<br />Schedule</th>
+                            <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 55 }}>Nominal<br />Thickness<br />(mm)</th>
+                            <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 60 }}>Component<br />Type</th>
+                            <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 45 }}>Point<br />No</th>
+                            <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 65 }}>
+                              <div className="flex flex-col items-center">
+                                <span>12 o'clock</span><span>North</span><span>(mm)</span>
+                              </div>
+                            </th>
+                            <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 65 }}>
+                              <div className="flex flex-col items-center">
+                                <span>3 o'clock</span><span>East</span><span>(mm)</span>
+                              </div>
+                            </th>
+                            <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 65 }}>
+                              <div className="flex flex-col items-center">
+                                <span>6 o'clock</span><span>South</span><span>(mm)</span>
+                              </div>
+                            </th>
+                            <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 65 }}>
+                              <div className="flex flex-col items-center">
+                                <span>9 o'clock</span><span>West</span><span>(mm)</span>
+                              </div>
+                            </th>
+                            <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 70 }}>
+                              <div className="flex flex-col items-center">
+                                <span>Observed</span><span>Minimum</span><span>Thickness (mm)</span>
+                              </div>
+                            </th>
+                            <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 200 }}>Findings / Comments</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {tableRows.length === 0 && (
+                            <tr>
+                              <td colSpan={11} className="border border-zinc-400 text-center py-4 text-zinc-500">
+                                No measurement rows in this table.
+                              </td>
+                            </tr>
+                          )}
+                          {tableRows.map((m) => (
+                            <tr key={m.id} className="hover:bg-zinc-50">
+                              <td className="border border-zinc-400 px-2 py-1 text-center font-mono">{m.pipeSizeInch}</td>
+                              <td className="border border-zinc-400 px-2 py-1 text-center font-mono">{m.pipeSchedule}</td>
+                              <td className="border border-zinc-400 px-2 py-1 text-center tabular-nums">
+                                {m.nominalThicknessMm !== null ? m.nominalThicknessMm.toFixed(2) : "—"}
+                                {m.standard && !m.standard.isVerified && (
+                                  <span className="ml-1 text-[9px] text-amber-700" title="Reference data not yet verified">(unv)</span>
+                                )}
+                              </td>
+                              <td className="border border-zinc-400 px-2 py-1 text-center">
+                                {m.componentType?.label ?? m.componentTypeCode}
+                              </td>
+                              <td className="border border-zinc-400 px-2 py-1 text-center font-mono">{m.pointNo}</td>
+                              <td className="border border-zinc-400 px-2 py-1 text-center tabular-nums">{fmtMeasurement(m.northMm, m.northStatus)}</td>
+                              <td className="border border-zinc-400 px-2 py-1 text-center tabular-nums">{fmtMeasurement(m.eastMm, m.eastStatus)}</td>
+                              <td className="border border-zinc-400 px-2 py-1 text-center tabular-nums">{fmtMeasurement(m.southMm, m.southStatus)}</td>
+                              <td className="border border-zinc-400 px-2 py-1 text-center tabular-nums">{fmtMeasurement(m.westMm, m.westStatus)}</td>
+                              <td className="border border-zinc-400 px-2 py-1 text-center font-semibold tabular-nums bg-emerald-50">
+                                {m.observedMinimumMm !== null ? m.observedMinimumMm.toFixed(2) : "—"}
+                              </td>
+                              <td className="border border-zinc-400 px-2 py-1 text-left whitespace-pre-wrap">{m.findingsComments ?? "—"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </th>
-                <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 65 }}>
-                  <div className="flex flex-col items-center">
-                    <span>3 o'clock</span><span>East</span><span>(mm)</span>
-                  </div>
-                </th>
-                <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 65 }}>
-                  <div className="flex flex-col items-center">
-                    <span>6 o'clock</span><span>South</span><span>(mm)</span>
-                  </div>
-                </th>
-                <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 65 }}>
-                  <div className="flex flex-col items-center">
-                    <span>9 o'clock</span><span>West</span><span>(mm)</span>
-                  </div>
-                </th>
-                <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 70 }}>
-                  <div className="flex flex-col items-center">
-                    <span>Observed</span><span>Minimum</span><span>Thickness (mm)</span>
-                  </div>
-                </th>
-                <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 200 }}>Findings / Comments</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.measurements.length === 0 && (
-                <tr>
-                  <td colSpan={11} className="border border-zinc-400 text-center py-4 text-zinc-500">
-                    No measurement rows recorded.
-                  </td>
-                </tr>
-              )}
-              {report.measurements.map((m) => (
-                <tr key={m.id} className="hover:bg-zinc-50">
-                  <td className="border border-zinc-400 px-2 py-1 text-center font-mono">{m.pipeSizeInch}</td>
-                  <td className="border border-zinc-400 px-2 py-1 text-center font-mono">{m.pipeSchedule}</td>
-                  <td className="border border-zinc-400 px-2 py-1 text-center tabular-nums">
-                    {m.nominalThicknessMm !== null ? m.nominalThicknessMm.toFixed(2) : "—"}
-                    {m.standard && !m.standard.isVerified && (
-                      <span className="ml-1 text-[9px] text-amber-700" title="Reference data not yet verified">(unv)</span>
-                    )}
-                  </td>
-                  <td className="border border-zinc-400 px-2 py-1 text-center">
-                    {m.componentType?.label ?? m.componentTypeCode}
-                  </td>
-                  <td className="border border-zinc-400 px-2 py-1 text-center font-mono">{m.pointNo}</td>
-                  <td className="border border-zinc-400 px-2 py-1 text-center tabular-nums">{fmtMeasurement(m.northMm, m.northStatus)}</td>
-                  <td className="border border-zinc-400 px-2 py-1 text-center tabular-nums">{fmtMeasurement(m.eastMm, m.eastStatus)}</td>
-                  <td className="border border-zinc-400 px-2 py-1 text-center tabular-nums">{fmtMeasurement(m.southMm, m.southStatus)}</td>
-                  <td className="border border-zinc-400 px-2 py-1 text-center tabular-nums">{fmtMeasurement(m.westMm, m.westStatus)}</td>
-                  <td className="border border-zinc-400 px-2 py-1 text-center font-semibold tabular-nums bg-emerald-50">
-                    {m.observedMinimumMm !== null ? m.observedMinimumMm.toFixed(2) : "—"}
-                  </td>
-                  <td className="border border-zinc-400 px-2 py-1 text-left whitespace-pre-wrap">{m.findingsComments ?? "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        )} {/* end measurement table — Thickness only */}
+                );
+              })}
+            </>
+          );
+        })()} {/* end measurement tables — Thickness only */}
 
         {/* Engineering Drawings section — shows attached drawings with previews */}
         {report.drawingLinks && report.drawingLinks.length > 0 && (

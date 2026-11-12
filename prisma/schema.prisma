@@ -280,6 +280,14 @@ model PipelineInspection {
   // Custom column definitions stored as JSON: [{id, name, unit}]
   // These are user-added columns beyond the 11 default system columns.
   customColumns            String?
+
+  // ─── Multi-table grouping (additive, optional) ───
+  // JSON array describing every Thickness table in this report:
+  //   [{ "id": "default", "label": "Thickness Pipeline Table 1", "sortOrder": 0 },
+  //    { "id": "t_1700000000000", "label": "Thickness Pipeline Table 2", "sortOrder": 1 }]
+  // Null/empty → single default table (legacy behaviour). Each row in
+  // ThicknessMeasurement carries a `tableGroup` matching one of these ids.
+  thicknessTablesConfig    String?
   // Photos stored as JSON array (legacy): [{path, caption, uploadedAt}]
   // Also tracked individually via the ReportPhoto model below for
   // proper relational storage and retrieval.
@@ -483,6 +491,14 @@ model ThicknessMeasurement {
   pipelineInspectionId String
   pointNo               String   // free text, e.g. "P-1"
   sortOrder             Int      @default(0)
+
+  // ─── Multi-table grouping (additive, default "default") ───
+  // When a Thickness report contains multiple tables, each row belongs to
+  // exactly one table group. Existing rows (and any new row in a
+  // single-table report) get "default" — so the existing single-table
+  // workflow keeps working unchanged. The list of table groups itself is
+  // stored as JSON on the parent PipelineInspection.thicknessTablesConfig.
+  tableGroup            String   @default("default")
 
   // First two fixed columns
   pipeSizeInch          String   // e.g. "2", "1/2", "6" (matches PipeStandard.nominalSizeInch)

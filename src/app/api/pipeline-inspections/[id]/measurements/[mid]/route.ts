@@ -6,37 +6,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { recordAudit } from "@/lib/audit";
-
-const MEASUREMENT_STATUSES = ["Measured", "NotMeasured", "NotApplicable"] as const;
-type MeasurementStatus = (typeof MEASUREMENT_STATUSES)[number];
-
-function parseNum(v: unknown): number | null {
-  if (v === null || v === undefined || v === "") return null;
-  const n = typeof v === "string" ? parseFloat(v) : (v as number);
-  if (Number.isNaN(n) || n < 0) return null;
-  return n;
-}
-
-function computeObservedMinimum(args: {
-  northMm: number | null; northStatus: string;
-  eastMm: number | null; eastStatus: string;
-  southMm: number | null; southStatus: string;
-  westMm: number | null; westStatus: string;
-}): number | null {
-  const values: number[] = [];
-  for (const [val, status] of [
-    [args.northMm, args.northStatus],
-    [args.eastMm, args.eastStatus],
-    [args.southMm, args.southStatus],
-    [args.westMm, args.westStatus],
-  ] as const) {
-    if (status === "Measured" && val !== null && val !== undefined) {
-      values.push(Number(val));
-    }
-  }
-  if (values.length === 0) return null;
-  return Math.min(...values);
-}
+import {
+  parseNum,
+  computeObservedMinimum,
+  normalizeMeasurementStatus,
+  type MeasurementStatus,
+} from "@/lib/measurement-utils";
 
 export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string; mid: string }> }) {
   const session = await getSession(req);
@@ -128,22 +103,15 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string;
     componentTypeCode = ct.code;
   }
 
-  // Validate measurement statuses
-  const normalizeStatus = (s: unknown, fallback: string): MeasurementStatus => {
-    if (typeof s === "string" && MEASUREMENT_STATUSES.includes(s as MeasurementStatus)) {
-      return s as MeasurementStatus;
-    }
-    return fallback as MeasurementStatus;
-  };
-
+  // Validate measurement statuses (shared helper from @/lib/measurement-utils)
   const northMm = body.northMm !== undefined ? parseNum(body.northMm) : existing.northMm;
-  const northStatus = normalizeStatus(body.northStatus ?? existing.northStatus, "NotMeasured");
+  const northStatus = normalizeMeasurementStatus(body.northStatus ?? existing.northStatus, "NotMeasured");
   const eastMm = body.eastMm !== undefined ? parseNum(body.eastMm) : existing.eastMm;
-  const eastStatus = normalizeStatus(body.eastStatus ?? existing.eastStatus, "NotMeasured");
+  const eastStatus = normalizeMeasurementStatus(body.eastStatus ?? existing.eastStatus, "NotMeasured");
   const southMm = body.southMm !== undefined ? parseNum(body.southMm) : existing.southMm;
-  const southStatus = normalizeStatus(body.southStatus ?? existing.southStatus, "NotMeasured");
+  const southStatus = normalizeMeasurementStatus(body.southStatus ?? existing.southStatus, "NotMeasured");
   const westMm = body.westMm !== undefined ? parseNum(body.westMm) : existing.westMm;
-  const westStatus = normalizeStatus(body.westStatus ?? existing.westStatus, "NotMeasured");
+  const westStatus = normalizeMeasurementStatus(body.westStatus ?? existing.westStatus, "NotMeasured");
 
   // If a status is "Measured", value MUST be valid
   const invalidMeasured = (
@@ -176,6 +144,11 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string;
     data: {
       pointNo: body.pointNo?.trim() ?? existing.pointNo,
       sortOrder: body.sortOrder !== undefined ? Number(body.sortOrder) : existing.sortOrder,
+      // Allow moving a row between thickness tables. Default to the
+      // existing group if not specified; reject empty strings.
+      tableGroup: typeof body.tableGroup === "string" && body.tableGroup.trim()
+        ? body.tableGroup.trim()
+        : existing.tableGroup,
       pipeSizeInch: newSize,
       pipeSchedule: newSchedule,
       nominalThicknessMm,

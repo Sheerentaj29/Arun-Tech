@@ -22,7 +22,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       approver: { select: { id: true, name: true, email: true } },
       returnedBy: { select: { id: true, name: true, email: true } },
       measurements: {
-        orderBy: { sortOrder: "asc" },
+        orderBy: [{ tableGroup: "asc" }, { sortOrder: "asc" }],
         include: {
           componentType: { select: { id: true, code: true, label: true } },
           standard: { select: { id: true, standard: true, edition: true, nominalSizeInch: true, schedule: true, wallThicknessMm: true, isVerified: true } },
@@ -169,6 +169,13 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       comments: body.comments ?? existing.comments,
       inspectionDescription: body.inspectionDescription ?? existing.inspectionDescription,
       customColumns: body.customColumns ?? existing.customColumns,
+      // ─── MULTI-THICKNESS-TABLE CONFIG ───
+      // JSON array of {id,label,sortOrder}. Additive & optional — null/empty
+      // falls back to a single default table on read.
+      thicknessTablesConfig:
+        body.thicknessTablesConfig !== undefined
+          ? (typeof body.thicknessTablesConfig === "string" ? body.thicknessTablesConfig : null)
+          : existing.thicknessTablesConfig,
       photos: body.photos ?? existing.photos,
       // ─── PIPELINE CONDITION fields (updated only when the form sends them;
       // the thickness/visual forms don't send these keys so the existing
