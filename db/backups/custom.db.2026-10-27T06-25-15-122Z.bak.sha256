@@ -1,0 +1,10 @@
+# SQLite backup manifest
+# Created: 2026-10-27T06:25:15.124Z`n# Source: /home/z/my-project/db/custom.db
+# Backup:  /home/z/my-project/db/backups/custom.db.2026-10-27T06-25-15-122Z.bak
+# Tables: 11
+# Total rows: 236
+#
+# Verify with: sha256sum -c /home/z/my-project/db/backups/custom.db.2026-10-27T06-25-15-122Z.bak.sha256
+
+12ddb07e0fc47989de558a5703fc80709946dac38c6e5630a8556c0b79dc7d91  /home/z/my-project/db/backups/custom.db.2026-10-27T06-25-15-122Z.bak
+12ddb07e0fc47989de558a5703fc80709946dac38c6e5630a8556c0b79dc7d91  /home/z/my-project/db/custom.db

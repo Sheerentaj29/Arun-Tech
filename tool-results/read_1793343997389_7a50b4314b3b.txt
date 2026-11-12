@@ -1,0 +1,685 @@
+     1→// Server-side PDF generator for the Pipeline Thickness Measurement Report.
+     2→// Uses pdfkit (pure JS, no native deps).
+     3→//
+     4→// Fixes applied:
+     5→//   1. Dynamic row height in header info grid — long MOC values wrap
+     6→//      without overlapping adjacent fields.
+     7→//   2. Title/subtitle spacing — increased gap so no text overlaps.
+     8→//   3. AutoCAD diagrams — images whose caption or filename contains
+     9→//      "diagram", "isometric", "autocad", or "drawing" are treated as
+    10→//      diagrams. Each diagram gets its OWN FULL PAGE, displayed BEFORE
+    11→//      the measurement table. Regular photos stay in the gallery at the
+    12→//      end.
+    13→//   4. Dynamic page handling — 0 diagrams = table starts right after
+    14→//      header; N diagrams = N full pages, then table starts on a fresh
+    15→//      page.
+    16→
+    17→import PDFDocument from "pdfkit";
+    18→import type { Writable } from "stream";
+    19→import type { PipelineInspection, ThicknessMeasurement, Client, Plant, User, ReportPhoto } from "@prisma/client";
+    20→import { readFileSync, existsSync } from "fs";
+    21→
+    22→export interface PdfReportInput {
+    23→  report: PipelineInspection & {
+    24→    client: Pick<Client, "id" | "name">;
+    25→    plant: Pick<Plant, "id" | "name" | "location" | "address">;
+    26→    inspector: Pick<User, "id" | "name" | "email">;
+    27→    approver: Pick<User, "id" | "name" | "email"> | null;
+    28→    reportPhotos?: ReportPhoto[];
+    29→  };
+    30→  measurements: ThicknessMeasurement[];
+    31→  photos?: ReportPhoto[];
+    32→}
+    33→
+    34→type Doc = PDFDocument.PDFDocument;
+    35→
+    36→const PAGE_SIZES = {
+    37→  landscape: [841.89, 595.28] as [number, number],
+    38→  portrait: [595.28, 841.89] as [number, number],
+    39→};
+    40→
+    41→const MARGIN = 28;
+    42→const HEADER_BG = "#3a7d3a";
+    43→const HEADER_FG = "#ffffff";
+    44→
+    45→// Keywords that identify a photo as an AutoCAD diagram
+    46→const DIAGRAM_KEYWORDS = ["diagram", "isometric", "autocad", "drawing", "dwg", "iso"];
+    47→
+    48→function isDiagram(photo: ReportPhoto): boolean {
+    49→  const caption = (photo.caption ?? "").toLowerCase();
+    50→  const fileName = (photo.fileName ?? "").toLowerCase();
+    51→  return DIAGRAM_KEYWORDS.some((kw) => caption.includes(kw) || fileName.includes(kw));
+    52→}
+    53→
+    54→interface Column {
+    55→  key: string;
+    56→  header: string;
+    57→  width: number;
+    58→  vertical?: boolean;
+    59→}
+    60→
+    61→const SYSTEM_COLUMNS_LANDSCAPE: Column[] = [
+    62→  { key: "diaInch",      header: "Dia mm\n(inch)",        width: 50 },
+    63→  { key: "schedule",     header: "Pipe\nSchedule",       width: 55 },
+    64→  { key: "nominal",      header: "Nominal\nThickness\n(mm)", width: 55 },
+    65→  { key: "component",    header: "Component\nType",      width: 60 },
+    66→  { key: "pointNo",      header: "Point\nNo",             width: 40 },
+    67→  { key: "north",        header: "12 o'clock\nNorth\n(mm)", width: 55, vertical: true },
+    68→  { key: "east",         header: "3 o'clock\nEast\n(mm)",  width: 55, vertical: true },
+    69→  { key: "south",        header: "6 o'clock\nSouth\n(mm)", width: 55, vertical: true },
+    70→  { key: "west",         header: "9 o'clock\nWest\n(mm)",  width: 55, vertical: true },
+    71→  { key: "obsMin",       header: "Observed\nMinimum\n(mm)", width: 60, vertical: true },
+    72→  { key: "findings",     header: "Findings / Comments",   width: 0 },
+    73→];
+    74→
+    75→const SYSTEM_COLUMNS_PORTRAIT: Column[] = [
+    76→  { key: "diaInch",      header: "Dia\n(inch)",      width: 35 },
+    77→  { key: "schedule",     header: "Schedule",         width: 42 },
+    78→  { key: "nominal",      header: "Nominal\n(mm)",    width: 42 },
+    79→  { key: "component",    header: "Type",             width: 40 },
+    80→  { key: "pointNo",      header: "Pt\nNo",            width: 28 },
+    81→  { key: "north",        header: "N\n(mm)",           width: 38 },
+    82→  { key: "east",         header: "E\n(mm)",           width: 38 },
+    83→  { key: "south",        header: "S\n(mm)",           width: 38 },
+    84→  { key: "west",         header: "W\n(mm)",           width: 38 },
+    85→  { key: "obsMin",       header: "Min\n(mm)",         width: 42 },
+    86→  { key: "findings",     header: "Findings / Comments", width: 0 },
+    87→];
+    88→
+    89→function calcColumnWidths(columns: Column[], pageWidth: number): number[] {
+    90→  const usable = pageWidth - 2 * MARGIN;
+    91→  let fixed = 0;
+    92→  for (const c of columns) if (c.width > 0) fixed += c.width;
+    93→  const fillW = usable - fixed;
+    94→  return columns.map((c) => (c.width > 0 ? c.width : Math.max(100, fillW)));
+    95→}
+    96→
+    97→function getCustomColumns(report: any): Array<{ id: string; name: string; unit: string }> {
+    98→  try {
+    99→    const cc = JSON.parse(report.customColumns || "[]");
+   100→    if (Array.isArray(cc)) return cc;
+   101→  } catch {}
+   102→  return [];
+   103→}
+   104→
+   105→function getCustomColumnValue(measurement: any, colId: string): string {
+   106→  try {
+   107→    const vals = JSON.parse(measurement.customColumnValues || "{}");
+   108→    return vals[colId] ?? "";
+   109→  } catch { return ""; }
+   110→}
+   111→
+   112→function fmtMeasurement(v: number | null, status: string): string {
+   113→  if (status === "NotApplicable") return "N/A";
+   114→  if (status === "NotMeasured" || v === null || v === undefined) return "—";
+   115→  return v.toFixed(2);
+   116→}
+   117→
+   118→/**
+   119→ * Calculate the wrapped height of a text string at a given font size
+   120→ * within a given width. Used to determine dynamic row heights so long
+   121→ * values (like MOC) don't overlap.
+   122→ */
+   123→function textHeight(doc: Doc, text: string, fontSize: number, maxWidth: number): number {
+   124→  doc.fontSize(fontSize).font("Helvetica");
+   125→  return doc.heightOfString(text ?? "—", { width: maxWidth });
+   126→}
+   127→
+   128→export async function generatePipelineReportPdf(
+   129→  input: PdfReportInput,
+   130→  out: Writable,
+   131→  orientation: "landscape" | "portrait" = "landscape",
+   132→): Promise<void> {
+   133→  const pageSize = PAGE_SIZES[orientation];
+   134→  const pageW = pageSize[0];
+   135→  const pageH = pageSize[1];
+   136→
+   137→  const doc = new PDFDocument({
+   138→    size: pageSize,
+   139→    margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
+   140→    layout: orientation,
+   141→    info: {
+   142→      Title: `Pipeline Thickness Measurement Report ${input.report.reportNumber}`,
+   143→      Author: input.report.inspectorName,
+   144→      Subject: input.report.pipelineDescription ?? "UT Thickness Measurement",
+   145→      Producer: "Inspection Report Automation System",
+   146→    },
+   147→  });
+   148→  doc.pipe(out);
+   149→
+   150→  const report = input.report;
+   151→  const measurements = input.measurements;
+   152→  const allPhotos = input.photos ?? input.report.reportPhotos ?? [];
+   153→  const customCols = getCustomColumns(report);
+   154→
+   155→  // ── LINKED ENGINEERING DRAWINGS ──
+   156→  // These are drawings linked to the report via the DrawingInspectionLink
+   157→  // model. Each gets its own FULL PAGE before the measurement table.
+   158→  // The PDF route loads them with their active revision's file path.
+   159→  const linkedDrawings: any[] = (report as any).linkedDrawings ?? [];
+   160→
+   161→  // Regular inspection photos stay in the gallery at the end.
+   162→  // (We no longer filter photos by "diagram" keywords — drawings come
+   163→  // from the dedicated Engineering Drawings module.)
+   164→  const regularPhotos = allPhotos;
+   165→
+   166→  // Determine columns: system + custom
+   167→  const systemCols = orientation === "landscape" ? SYSTEM_COLUMNS_LANDSCAPE : SYSTEM_COLUMNS_PORTRAIT;
+   168→  const allCols: Column[] = [
+   169→    ...systemCols,
+   170→    ...customCols.map((cc) => ({
+   171→      key: `custom_${cc.id}`,
+   172→      header: cc.name + (cc.unit ? `\n(${cc.unit})` : ""),
+   173→      width: orientation === "landscape" ? 60 : 40,
+   174→    })),
+   175→  ];
+   176→  const colWidths = calcColumnWidths(allCols, pageW);
+   177→
+   178→  let pageNo = 0;
+   179→  const drawHeaderAndFooter = () => {
+   180→    pageNo += 1;
+   181→    doc.fontSize(7).fillColor("#666");
+   182→    doc.text(
+   183→      `Page ${pageNo} | Generated ${new Date().toISOString().slice(0, 19).replace("T", " ")} | Inspection Report Automation System`,
+   184→      MARGIN, pageH - 18,
+   185→      { width: pageW - 2 * MARGIN, align: "center" },
+   186→    );
+   187→    doc.fillColor("#000");
+   188→  };
+   189→
+   190→  const addNewPage = () => {
+   191→    doc.addPage({
+   192→      size: pageSize,
+   193→      layout: orientation,
+   194→      margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
+   195→    });
+   196→    drawHeaderAndFooter();
+   197→  };
+   198→
+   199→  drawHeaderAndFooter();
+   200→
+   201→  // ═══════════════════════════════════════════════════════════════
+   202→  // PAGE 1: TITLE + LOGOS + HEADER INFO GRID
+   203→  // ═══════════════════════════════════════════════════════════════
+   204→
+   205→  // ── FIX 2: Title with proper spacing ──
+   206→  const titleFontSize = orientation === "landscape" ? 13 : 11;
+   207→  const subtitleFontSize = orientation === "landscape" ? 8 : 7;
+   208→  const titleY = MARGIN;
+   209→
+   210→  // Draw the title
+   211→  doc.fontSize(titleFontSize).font("Helvetica-Bold");
+   212→  doc.text("PIPELINE THICKNESS MEASUREMENT REPORT", MARGIN, titleY, {
+   213→    width: pageW - 2 * MARGIN, align: "center",
+   214→  });
+   215→
+   216→  // Calculate actual title height (handles wrapping)
+   217→  const titleHeight = doc.heightOfString("PIPELINE THICKNESS MEASUREMENT REPORT", {
+   218→    width: pageW - 2 * MARGIN, align: "center",
+   219→  });
+   220→
+   221→  // Draw subtitle with enough gap below the title (at least 6pt gap)
+   222→  const subtitleY = titleY + titleHeight + 6;
+   223→  doc.font("Helvetica").fontSize(subtitleFontSize);
+   224→  doc.text(
+   225→    `Report No: ${report.reportNumber}    |    Rev: ${report.revisionNumber}    |    Date: ${new Date(report.inspectionDate).toISOString().slice(0, 10)}    |    Status: ${report.status}`,
+   226→    MARGIN, subtitleY,
+   227→    { width: pageW - 2 * MARGIN, align: "center" },
+   228→  );
+   229→
+   230→  const subtitleHeight = doc.heightOfString(
+   231→    `Report No: ${report.reportNumber}    |    Rev: ${report.revisionNumber}    |    Date: ${new Date(report.inspectionDate).toISOString().slice(0, 10)}    |    Status: ${report.status}`,
+   232→    { width: pageW - 2 * MARGIN, align: "center" },
+   233→  );
+   234→
+   235→  // ── LOGO PLACEHOLDERS (positioned below subtitle with gap) ──
+   236→  const logoY = subtitleY + subtitleHeight + 6;
+   237→  const logoH = 36;
+   238→  doc.rect(MARGIN, logoY, 110, logoH).stroke();
+   239→  doc.fontSize(7).fillColor("#666");
+   240→  doc.text("SERVICE COMPANY\nLOGO", MARGIN, logoY + 10, { width: 110, align: "center" });
+   241→  doc.rect(pageW - MARGIN - 110, logoY, 110, logoH).stroke();
+   242→  const clientShort = report.client.name.length > 28 ? report.client.name.slice(0, 28) : report.client.name;
+   243→  doc.text(`${clientShort}\nCLIENT LOGO`, pageW - MARGIN - 110, logoY + 10, { width: 110, align: "center" });
+   244→  doc.fillColor("#000");
+   245→
+   246→  // ── FIX 1: HEADER INFO GRID with dynamic row heights ──
+   247→  // Long values (like MOC) wrap to multiple lines. Calculate each row's
+   248→  // height dynamically so text never overlaps.
+   249→  const infoY = logoY + logoH + 10;
+   250→  const labelW = orientation === "landscape" ? 150 : 110;
+   251→  const valueW = (pageW - 2 * MARGIN - 2 * labelW) / 2;
+   252→  const minRowH = 14; // minimum height per row
+   253→  const fontSizeInfo = orientation === "landscape" ? 8 : 7;
+   254→
+   255→  const infoRows: Array<[string, string | null | undefined]> = [
+   256→    ["Client", report.client.name],
+   257→    ["Location", report.plant.location],
+   258→    ["Plant Name", report.plant.name],
+   259→    ["Inspection Area", report.inspectionArea],
+   260→    ["Pipeline Description", report.pipelineDescription],
+   261→    ["Pipeline Identification No.", report.pipelineIdentificationNumber],
+   262→    ["Isometric Drawing No.", report.isometricDrawingNumber],
+   263→    ["Material of Construction (MOC)", report.materialOfConstruction],
+   264→    ["Applicable Standard", `${report.applicableStandard ?? "—"} ${report.standardEdition ?? ""}`.trim()],
+   265→    ["Inspector", report.inspectorName],
+   266→  ];
+   267→
+   268→  // Group rows into pairs (left + right columns) and calculate the max
+   269→  // height needed for each pair.
+   270→  const rowPairs: Array<{ left: [string, string]; right: [string, string]; height: number }> = [];
+   271→  for (let i = 0; i < infoRows.length; i += 2) {
+   272→    const left = infoRows[i];
+   273→    const right = infoRows[i + 1] ?? ["", "—"];
+   274→
+   275→    // Calculate the wrapped height for each value in this pair
+   276→    const leftLabelH = textHeight(doc, left[0], fontSizeInfo, labelW - 8);
+   277→    const leftValStr = left[1] ?? "—";
+   278→    const leftValH = textHeight(doc, leftValStr, fontSizeInfo, valueW - 8);
+   279→    const rightLabelH = textHeight(doc, right[0], fontSizeInfo, labelW - 8);
+   280→    const rightValStr = right[1] ?? "—";
+   281→    const rightValH = textHeight(doc, rightValStr, fontSizeInfo, valueW - 8);
+   282→
+   283→    // The row height is the maximum of all four heights, with padding
+   284→    const maxContentH = Math.max(leftLabelH, leftValH, rightLabelH, rightValH);
+   285→    const pairHeight = Math.max(minRowH, maxContentH + 4); // +4 for padding
+   286→
+   287→    rowPairs.push({
+   288→      left: [left[0], leftValStr],
+   289→      right: [right[0], rightValStr],
+   290→      height: pairHeight,
+   291→    });
+   292→  }
+   293→
+   294→  // Draw each pair with its calculated height
+   295→  let currentY = infoY;
+   296→  for (const pair of rowPairs) {
+   297→    const h = pair.height;
+   298→    // Left label
+   299→    doc.font("Helvetica-Bold").fontSize(fontSizeInfo);
+   300→    doc.rect(MARGIN, currentY, labelW, h).stroke();
+   301→    doc.text(pair.left[0], MARGIN + 4, currentY + 2, { width: labelW - 8, align: "left", height: h });
+   302→    // Left value — use height option to clip text within the cell
+   303→    doc.font("Helvetica").fontSize(fontSizeInfo);
+   304→    doc.rect(MARGIN + labelW, currentY, valueW, h).stroke();
+   305→    doc.text(pair.left[1], MARGIN + labelW + 4, currentY + 2, { width: valueW - 8, align: "left", height: h });
+   306→
+   307→    // Right label
+   308→    const rightX = MARGIN + labelW + valueW;
+   309→    doc.font("Helvetica-Bold").fontSize(fontSizeInfo);
+   310→    doc.rect(rightX, currentY, labelW, h).stroke();
+   311→    doc.text(pair.right[0], rightX + 4, currentY + 2, { width: labelW - 8, align: "left", height: h });
+   312→    // Right value
+   313→    doc.font("Helvetica").fontSize(fontSizeInfo);
+   314→    doc.rect(rightX + labelW, currentY, valueW, h).stroke();
+   315→    doc.text(pair.right[1], rightX + labelW + 4, currentY + 2, { width: valueW - 8, align: "left", height: h });
+   316→
+   317→    currentY += h;
+   318→  }
+   319→
+   320→  // ═══════════════════════════════════════════════════════════════
+   321→  // ENGINEERING DRAWINGS — each on its OWN FULL PAGE, before the table
+   322→  // ═══════════════════════════════════════════════════════════════
+   323→  if (linkedDrawings.length > 0) {
+   324→    for (let i = 0; i < linkedDrawings.length; i++) {
+   325→      const drawing = linkedDrawings[i];
+   326→      // Each drawing gets a fresh full page
+   327→      addNewPage();
+   328→
+   329→      const availW = pageW - 2 * MARGIN;
+   330→      const availH = pageH - 2 * MARGIN - 40; // room for header + caption
+   331→
+   332→      // Drawing header: title, number, revision
+   333→      doc.font("Helvetica-Bold").fontSize(11).fillColor("#000");
+   334→      doc.text(`${drawing.title}`, MARGIN, MARGIN, { width: availW, align: "center" });
+   335→      doc.font("Helvetica").fontSize(8).fillColor("#444");
+   336→      const subLine = `Drawing No: ${drawing.drawingNumber}  |  Revision: ${drawing.revisionNumber}  |  Type: ${drawing.drawingType}`;
+   337→      doc.text(subLine, MARGIN, MARGIN + 16, { width: availW, align: "center" });
+   338→
+   339→      // Client/plant info
+   340→      if (drawing.clientName || drawing.plantName) {
+   341→        const locLine = [drawing.clientName, drawing.plantName].filter(Boolean).join(" — ");
+   342→        doc.fontSize(7).fillColor("#666");
+   343→        doc.text(locLine, MARGIN, MARGIN + 30, { width: availW, align: "center" });
+   344→      }
+   345→      doc.fillColor("#000");
+   346→
+   347→      // Embed the drawing file
+   348→      const drawingY = MARGIN + 40;
+   349→      const drawingH = availH - 40;
+   350→
+   351→      if (drawing.filePath && existsSync(drawing.filePath)) {
+   352→        try {
+   353→          const imgBuf = readFileSync(drawing.filePath);
+   354→          const ext = (drawing.fileExtension || "").toLowerCase();
+   355→
+   356→          if (ext === ".pdf") {
+   357→            // For PDF drawings, we can't embed a PDF inside a PDF.
+   358→            // Show a placeholder with download instructions.
+   359→            doc.fillColor("#999").fontSize(10);
+   360→            doc.rect(MARGIN, drawingY, availW, drawingH).stroke("#ccc");
+   361→            doc.text(
+   362→              `[PDF Drawing: ${drawing.fileName}]\n\nThis drawing is a PDF file and cannot be embedded directly.\nDownload the original file to view it.`,
+   363→              MARGIN + 20, drawingY + drawingH / 2 - 20,
+   364→              { width: availW - 40, align: "center" },
+   365→            );
+   366→            doc.fillColor("#000");
+   367→          } else {
+   368→            // Image formats (PNG, JPEG, TIFF) — embed directly
+   369→            doc.image(imgBuf, MARGIN, drawingY, {
+   370→              fit: [availW, drawingH],
+   371→              align: "center",
+   372→              valign: "center",
+   373→            });
+   374→          }
+   375→        } catch (err) {
+   376→          // For DWG/DXF or unreadable files, show a clear message
+   377→          doc.fillColor("#999").fontSize(9);
+   378→          doc.rect(MARGIN, drawingY, availW, drawingH).stroke("#ccc");
+   379→          const ext = (drawing.fileExtension || "").toUpperCase();
+   380→          doc.text(
+   381→            `[${ext} File: ${drawing.fileName}]\n\nPreview not available for ${ext} files.\nDownload the original CAD file to view it in AutoCAD or compatible software.`,
+   382→            MARGIN + 20, drawingY + drawingH / 2 - 20,
+   383→            { width: availW - 40, align: "center" },
+   384→          );
+   385→          doc.fillColor("#000");
+   386→        }
+   387→      } else {
+   388→        doc.fillColor("#999").fontSize(9);
+   389→        doc.rect(MARGIN, drawingY, availW, drawingH).stroke("#ccc");
+   390→        doc.text(
+   391→          `[File missing: ${drawing.fileName}]\n\nThe drawing file could not be found on disk.`,
+   392→          MARGIN + 20, drawingY + drawingH / 2 - 15,
+   393→          { width: availW - 40, align: "center" },
+   394→        );
+   395→        doc.fillColor("#000");
+   396→      }
+   397→    }
+   398→  }
+   399→
+   400→  // ═══════════════════════════════════════════════════════════════
+   401→  // MEASUREMENT TABLE — starts on a FRESH PAGE (after all diagrams)
+   402→  // ═══════════════════════════════════════════════════════════════
+   403→
+   404→  // If there are diagrams OR the header info grid filled most of page 1,
+   405→  // start the table on a fresh page. Otherwise, continue on the same page
+   406→  // if there's room.
+   407→  const tableHeaderH = 36;
+   408→  const rowH2 = orientation === "landscape" ? 28 : 22;
+   409→  const maxRowY = pageH - MARGIN - 20; // leave room for footer
+   410→
+   411→  // If there are linked drawings, the table MUST start on a fresh page
+   412→  let y: number;
+   413→
+   414→  if (linkedDrawings.length > 0) {
+   415→    addNewPage();
+   416→    drawTableHeader(doc, allCols, colWidths, MARGIN, pageW);
+   417→    y = MARGIN + tableHeaderH;
+   418→  } else {
+   419→    if (currentY + tableHeaderH + rowH2 > maxRowY) {
+   420→      addNewPage();
+   421→      drawTableHeader(doc, allCols, colWidths, MARGIN, pageW);
+   422→      y = MARGIN + tableHeaderH;
+   423→    } else {
+   424→      currentY += 10;
+   425→      drawTableHeader(doc, allCols, colWidths, currentY, pageW);
+   426→      y = currentY + tableHeaderH;
+   427→    }
+   428→  }
+   429→
+   430→  // ── TABLE ROWS ──
+   431→  for (const m of measurements) {
+   432→    if (y + rowH2 > maxRowY) {
+   433→      addNewPage();
+   434→      drawTableHeader(doc, allCols, colWidths, MARGIN, pageW);
+   435→      y = MARGIN + tableHeaderH;
+   436→    }
+   437→    drawMeasurementRow(doc, m, allCols, colWidths, y, report, customCols);
+   438→    y += rowH2;
+   439→  }
+   440→
+   441→  // ── INSPECTION DESCRIPTION ──
+   442→  if (report.inspectionDescription) {
+   443→    if (y + 60 > maxRowY) {
+   444→      addNewPage();
+   445→      y = MARGIN;
+   446→    }
+   447→    y += 10;
+   448→    doc.font("Helvetica-Bold").fontSize(9).fillColor("#000");
+   449→    doc.text("Inspection Description", MARGIN, y);
+   450→    y += 14;
+   451→    doc.font("Helvetica").fontSize(8);
+   452→    const descHeight = doc.heightOfString(report.inspectionDescription, {
+   453→      width: pageW - 2 * MARGIN,
+   454→    });
+   455→    doc.text(report.inspectionDescription, MARGIN, y, {
+   456→      width: pageW - 2 * MARGIN, align: "left",
+   457→    });
+   458→    y += descHeight + 6;
+   459→  }
+   460→
+   461→  // ── FINDINGS SUMMARY ──
+   462→  if (report.findingsSummary) {
+   463→    if (y + 40 > maxRowY) {
+   464→      addNewPage();
+   465→      y = MARGIN;
+   466→    }
+   467→    y += 8;
+   468→    doc.font("Helvetica-Bold").fontSize(9);
+   469→    doc.text("Findings Summary", MARGIN, y);
+   470→    y += 14;
+   471→    doc.font("Helvetica").fontSize(8);
+   472→    const findingsH = doc.heightOfString(report.findingsSummary ?? "—", {
+   473→      width: pageW - 2 * MARGIN,
+   474→    });
+   475→    doc.text(report.findingsSummary ?? "—", MARGIN, y, {
+   476→      width: pageW - 2 * MARGIN, align: "left",
+   477→    });
+   478→    y += findingsH + 6;
+   479→  }
+   480→
+   481→  // ── COMMENTS ──
+   482→  if (report.comments) {
+   483→    if (y + 30 > maxRowY) {
+   484→      addNewPage();
+   485→      y = MARGIN;
+   486→    }
+   487→    y += 6;
+   488→    doc.font("Helvetica-Bold").fontSize(9);
+   489→    doc.text("Comments", MARGIN, y);
+   490→    y += 14;
+   491→    doc.font("Helvetica").fontSize(8);
+   492→    const commentsH = doc.heightOfString(report.comments ?? "—", {
+   493→      width: pageW - 2 * MARGIN,
+   494→    });
+   495→    doc.text(report.comments ?? "—", MARGIN, y, {
+   496→      width: pageW - 2 * MARGIN, align: "left",
+   497→    });
+   498→    y += commentsH + 6;
+   499→  }
+   500→
+   501→  // ── REGULAR PHOTOS (gallery — NOT diagrams) ──
+   502→  if (regularPhotos.length > 0) {
+   503→    if (y + 100 > maxRowY) {
+   504→      addNewPage();
+   505→      y = MARGIN;
+   506→    }
+   507→    y += 10;
+   508→    doc.font("Helvetica-Bold").fontSize(10).fillColor("#000");
+   509→    doc.text("Photographs", MARGIN, y);
+   510→    y += 20;
+   511→
+   512→    const photoW = orientation === "landscape" ? 180 : 140;
+   513→    const photoH = orientation === "landscape" ? 120 : 95;
+   514→    const gap = 10;
+   515→    let photosPerRow = Math.floor((pageW - 2 * MARGIN + gap) / (photoW + gap));
+   516→    if (photosPerRow < 1) photosPerRow = 1;
+   517→
+   518→    for (let i = 0; i < regularPhotos.length; i++) {
+   519→      const photo = regularPhotos[i];
+   520→      const col = i % photosPerRow;
+   521→      const row = Math.floor(i / photosPerRow);
+   522→      const px = MARGIN + col * (photoW + gap);
+   523→      const py = y + row * (photoH + 30);
+   524→
+   525→      if (py + photoH + 20 > maxRowY) {
+   526→        addNewPage();
+   527→        y = MARGIN + 20;
+   528→      }
+   529→
+   530→      doc.rect(px, py, photoW, photoH).stroke("#999");
+   531→
+   532→      if (photo.filePath && existsSync(photo.filePath)) {
+   533→        try {
+   534→          const imgBuf = readFileSync(photo.filePath);
+   535→          doc.image(imgBuf, px + 1, py + 1, {
+   536→            fit: [photoW - 2, photoH - 2],
+   537→            align: "center",
+   538→            valign: "center",
+   539→          });
+   540→        } catch (err) {
+   541→          doc.fillColor("#999").fontSize(7);
+   542→          doc.text("[Image unreadable]", px + 4, py + photoH / 2 - 5, {
+   543→            width: photoW - 8, align: "center",
+   544→          });
+   545→          doc.fillColor("#000");
+   546→        }
+   547→      } else {
+   548→        doc.fillColor("#999").fontSize(7);
+   549→        doc.text(`[File missing: ${photo.fileName}]`, px + 4, py + photoH / 2 - 5, {
+   550→          width: photoW - 8, align: "center",
+   551→        });
+   552→        doc.fillColor("#000");
+   553→      }
+   554→
+   555→      doc.font("Helvetica").fontSize(7).fillColor("#333");
+   556→      const caption = photo.caption || photo.fileName;
+   557→      doc.text(caption, px, py + photoH + 2, { width: photoW, align: "center" });
+   558→      doc.fillColor("#000");
+   559→    }
+   560→    y += Math.ceil(regularPhotos.length / photosPerRow) * (photoH + 30);
+   561→  }
+   562→
+   563→  // ── SIGN-OFF ──
+   564→  if (y + 80 > maxRowY) {
+   565→    addNewPage();
+   566→    y = MARGIN;
+   567→  }
+   568→  y += 10;
+   569→  doc.font("Helvetica-Bold").fontSize(9).fillColor("#000");
+   570→  doc.text("Sign-off", MARGIN, y);
+   571→  y += 18;
+   572→
+   573→  const signW = (pageW - 2 * MARGIN - 2 * 8) / 3;
+   574→  const signBlocks = [
+   575→    { label: "Inspected by", name: report.inspectorName, dateVal: new Date(report.inspectionDate).toISOString().slice(0, 10) },
+   576→    { label: "Reviewed / Approved by", name: report.approver?.name ?? "—", dateVal: report.approvedAt?.slice(0, 10) ?? "—" },
+   577→    { label: "Revision", name: `Rev ${report.revisionNumber}`, dateVal: report.status },
+   578→  ];
+   579→  for (let i = 0; i < signBlocks.length; i++) {
+   580→    const b = signBlocks[i];
+   581→    const x = MARGIN + i * (signW + 8);
+   582→    doc.font("Helvetica").fontSize(7).fillColor("#666");
+   583→    doc.rect(x, y, signW, 50).stroke("#999");
+   584→    doc.text(b.label, x + 4, y + 4, { width: signW - 8 });
+   585→    doc.fillColor("#000");
+   586→    doc.font("Helvetica-Bold").fontSize(8);
+   587→    doc.text(b.name, x + 4, y + 16, { width: signW - 8 });
+   588→    doc.font("Helvetica").fontSize(7).fillColor("#666");
+   589→    doc.text(`Date / Status: ${b.dateVal}`, x + 4, y + 36, { width: signW - 8 });
+   590→    doc.fillColor("#000");
+   591→  }
+   592→
+   593→  // ── OVERRIDE NOTE ──
+   594→  if (report.overrideReason) {
+   595→    y += 60;
+   596→    doc.font("Helvetica-Bold").fontSize(8).fillColor("#a00");
+   597→    doc.text("OVERRIDE APPLIED (recorded):", MARGIN, y, { width: 200 });
+   598→    doc.font("Helvetica").fillColor("#000").fontSize(7);
+   599→    doc.text(report.overrideReason, MARGIN + 140, y, { width: pageW - 2 * MARGIN - 140 });
+   600→  }
+   601→
+   602→  doc.end();
+   603→}
+   604→
+   605→// ─── TABLE HELPERS ───
+   606→
+   607→function drawTableHeader(doc: Doc, columns: Column[], colWidths: number[], y: number, pageW: number) {
+   608→  const usable = pageW - 2 * MARGIN;
+   609→  doc.rect(MARGIN, y, usable, 36).fill(HEADER_BG).fillColor(HEADER_FG);
+   610→  let x = MARGIN;
+   611→  doc.font("Helvetica-Bold").fontSize(7).fillColor(HEADER_FG);
+   612→  for (let i = 0; i < columns.length; i++) {
+   613→    const c = columns[i];
+   614→    const w = colWidths[i];
+   615→    if (c.vertical) {
+   616→      const lines = c.header.split("\n");
+   617→      const joined = lines.join(" ");
+   618→      doc.save();
+   619→      doc.translate(x + w / 2 + 3, y + 32);
+   620→      doc.rotate(-90);
+   621→      doc.text(joined, 0, 0, { width: 30, align: "left" });
+   622→      doc.restore();
+   623→    } else {
+   624→      const lines = c.header.split("\n");
+   625→      let ly = y + 4;
+   626→      for (const ln of lines) {
+   627→        doc.text(ln, x + 3, ly, { width: w - 6, align: "center" });
+   628→        ly += 9;
+   629→      }
+   630→    }
+   631→    doc.rect(x, y, w, 36).stroke("#1b4d1b");
+   632→    x += w;
+   633→  }
+   634→  doc.fillColor("#000");
+   635→}
+   636→
+   637→function drawMeasurementRow(
+   638→  doc: Doc,
+   639→  m: ThicknessMeasurement,
+   640→  columns: Column[],
+   641→  colWidths: number[],
+   642→  y: number,
+   643→  report: any,
+   644→  customCols: any[],
+   645→) {
+   646→  const rowH = 28;
+   647→  const usable = doc.page.width - 2 * MARGIN;
+   648→  doc.rect(MARGIN, y, usable, rowH).stroke("#999");
+   649→  let x = MARGIN;
+   650→  const cellPad = 3;
+   651→  doc.font("Helvetica").fontSize(8).fillColor("#000");
+   652→
+   653→  for (let i = 0; i < columns.length; i++) {
+   654→    const c = columns[i];
+   655→    const w = colWidths[i];
+   656→    let text = "";
+   657→    switch (c.key) {
+   658→      case "diaInch": text = m.pipeSizeInch; break;
+   659→      case "schedule": text = m.pipeSchedule; break;
+   660→      case "nominal": text = m.nominalThicknessMm !== null ? m.nominalThicknessMm.toFixed(2) : "—"; break;
+   661→      case "component": text = m.componentTypeCode; break;
+   662→      case "pointNo": text = m.pointNo; break;
+   663→      case "north": text = fmtMeasurement(m.northMm, m.northStatus); break;
+   664→      case "east": text = fmtMeasurement(m.eastMm, m.eastStatus); break;
+   665→      case "south": text = fmtMeasurement(m.southMm, m.southStatus); break;
+   666→      case "west": text = fmtMeasurement(m.westMm, m.westStatus); break;
+   667→      case "obsMin": text = m.observedMinimumMm !== null ? m.observedMinimumMm.toFixed(2) : "—"; break;
+   668→      case "findings": text = m.findingsComments ?? ""; break;
+   669→      default:
+   670→        if (c.key.startsWith("custom_")) {
+   671→          const colId = c.key.replace("custom_", "");
+   672→          text = getCustomColumnValue(m, colId);
+   673→        }
+   674→        break;
+   675→    }
+   676→    doc.rect(x, y, w, rowH).stroke("#bbb");
+   677→    const maxW = w - 2 * cellPad;
+   678→    const wrapped = doc.widthOfString(text) > maxW
+   679→      ? text.slice(0, Math.floor((maxW / Math.max(1, doc.widthOfString(text))) * text.length)) + "…"
+   680→      : text;
+   681→    doc.text(wrapped, x + cellPad, y + 9, { width: maxW, align: c.key === "findings" ? "left" : "center" });
+   682→    x += w;
+   683→  }
+   684→}
+   685→
