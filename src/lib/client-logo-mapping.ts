@@ -2,8 +2,10 @@
  * Client Logo Mapping — Single Source of Truth
  * ============================================
  *
- * STATUS: The map below contains exactly 5 verified mappings, one per
- * client logo image the user explicitly uploaded and identified.
+ * STATUS: The map below contains 54 verified mappings (5 original + 49 added
+ * from the "Add remaining client logos" push), one per client logo image the
+ * user explicitly uploaded and identified. Three demo clients and one unused
+ * duplicate file have no mapping.
  *
  * The old hardcoded mapping (aarti_industries.png, jetyre.png, lt.png,
  * tamimi.png, …) was removed in full in the previous cleanup step. The old
@@ -78,6 +80,61 @@ const CLIENT_LOGO_MAP: Record<string, string> = {
   "bharat petroleum corporation ltd":    "Bharat Petroleum Corporation Ltd.png",
   "blue star limited":                   "Blue Star Limited.png",
   "chemplast sanmar limited":            "Chemplast Sanmar Limited.png",
+
+  // ── 43 mappings added from the "Add remaining client logos" push
+  //    (verified exact matches against the Client DB) ──
+  "advanced inspection services":                     "Advanced Inspection Services.png",
+  "chennai petroleum corporation limited":            "Chennai Petroleum Corporation Limited.png",
+  "chidambaram shipcare private limited":             "Chidambaram Shipcare Private Limited.jpg",
+  "citadel engineering company":                      "Citadel Engineering Company.png",
+  "coromandel international limited":                 "Coromandel International Limited.png",
+  "dow chemicals international limited":              "Dow Chemicals International Limited.webp",
+  "global analytical services":                       "Global Analytical Services.jpeg",
+  "grasim industries limited":                        "Grasim Industries Limited.png",
+  "green flame pvt ltd":                              "Green Flame Pvt Ltd.jpeg",
+  "hindustan oil exploration company limited":        "Hindustan Oil Exploration Company Limited.png",
+  "hindustan zinc ltd":                               "Hindustan Zinc Ltd.webp",
+  "indczech engineering pvt ltd":                     "Indczech Engineering Pvt.Ltd.jpeg",
+  "indian additives limited":                         "Indian Additives Limited.jpeg",
+  "indian oil corporation limited":                   "Indian Oil Corporation Limited.png",
+  "itd cementation india limited":                    "ITD Cementation India Limited.png",
+  "jk tyre industries ltd":                           "JK Tyre & Industries Ltd.png",
+  "jordan india fertilizer company l l c":            "Jordan India Fertilizer Company L.L.C.jpeg",
+  "k c surendran":                                    "K.C. Surendran.jpeg",
+  "kamachi industries limited":                       "Kamachi Industries Limited.jpeg",
+  "kothari petrochemicals limited":                   "Kothari Petrochemicals Limited.png",
+  "l t geostructure private limited":                 "L&T GeoStructure Private Limited.png",
+  "laxmi organic industries ltd":                     "Laxmi Organic Industries Ltd.jpg",
+  "madras fertilizers limited":                       "Madras Fertilizers Limited.avif",
+  "malladi drugs pharmaceuticals ltd":                "Malladi Drugs & Pharmaceuticals Ltd.avif",
+  "mogli labs india pvt ltd":                         "Mogli Labs India Pvt Ltd.png",
+  "pidilite industries limited":                      "Pidilite Industries Limited.webp",
+  "raftaar terminals pvt ltd":                        "Raftaar Terminals Pvt Ltd.png",
+  "raj petro specialities private limited":           "Raj Petro Specialities Private Limited.png",
+  "sunfix chemicals":                                 "Sunfix chemicals.jpeg",
+  "supreme petrochem ltd":                            "Supreme Petrochem Ltd.png",
+  "tamilnadu petroproducts limited":                  "Tamilnadu Petroproducts Limited.png",
+  "tata chemicals limited":                           "Tata Chemicals Limited.png",
+  "tata projects limited":                            "Tata Projects Limited.png",
+  "thirumalai chemicals ltd":                         "Thirumalai Chemicals Ltd.png",
+  "tq cert services private limited":                 "TQ Cert Services Private Limited.png",
+  "tuv india pvt ltd":                                "TUV India Pvt Ltd.jpeg",
+  "ultramarine pigments ltd":                         "Ultramarine & Pigments Ltd.png",
+  "ultramarine specialty chemicals limited":          "Ultramarine Specialty Chemicals Limited.png",
+  "urc construction pvt ltd":                         "URC Construction Pvt Ltd.svg",
+  "v gazolution":                                     "V-Gazolution.jpeg",
+  "vaaman engineers india limited":                   "Vaaman Engineers India Limited.jpeg",
+  "valspar india coatings corporation private limited": "Valspar (India) Coatings Corporation Private Limited.png",
+  "vedanta aluminium metal limited":                  "Vedanta Aluminium Metal Limited.png",
+
+  // ── 6 manually verified pairs (minor spelling variants between the
+  //    DB client name and the uploaded logo filename) ──
+  "abdallah i al tamimi industrial services co":      "Abdullah I. Altamimi industrial services Co.jpeg",
+  "ieqs technologies private limited":                "IEQS.jpeg",
+  "kiran global chems limited":                       "KIRAN GLOBAL CHEMS LTD.jpeg",
+  "larsen toubro limited construction":               "Larsen & Toubro constructions.png",
+  "pcbl limited":                                     "PCBL.png",
+  "pro india engineering pvt ltd":                    "Prou India Engineering Pvt Ltd.jpeg",
 };
 
 /**

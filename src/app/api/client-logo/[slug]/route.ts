@@ -31,11 +31,12 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ slug: strin
 
   const { slug } = await ctx.params;
 
-  // Sanitize the slug — allow alphanumeric, dots, dashes, underscores, and
-  // spaces (filenames like "Aarti Industries Ltd.png" contain spaces).
+  // Sanitize the slug — allow alphanumeric, dots, dashes, underscores,
+  // spaces, ampersands and parentheses (filenames like
+  // "JK Tyre & Industries Ltd.png" or "Valspar (India) ....png" contain them).
   // Path separators (/ \) and `..` traversal are still blocked because
   // neither `/` nor `\` is in the allowed character class.
-  if (!/^[a-zA-Z0-9._ \-]+$/.test(slug)) {
+  if (!/^[a-zA-Z0-9._ &()\-]+$/.test(slug)) {
     return NextResponse.json({ error: "Invalid slug" }, { status: 400 });
   }
 
@@ -50,6 +51,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ slug: strin
   const mime = ext === "jpg" || ext === "jpeg" ? "image/jpeg"
     : ext === "gif" ? "image/gif"
     : ext === "webp" ? "image/webp"
+    : ext === "svg" ? "image/svg+xml"
     : `image/${ext}`;
 
   return new NextResponse(buf, {
