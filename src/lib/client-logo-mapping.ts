@@ -1,15 +1,45 @@
 /**
- * Client Logo Mapping — Single Source of Truth
- * ============================================
+ * Client Logo Mapping — Single Source of Truth (CLEAN SLATE)
+ * =========================================================
  *
- * IMPORTANT: This module is the ONLY place where client company names are
- * mapped to logo files. It is imported by:
- *   - the on-screen review / PDF preview (pipeline-report-detail-view.tsx)
- *   - the downloaded PDF generator (src/lib/pdf/pipeline-report.ts)
+ * STATUS: The static client-name → logo-file map below is INTENTIONALLY EMPTY.
  *
- * Design rules (DO NOT violate):
- *   1. The map key is the **normalized** form of an EXACT client name as it
- *      appears in the database — never a keyword/substring. We match the
+ * The previous hardcoded mapping (aarti_industries.png, jetyre.png, lt.png,
+ * tamimi.png, …) has been removed in full. The old index-based / upload-order
+ * based / array-position based matching logic that previously lived here is
+ * GONE. Nothing elsewhere in the codebase falls back to another company's
+ * logo anymore — when no entry exists below, `resolveClientLogo()` returns
+ * `null` and every caller renders a clean placeholder.
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * HOW THE NEW MAPPING WILL BE ADDED
+ * ─────────────────────────────────────────────────────────────────────────
+ * The user will provide a fresh set of logo image files, each with a unique,
+ * clearly identifiable filename (e.g. `raj-petro.png`, `raftaar-terminals.png`,
+ * `thirumalai-chemicals.png`, `jk-tyre.png`, `vaaman-engineers.png`,
+ * `valspar.png`, `vedanta-aluminium.png`).
+ *
+ * Those files will be dropped into `CLIENT_LOGO_DIR` (see constant below) and
+ * the mapping will be filled in here, one line per client, using the form:
+ *
+ *     "<normalized exact DB client name>": "<exact-logo-filename>",
+ *
+ * The mapping uses ONLY:
+ *   - exact client identifier (the normalized exact client name), and
+ *   - exact logo filename.
+ *
+ * The mapping does NOT use:
+ *   - array position
+ *   - array index
+ *   - upload order
+ *   - alphabetical position
+ *   - random / fuzzy fallback
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * DESIGN RULES (must be respected when filling the map back in)
+ * ─────────────────────────────────────────────────────────────────────────
+ *   1. The map key is the NORMALIZED form of an EXACT client name as it
+ *      appears in the database — never a keyword or substring. We match the
  *      whole company name, not part of it.
  *   2. Logo files are referenced by exact filename only — no array indices,
  *      no upload order, no positional lookup.
@@ -34,76 +64,29 @@ export const CLIENT_LOGO_DIR =
 /**
  * Explicit map: normalized client name → logo filename.
  *
- * Every key below is `normalizeClientName(<exact DB client name>)`.
- * Every value is a real file that exists in CLIENT_LOGO_DIR.
- *
- * Clients not listed here (e.g. demo clients with no real logo) intentionally
- * have NO entry — `resolveClientLogo()` returns null for them so the UI shows
- * a placeholder instead of an unrelated company's logo.
+ * EMPTY by design. Populate one entry per client AFTER the user uploads the
+ * new uniquely-named logo images. Until then, every lookup returns `null`
+ * and the UI shows a placeholder.
  */
 const CLIENT_LOGO_MAP: Record<string, string> = {
-  // ── A ──
-  "aarti industries ltd": "aarti_industries.png",
-  "abdallah i al tamimi industrial services co": "tamimi.png",
-  "advanced inspection services": "advanced_inspection.png",
-  "atul ltd": "atul.png",
-
-  // ── B ──
-  "bharat petroleum corporation ltd": "bharat_petroleum.png",
-  "blue star limited": "blue_star.png",
-
-  // ── C ──
-  "chennai petroleum corporation limited": "cpcl.png",
-  "chemplast sanmar limited": "sanmar.png",
-  "chidambaram shipcare private limited": "chidambaram_shipcare.png",
-  "citadel engineering company": "citadel_engineering.png",
-  "coromandel international limited": "coromandel.png",
-
-  // ── D ──
-  "dow chemicals international limited": "dow.png",
-
-  // ── G ──
-  "global analytical services": "global_analytical.png",
-  "grasim industries limited": "aditya_birla_grasim.png",
-
-  // ── H ──
-  "hindustan zinc ltd": "hindustan_zinc.png",
-
-  // ── I ──
-  "itd cementation india limited": "it_cem.png",
-
-  // ── J ──
-  "jk tyre industries ltd": "jetyre.png",
-
-  // ── K ──
-  "kothari petrochemicals limited": "kothari_petrochemicals.png",
-
-  // ── L ──
-  // Note: the `&` in "L&T" normalizes to a SPACE (not removed), so the
-  // normalized form is "l t geostructure private limited" — three separate
-  // words: "l", "t", "geostructure". Keep the key exactly like that.
-  "l t geostructure private limited": "lt.png",
-  "larsen toubro limited construction": "lt.png",
-
-  // ── P ──
-  "pcbl limited": "pcbl_chemical.png",
-  "pidilite industries limited": "pidilite.png",
-
-  // ── R ──
-  "raftaar terminals pvt ltd": "raftaar_terminals.png",
-  "raj petro specialities private limited": "raj_petro.png",
-
-  // ── T ──
-  "tata chemicals limited": "tata.png",
-  "tata projects limited": "tata.png",
-  "thirumalai chemicals ltd": "thirumalai_chemicals.png",
-  "tq cert services private limited": "tq_cert.png",
-  "tuv india pvt ltd": "tuv_india.png",
-
-  // ── V ──
-  "vaaman engineers india limited": "vaaman_engineers.png",
-  "valspar india coatings corporation private limited": "valspar.png",
-  "vedanta aluminium metal limited": "vedanta_aluminium.png",
+  // ─────────────────────────────────────────────────────────────────────
+  // CLEAN SLATE — no entries.
+  //
+  // Add new entries here, one per line, in the form:
+  //
+  //   "<normalized exact client name>": "<exact-logo-filename>",
+  //
+  // Example (illustrative only — DO NOT assume these are correct until the
+  // user provides the real filenames):
+  //
+  //   "raj petro specialities private limited": "raj-petro.png",
+  //   "raftaar terminals pvt ltd":             "raftaar-terminals.png",
+  //   "thirumalai chemicals ltd":              "thirumalai-chemicals.png",
+  //   "jk tyre industries ltd":                "jk-tyre.png",
+  //   "vaaman engineers india limited":        "vaaman-engineers.png",
+  //   "valspar india coatings corporation private limited": "valspar.png",
+  //   "vedanta aluminium metal limited":       "vedanta-aluminium.png",
+  // ─────────────────────────────────────────────────────────────────────
 };
 
 /**
@@ -126,8 +109,10 @@ export function normalizeClientName(name: string): string {
 
 /**
  * Resolve a client name to its logo filename, or `null` if no exact mapping
- * exists. Callers MUST handle the `null` case by showing a placeholder —
- * never by substituting another company's logo.
+ * exists. With the map currently empty this always returns `null`.
+ *
+ * Callers MUST handle the `null` case by showing a placeholder — never by
+ * substituting another company's logo.
  */
 export function resolveClientLogo(clientName: string): string | null {
   const key = normalizeClientName(clientName);

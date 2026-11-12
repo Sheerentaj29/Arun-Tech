@@ -536,8 +536,9 @@ export async function generatePipelineReportPdf(
   //   Priority:
   //     1. If the client has its own uploaded logo (logoPath) and the file
   //        exists, use that — it's their real brand asset.
-  //     2. Else, look up the normalized-name → logo-file map and join
-  //        with the logos directory.
+  //     2. Else, look up the normalized-name → logo-file map (currently
+  //        EMPTY — clean slate. Will be repopulated one entry per client
+  //        after the user uploads the new uniquely-named logo images).
   //     3. Else, leave it as null — the placeholder text will be drawn
   //        instead. NEVER substitute another company's logo.
   let clientLogoPath = report.client.logoPath ?? null;

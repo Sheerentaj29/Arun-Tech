@@ -1,12 +1,18 @@
 // GET /api/client-logo/[slug]
 // Serves a client logo image file from /storage/logos/clients/{slug}.
-// The slug is the exact filename (e.g., "lt.png", "jetyre.png") returned
-// by `resolveClientLogo()` in @/lib/client-logo-mapping.ts — the single
-// source of truth for the client-name → logo-file mapping.
+// The slug is the exact logo filename (e.g. "raj-petro.png",
+// "raftaar-terminals.png") that the mapping in @/lib/client-logo-mapping.ts
+// connects to a specific client name.
 //
-// The frontend calls this endpoint with the slug returned by the resolver
-// to render the right-hand client logo via AuthImage, without needing
-// logoPath to be set on the Client row in the database.
+// The mapping in @/lib/client-logo-mapping.ts is currently EMPTY (clean
+// slate) — it will be repopulated one entry per client after the user
+// uploads the new uniquely-named logo images. Until then this endpoint
+// simply returns 404 for any slug, which is the desired behaviour: no
+// client logo is shown for any client, only a clean placeholder.
+//
+// The frontend uses this endpoint to render the right-hand client logo via
+// AuthImage when `resolveClientLogo()` returns a non-null filename, without
+// needing logoPath to be set on the Client row in the database.
 //
 // Authentication: requires a valid session (cookie or Bearer token).
 

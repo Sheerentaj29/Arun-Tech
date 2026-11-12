@@ -620,10 +620,15 @@ export function PipelineReportDetailView() {
         </div>
 
         {/* Logo section — Aruntech (left, permanent) + Client (right, dynamic)
-            The client logo is resolved using the logo mapping file based on
-            the client name. Uses AuthImage for cross-origin auth support.
-            Logo containers use flexbox with object-fit: contain so logos
-            of any aspect ratio (square, wide, tall) are properly scaled
+            The client logo is resolved via @/lib/client-logo-mapping, which is
+            the single source of truth for the client-name → logo-file mapping.
+            The map is currently EMPTY (clean slate) — it will be repopulated
+            one entry per client after the user uploads the new uniquely-named
+            logo images. Until then `resolveClientLogo()` returns null for
+            every client and a clean placeholder is shown. No other company's
+            logo is ever substituted. Uses AuthImage for cross-origin auth
+            support. Logo containers use flexbox with object-fit: contain so
+            logos of any aspect ratio (square, wide, tall) are properly scaled
             and centered without distortion. */}
         <div className="mb-4 flex items-center justify-between">
           {/* Left: Aruntech logo (permanent) */}
@@ -646,9 +651,11 @@ export function PipelineReportDetailView() {
               // Resolve the client logo using the SHARED, EXACT-match
               // resolver in @/lib/client-logo-mapping.
               //   Priority:
-              //     1. If the client has its own uploaded logo (logoPath),
-              //        use that — it's their real brand asset.
-              //     2. Else, look up the normalized-name → logo-file map.
+              //     1. If the client has a static-map entry (currently NONE —
+              //        the map is empty pending the user's new logo uploads),
+              //        serve the mapped file via /api/client-logo/[slug].
+              //     2. Else, if the client has its own uploaded logo
+              //        (logoPath), use that — it's their real brand asset.
               //     3. Else, show a text placeholder — NEVER another
               //        company's logo.
               const mappedLogoFile = resolveClientLogo(report.client.name);

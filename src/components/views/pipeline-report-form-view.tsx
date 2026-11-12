@@ -2240,6 +2240,9 @@ export function PipelineReportFormView() {
 
           Resolution order:
             1. resolveClientLogo(selectedClient.name)  → static map
+               (currently EMPTY — clean slate. Will be filled one entry
+                per client after the user uploads the new uniquely-named
+                logo images.)
             2. selectedClient.logoPath                 → DB-uploaded logo
             3. placeholder text — NEVER another company's logo
       */}
@@ -2267,6 +2270,9 @@ export function PipelineReportFormView() {
                 </span>
               );
             }
+            // 1) Static map (currently empty — clean slate).
+            // 2) Per-client DB-uploaded logoPath.
+            // 3) Placeholder — never another company's logo.
             const mappedLogoFile = resolveClientLogo(selectedClient.name);
             if (mappedLogoFile) {
               return (
