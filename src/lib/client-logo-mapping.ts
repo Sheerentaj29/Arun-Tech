@@ -1,26 +1,23 @@
 /**
- * Client Logo Mapping — Single Source of Truth (CLEAN SLATE)
- * =========================================================
+ * Client Logo Mapping — Single Source of Truth
+ * ============================================
  *
- * STATUS: The static client-name → logo-file map below is INTENTIONALLY EMPTY.
+ * STATUS: The map below contains exactly 5 verified mappings, one per
+ * client logo image the user explicitly uploaded and identified.
  *
- * The previous hardcoded mapping (aarti_industries.png, jetyre.png, lt.png,
- * tamimi.png, …) has been removed in full. The old index-based / upload-order
- * based / array-position based matching logic that previously lived here is
- * GONE. Nothing elsewhere in the codebase falls back to another company's
- * logo anymore — when no entry exists below, `resolveClientLogo()` returns
- * `null` and every caller renders a clean placeholder.
+ * The old hardcoded mapping (aarti_industries.png, jetyre.png, lt.png,
+ * tamimi.png, …) was removed in full in the previous cleanup step. The old
+ * index-based / upload-order-based / array-position-based matching logic
+ * that previously lived here is GONE. Nothing elsewhere in the codebase
+ * falls back to another company's logo — when no entry exists below,
+ * `resolveClientLogo()` returns `null` and every caller renders a clean
+ * placeholder.
  *
  * ─────────────────────────────────────────────────────────────────────────
- * HOW THE NEW MAPPING WILL BE ADDED
+ * HOW ADDITIONAL MAPPINGS ARE ADDED
  * ─────────────────────────────────────────────────────────────────────────
- * The user will provide a fresh set of logo image files, each with a unique,
- * clearly identifiable filename (e.g. `raj-petro.png`, `raftaar-terminals.png`,
- * `thirumalai-chemicals.png`, `jk-tyre.png`, `vaaman-engineers.png`,
- * `valspar.png`, `vedanta-aluminium.png`).
- *
- * Those files will be dropped into `CLIENT_LOGO_DIR` (see constant below) and
- * the mapping will be filled in here, one line per client, using the form:
+ * When the user uploads more logo images, drop each file into
+ * `CLIENT_LOGO_DIR` (see constant below) and add one line here in the form:
  *
  *     "<normalized exact DB client name>": "<exact-logo-filename>",
  *
@@ -36,7 +33,7 @@
  *   - random / fuzzy fallback
  *
  * ─────────────────────────────────────────────────────────────────────────
- * DESIGN RULES (must be respected when filling the map back in)
+ * DESIGN RULES (must be respected when adding entries)
  * ─────────────────────────────────────────────────────────────────────────
  *   1. The map key is the NORMALIZED form of an EXACT client name as it
  *      appears in the database — never a keyword or substring. We match the
@@ -64,29 +61,23 @@ export const CLIENT_LOGO_DIR =
 /**
  * Explicit map: normalized client name → logo filename.
  *
- * EMPTY by design. Populate one entry per client AFTER the user uploads the
- * new uniquely-named logo images. Until then, every lookup returns `null`
- * and the UI shows a placeholder.
+ * Each key is `normalizeClientName(<exact DB client name>)`.
+ * Each value is the exact filename of a logo image that physically exists
+ * in CLIENT_LOGO_DIR. Only the 5 logos the user explicitly uploaded and
+ * verified are listed here — no guessed, fuzzy, or leftover entries from
+ * the old (deleted) mapping.
+ *
+ * Filenames are taken verbatim from the user's upload (with the accidental
+ * leading space stripped). Internal spaces are preserved and the
+ * /api/client-logo/[slug] endpoint is configured to accept them.
  */
 const CLIENT_LOGO_MAP: Record<string, string> = {
-  // ─────────────────────────────────────────────────────────────────────
-  // CLEAN SLATE — no entries.
-  //
-  // Add new entries here, one per line, in the form:
-  //
-  //   "<normalized exact client name>": "<exact-logo-filename>",
-  //
-  // Example (illustrative only — DO NOT assume these are correct until the
-  // user provides the real filenames):
-  //
-  //   "raj petro specialities private limited": "raj-petro.png",
-  //   "raftaar terminals pvt ltd":             "raftaar-terminals.png",
-  //   "thirumalai chemicals ltd":              "thirumalai-chemicals.png",
-  //   "jk tyre industries ltd":                "jk-tyre.png",
-  //   "vaaman engineers india limited":        "vaaman-engineers.png",
-  //   "valspar india coatings corporation private limited": "valspar.png",
-  //   "vedanta aluminium metal limited":       "vedanta-aluminium.png",
-  // ─────────────────────────────────────────────────────────────────────
+  // ── 5 mappings (verified exact matches against the Client DB) ──
+  "aarti industries ltd":                "Aarti Industries Ltd.png",
+  "atul ltd":                            "Atul Ltd.png",
+  "bharat petroleum corporation ltd":    "Bharat Petroleum Corporation Ltd.png",
+  "blue star limited":                   "Blue Star Limited.png",
+  "chemplast sanmar limited":            "Chemplast Sanmar Limited.png",
 };
 
 /**
