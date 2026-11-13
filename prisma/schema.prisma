@@ -548,6 +548,54 @@ model PipelineInspection {
   //      "probeAngle": "...", "probeFrequency": "...", "observationResult": "..." }]
   vwsDetailRows             String?
 
+  // ─── VESSEL UT THICKNESS MEASUREMENT FIELDS ───
+  // Populated when reportType = VESSEL_UTM. Completely separate from the
+  // Piping Thickness Measurement (reportType = PIPELINE_THICKNESS, which
+  // uses the ThicknessMeasurement child table and stays untouched) and
+  // from the Vessel Weld Scan vws* fields above. The selected vessel
+  // orientation (vesselOrientation = HORIZONTAL | VERTICAL) determines
+  // the shape of the shell readings rows.
+  // Parameters — UT Thickness Measurement Parameters form:
+  vutmDateOfExamination     DateTime? // Date of Examination (calendar picker)
+  vutmTestingStandard       String?  // Testing Standard
+  vutmAcceptanceCriteria    String?  // Acceptance Criteria
+  vutmUtProcedure           String?  // UT Procedure
+  vutmEquipmentMake         String?  // Equipment Make
+  vutmEquipmentModel        String?  // Equipment Model
+  vutmEquipmentSerialNo     String?  // Equipment Serial Number
+  vutmCalibrationDueDate    DateTime? // Calibration Due Date (calendar picker)
+  vutmCableLengthAndType    String?  // Cable Length and Type
+  // Longitudinal Wave (0°) probe rows — repeatable. JSON array:
+  //   [{ "frequency": "...", "probeSize": "...", "serialNo": "..." }]
+  vutmLwProbeRows           String?
+  vutmTypeOfCrystal         String?  // Type of Crystal
+  vutmCalibrationBlock      String?  // Calibration Block Dimension / MOC
+  vutmSurfaceTemperature    String?  // Surface Temperature (e.g. "32 °C")
+  vutmMethod                String?  // Method
+  vutmCouplant              String?  // Couplant
+  vutmSurfacePreparation    String?  // Surface Preparation
+  vutmSurfaceFinish         String?  // Surface Finish
+  // Readings rows — Minimum Measured Thickness is always recomputed from
+  // the spot readings (never trusted from the client payload).
+  // Shell rows for HORIZONTAL vessels — JSON array:
+  //   [{ "moc": "...", "componentType": "Shell-1", "componentId": "...",
+  //      "nominalThickness": "...",
+  //      "c12": ["s1","s2","s3","s4"], "c3": [...], "c6": [...], "c9": [...] }]
+  // Shell rows for VERTICAL vessels — JSON array:
+  //   [{ "moc": "...", "componentType": "Shell-1", "direction": "East",
+  //      "nominalThickness": "...", "spot1": "...", "spot2": "...",
+  //      "spot3": "...", "spot4": "..." }]
+  vutmShellRows             String?
+  // Dish-end rows (Top Dish / Bottom Dish, direction-based). JSON array:
+  //   [{ "component": "Top Dish", "direction": "East",
+  //      "spot1": "...", "spot2": "...", "spot3": "...", "spot4": "..." }]
+  vutmDishRows              String?
+  // Nozzle rows. JSON array:
+  //   [{ "nozzleId": "N1", "nominalThickness": "...", "size": "...",
+  //      "schedule": "...", "moc": "...", "spot1": "...", "spot2": "...",
+  //      "spot3": "...", "spot4": "..." }]
+  vutmNozzleRows            String?
+
   isDemo                   Boolean  @default(false)
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt

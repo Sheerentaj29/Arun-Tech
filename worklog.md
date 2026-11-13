@@ -390,3 +390,106 @@ Stage Summary:
   and photographs in preview / review / PDF.
 - Kept VMPT-COR-ENN-101 (approved) as a working Vessel MPT demo report;
   API-only test reports were deleted.
+
+---
+Task ID: 15
+Agent: main
+Task: Implement VESSEL → UT Thickness Measurement (VESSEL_UTM) with mandatory
+Horizontal/Vertical orientation selection — orientation-specific readings
+tables, dish-end and nozzle measurements, auto Minimum Measured Thickness,
+photographs, and PDF output. No changes to Piping or the other Vessel modules.
+
+Work Log:
+- Selector (pipeline-report-type-selector-view.tsx): Vessel → UT Thickness
+  Measurement card is now ACTIVE (emerald, type VESSEL_UTM) and requires the
+  mandatory Vessel Orientation step (Horizontal Vessel | Vertical Vessel) —
+  added to VESSEL_ORIENTATION_REQUIRED alongside VESSEL_DPT / VESSEL_MPT
+  (their existing orientation flow preserved untouched). VESSEL_WELD_SCAN and
+  the new "Visual Inspection (Coming soon)" card deliberately get NO
+  orientation step. Breadcrumb label map updated; VESSEL_VISUAL is a reserved
+  type the API refuses to create.
+- Schema (additive): PipelineInspection.vutm* fields — UT Thickness
+  Measurement Parameters (Date of Examination, Testing Standard, Acceptance
+  Criteria, UT Procedure, Equipment Make/Model/Serial No., Calibration Due
+  Date, Cable Length and Type, repeatable Longitudinal Wave 0° probe rows
+  JSON, Type of Crystal, Calibration Block Dimension / MOC, Surface
+  Temperature, Method, Couplant, Surface Preparation, Surface Finish) +
+  three readings JSON columns: vutmShellRows (orientation-specific shape),
+  vutmDishRows, vutmNozzleRows. prisma db push (no data loss) + generate.
+- New shared module src/lib/vutm-rows.ts: vutmMinOfSpots (Minimum Measured
+  Thickness = min of the numeric spot readings, preserving the original text
+  of the minimum; blank/non-numeric spots ignored), normalizeVutmRows
+  (server-side validation + min recomputation — never trusted from the
+  client), parseVutmRows, direction clamping (E/W/N/S), suggestion lists.
+- API: POST/PUT accept VESSEL_UTM + vesselOrientation (HORIZONTAL|VERTICAL)
+  + all vutm* fields; rows normalized server-side (min recomputed, clock
+  arrays padded to 4, directions normalized). Submit route requires ≥1
+  row across shell/dish/nozzle. PUT preserves untouched fields on partial
+  updates; horizontal/vertical data are fully separated per report.
+- Form view: VESSEL_UTM REPORT_TYPE_INFO entry, vutm* header fields +
+  defaults, row types/parsers, local row states + add/update/remove
+  operations (orientation-aware shell rows: clock positions c12/c3/c6/c9
+  each with Spot 1–4 for HORIZONTAL; direction + Spot 1–4 rows for
+  VERTICAL), repeatable LW-probe grid ops, edit-load, payload serialization,
+  Step-2 warning, vessel wording on Step 1. Step 2 renders:
+    A. UT Thickness Measurement Parameters (grouped two-column table,
+       emerald accent + repeatable "Probe Details — Longitudinal Wave (0°)"
+       grid with Add/Remove rows).
+    B. UT Thickness Measurement Readings — orientation-specific:
+       HORIZONTAL → | MOC | Component Type | Component ID | Nominal | 12/3/6/9
+       O'clock (each Spot 1–4) | Minimum | with two-row grouped header;
+       VERTICAL → | MOC | Component Type | Direction | Nominal | Spot 1–4 |
+       Minimum |. Components: Shell, Shell-1, Shell-2, Dish End, Top Dish,
+       Bottom Dish, Nozzle (+ custom); directions East/West/North/South.
+       Plus dedicated Dish End Measurements table (Top Dish / Bottom Dish /
+       Dish End × E/W/N/S, Spot 1–4) and Nozzle Measurements table
+       (Nozzle ID N1–N4 or custom | Nominal | Size | Schedule | MOC |
+       Spot 1–4 | Minimum). Minimum Measured Thickness is read-only and
+       recalculates on every keystroke.
+- Detail (review) view: VESSEL_UTM block — Equipment: Vessel + orientation
+  badges, grouped Parameters table, LW probe grid, orientation-specific
+  readings tables (min recomputed from stored spots), dish/nozzle tables;
+  cover grid uses vessel wording + "Vessel Orientation" row; photo gallery
+  heading is "Photographs – During UT Thickness Measurement" for this type
+  (all other types keep their headings).
+- PDF generator (VESSEL_UTM): title "VESSEL UT THICKNESS MEASUREMENT
+  REPORT", no-drawings list, cover vessel wording + orientation row, body =
+  "Equipment Type: Vessel / Orientation: …" line → Parameters (grouped) →
+  Probe Details grid → UT Thickness Measurement Readings (orientation-
+  specific shell table with repeated headers on page breaks + dish + nozzle
+  tables; min recomputed via vutmMinOfSpots) → photo gallery with the UTM
+  heading. Landscape/portrait column sets both supported.
+- List view + admin/employee dashboards: "Vessel UT Thickness" badge.
+- Verified via API test suite (scripts/test-vessel-utm.mjs, 55/55 passed):
+  horizontal min of 16 spots (10.8), vertical direction rows + lowercase
+  direction normalization, custom nozzle IDs, non-numeric spots ignored,
+  partial-PUT min recompute (9.8) + field preservation, horizontal/vertical
+  data separation, empty-row submit rejected (400), PDFs generated for both
+  orientations (visual check: cover, parameters, probe grid, clock-position
+  /direction readings, dish + nozzle tables all correct), piping regression
+  (existing PIPELINE_THICKNESS reports keep their measurement rows + PDF
+  unchanged; new piping report NOT given orientation), VESSEL_WELD_SCAN
+  unchanged (no orientation, own data intact), VESSEL_VISUAL rejected.
+- Verified in browser (agent-browser): Vessel selector shows 5 cards
+  (UT Thickness active; Visual Inspection coming soon, not clickable);
+  UT Thickness → mandatory orientation step; Weld Scan opens directly with
+  NO orientation; piping flow still exactly 4 options without orientation;
+  full horizontal flow: form → Step 2 parameters + readings → live min
+  auto-calc (10.8 / 11.8 / 7.6) → Save Draft → review page shows all
+  sections + "Photographs – During UT Thickness Measurement" with uploaded
+  photo → Edit reloads saved rows with mins intact; existing Vessel MPT
+  report (VMPT-COR-ENN-101) opens unchanged.
+
+Stage Summary:
+- Vessel → UT Thickness Measurement works end-to-end for both orientations:
+  mandatory orientation selection, parameters form (all fields typeable,
+  nothing hardcoded), orientation-specific readings tables with dynamic
+  add/remove rows and auto Minimum Measured Thickness (read-only), dish-end
+  directional measurements, unrestricted nozzle rows, photos after the
+  readings, and a PDF that changes layout with the orientation and displays
+  the selected orientation.
+- Kept untouched: Piping workflow + Piping UT Thickness Measurement,
+  Vessel DPT / MPT / Weld Scan, approval workflow, logos, dashboards.
+  No Equipment Master, no UT Report, no duplicate modules re-introduced.
+- Test reports created during verification were deleted; VUTM demo data is
+  not left in the database (the user can create real reports via the UI).

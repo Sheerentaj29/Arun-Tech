@@ -1,0 +1,562 @@
+     1→  4945→      {step === 2 && header.reportType === "VESSEL_WELD_SCAN" && (
+     2→  4946→      <>
+     3→  4947→      {/* ═══ A. WELD SCAN TESTING PARAMETERS ═══
+     4→  4948→          Clean two-column table layout grouped into General Information /
+     5→  4949→          Equipment Details / Cable Details / Calibration Details / Other
+     6→  4950→          Testing Parameters, plus the fixed 4-probe grid. Every value is
+     7→  4951→          typed by the user — nothing is prefilled from any sample. */}
+     8→  4952→      <Card>
+     9→  4953→        <CardHeader>
+    10→  4954→          <CardTitle className="text-base flex items-center gap-2">
+    11→  4955→            <Zap className="h-4 w-4 text-cyan-700" />
+    12→  4956→            Weld Scan Testing Parameters
+    13→  4957→          </CardTitle>
+    14→  4958→          <CardDescription>
+    15→  4959→            Record the weld scan (ultrasonic) testing parameters for this
+    16→  4960→            vessel examination. All fields are editable — type the value as
+    17→  4961→            it applies to this examination. Leave a field blank if it is not
+    18→  4962→            applicable.
+    19→  4963→          </CardDescription>
+    20→  4964→        </CardHeader>
+    21→  4965→        <CardContent className="p-0 space-y-0">
+    22→  4966→          <div className="overflow-x-auto">
+    23→  4967→            <table className="w-full text-sm border-collapse">
+    24→  4968→              <tbody>
+    25→  4969→                {/* ─── General Information ─── */}
+    26→  4970→                <tr className="bg-cyan-800 text-white">
+    27→  4971→                  <td colSpan={2} className="border border-cyan-900 px-3 py-2 font-semibold text-xs tracking-wide">
+    28→  4972→                    General Information
+    29→  4973→                  </td>
+    30→  4974→                </tr>
+    31→  4975→                <tr className="border-b border-zinc-200">
+    32→  4976→                  <td className="bg-cyan-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/3">
+    33→  4977→                    Date of Examination
+    34→  4978→                  </td>
+    35→  4979→                  <td className="px-2 py-1.5">
+    36→  4980→                    <Input
+    37→  4981→                      type="date"
+    38→  4982→                      className="h-8 text-sm"
+    39→  4983→                      value={header.vwsDateOfExamination}
+    40→  4984→                      onChange={(e) => updateHeader("vwsDateOfExamination", e.target.value)}
+    41→  4985→                    />
+    42→  4986→                  </td>
+    43→  4987→                </tr>
+    44→  4988→                {([
+    45→  4989→                  ["Testing Standard", "vwsTestingStandard", "e.g. ASME Section V 2023, Article 4"],
+    46→  4990→                  ["Acceptance Criteria", "vwsAcceptanceCriteria", "e.g. ASME Section VIII Div. 1, Appx. 12"],
+    47→  4991→                  ["UT Procedure", "vwsUtProcedure", "e.g. Procedure / document number"],
+    48→  4992→                ] as const).map(([label, fieldKey, placeholder]) => (
+    49→  4993→                  <tr key={fieldKey} className="border-b border-zinc-200">
+    50→  4994→                    <td className="bg-cyan-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+    51→  4995→                      {label}
+    52→  4996→                    </td>
+    53→  4997→                    <td className="px-2 py-1.5">
+    54→  4998→                      <Input
+    55→  4999→                        className="h-8 text-sm"
+    56→  5000→                        value={header[fieldKey]}
+    57→  5001→                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+    58→  5002→                        placeholder={placeholder}
+    59→  5003→                      />
+    60→  5004→                    </td>
+    61→  5005→                  </tr>
+    62→  5006→                ))}
+    63→  5007→
+    64→  5008→                {/* ─── Equipment Details ─── */}
+    65→  5009→                <tr className="bg-cyan-800 text-white">
+    66→  5010→                  <td colSpan={2} className="border border-cyan-900 px-3 py-2 font-semibold text-xs tracking-wide">
+    67→  5011→                    Equipment Details
+    68→  5012→                  </td>
+    69→  5013→                </tr>
+    70→  5014→                {([
+    71→  5015→                  ["Equipment Make", "vwsEquipmentMake", "e.g. Olympus / Krautkramer / Sonatest"],
+    72→  5016→                  ["Equipment Model", "vwsEquipmentModel", "e.g. EPOCH 650 / USM Go"],
+    73→  5017→                  ["Equipment Serial Number", "vwsEquipmentSerialNo", "Instrument serial number"],
+    74→  5018→                ] as const).map(([label, fieldKey, placeholder]) => (
+    75→  5019→                  <tr key={fieldKey} className="border-b border-zinc-200">
+    76→  5020→                    <td className="bg-cyan-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+    77→  5021→                      {label}
+    78→  5022→                    </td>
+    79→  5023→                    <td className="px-2 py-1.5">
+    80→  5024→                      <Input
+    81→  5025→                        className="h-8 text-sm"
+    82→  5026→                        value={header[fieldKey]}
+    83→  5027→                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+    84→  5028→                        placeholder={placeholder}
+    85→  5029→                      />
+    86→  5030→                    </td>
+    87→  5031→                  </tr>
+    88→  5032→                ))}
+    89→  5033→                <tr className="border-b border-zinc-200">
+    90→  5034→                  <td className="bg-cyan-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+    91→  5035→                    Calibration Due Date
+    92→  5036→                  </td>
+    93→  5037→                  <td className="px-2 py-1.5">
+    94→  5038→                    <Input
+    95→  5039→                      type="date"
+    96→  5040→                      className="h-8 text-sm"
+    97→  5041→                      value={header.vwsCalibrationDueDate}
+    98→  5042→                      onChange={(e) => updateHeader("vwsCalibrationDueDate", e.target.value)}
+    99→  5043→                    />
+   100→  5044→                  </td>
+   101→  5045→                </tr>
+   102→  5046→
+   103→  5047→                {/* ─── Cable Details ─── */}
+   104→  5048→                <tr className="bg-cyan-800 text-white">
+   105→  5049→                  <td colSpan={2} className="border border-cyan-900 px-3 py-2 font-semibold text-xs tracking-wide">
+   106→  5050→                    Cable Details
+   107→  5051→                  </td>
+   108→  5052→                </tr>
+   109→  5053→                {([
+   110→  5054→                  ["Cable Length", "vwsCableLength", "e.g. 2.0 meters"],
+   111→  5055→                  ["Cable Type", "vwsCableType", "e.g. Coaxial"],
+   112→  5056→                ] as const).map(([label, fieldKey, placeholder]) => (
+   113→  5057→                  <tr key={fieldKey} className="border-b border-zinc-200">
+   114→  5058→                    <td className="bg-cyan-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+   115→  5059→                      {label}
+   116→  5060→                    </td>
+   117→  5061→                    <td className="px-2 py-1.5">
+   118→  5062→                      <Input
+   119→  5063→                        className="h-8 text-sm"
+   120→  5064→                        value={header[fieldKey]}
+   121→  5065→                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+   122→  5066→                        placeholder={placeholder}
+   123→  5067→                      />
+   124→  5068→                    </td>
+   125→  5069→                  </tr>
+   126→  5070→                ))}
+   127→  5071→
+   128→  5072→                {/* ─── Calibration Details ─── */}
+   129→  5073→                <tr className="bg-cyan-800 text-white">
+   130→  5074→                  <td colSpan={2} className="border border-cyan-900 px-3 py-2 font-semibold text-xs tracking-wide">
+   131→  5075→                    Calibration Details
+   132→  5076→                  </td>
+   133→  5077→                </tr>
+   134→  5078→                {([
+   135→  5079→                  ["Calibration Block", "vwsCalibrationBlock", "e.g. V1 / V2 / ASME basic calibration block"],
+   136→  5080→                  ["Calibration Block Material / MOC", "vwsCalibrationBlockMoc", "Material of the calibration block"],
+   137→  5081→                  ["Reference Reflector", "vwsReferenceReflector", "e.g. Side drilled hole / flat bottom hole"],
+   138→  5082→                  ["Reference Level", "vwsReferenceLevel", "e.g. 100% DAC / 50% DAC"],
+   139→  5083→                ] as const).map(([label, fieldKey, placeholder]) => (
+   140→  5084→                  <tr key={fieldKey} className="border-b border-zinc-200">
+   141→  5085→                    <td className="bg-cyan-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+   142→  5086→                      {label}
+   143→  5087→                    </td>
+   144→  5088→                    <td className="px-2 py-1.5">
+   145→  5089→                      <Input
+   146→  5090→                        className="h-8 text-sm"
+   147→  5091→                        value={header[fieldKey]}
+   148→  5092→                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+   149→  5093→                        placeholder={placeholder}
+   150→  5094→                      />
+   151→  5095→                    </td>
+   152→  5096→                  </tr>
+   153→  5097→                ))}
+   154→  5098→
+   155→  5099→                {/* ─── Other Testing Parameters ─── */}
+   156→  5100→                <tr className="bg-cyan-800 text-white">
+   157→  5101→                  <td colSpan={2} className="border border-cyan-900 px-3 py-2 font-semibold text-xs tracking-wide">
+   158→  5102→                    Other Testing Parameters
+   159→  5103→                  </td>
+   160→  5104→                </tr>
+   161→  5105→                {([
+   162→  5106→                  ["Flaw Sizing Technique", "vwsFlawSizingTechnique", "e.g. DAC / dB drop / AWS"],
+   163→  5107→                  ["Surface Temperature", "vwsSurfaceTemperature", "e.g. 32 °C"],
+   164→  5108→                  ["Method", "vwsTestingMethod", "e.g. Contact pulse echo"],
+   165→  5109→                  ["Couplant", "vwsCouplant", "e.g. Gel / oil / glycerine"],
+   166→  5110→                  ["Surface Preparation", "vwsSurfacePreparation", "e.g. Grinding / wire brush"],
+   167→  5111→                  ["Surface Finish", "vwsSurfaceFinish", "e.g. Smooth / machined / as welded"],
+   168→  5112→                  ["Extent of Scanning", "vwsExtentOfScanning", "e.g. 100% of weld length, 150 mm beam spread"],
+   169→  5113→                ] as const).map(([label, fieldKey, placeholder]) => (
+   170→  5114→                  <tr key={fieldKey} className="border-b border-zinc-200">
+   171→  5115→                    <td className="bg-cyan-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+   172→  5116→                      {label}
+   173→  5117→                    </td>
+   174→  5118→                    <td className="px-2 py-1.5">
+   175→  5119→                      <Input
+   176→  5120→                        className="h-8 text-sm"
+   177→  5121→                        value={header[fieldKey]}
+   178→  5122→                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+   179→  5123→                        placeholder={placeholder}
+   180→  5124→                      />
+   181→  5125→                    </td>
+   182→  5126→                  </tr>
+   183→  5127→                ))}
+   184→  5128→              </tbody>
+   185→  5129→            </table>
+   186→  5130→          </div>
+   187→  5131→
+   188→  5132→          {/* ─── Probe Details: fixed 4-probe grid ─── */}
+   189→  5133→          <div className="border-t border-zinc-200 p-4 space-y-3">
+   190→  5134→            <div>
+   191→  5135→              <div className="text-sm font-semibold text-zinc-700">Probe Details</div>
+   192→  5136→              <p className="text-xs text-muted-foreground mt-0.5">
+   193→  5137→                One entry per probe used. Frequency, probe size and serial
+   194→  5138→                number are entered for each probe.
+   195→  5139→              </p>
+   196→  5140→            </div>
+   197→  5141→            <div className="overflow-x-auto">
+   198→  5142→              <table className="w-full text-xs border-collapse">
+   199→  5143→                <thead className="bg-cyan-800 text-white">
+   200→  5144→                  <tr>
+   201→  5145→                    <th className="border border-cyan-900 px-2 py-2 text-center" style={{ minWidth: 170 }}>Probe</th>
+   202→  5146→                    <th className="border border-cyan-900 px-2 py-2 text-center" style={{ minWidth: 90 }}>Probe Angle</th>
+   203→  5147→                    <th className="border border-cyan-900 px-2 py-2 text-center" style={{ minWidth: 130 }}>Frequency</th>
+   204→  5148→                    <th className="border border-cyan-900 px-2 py-2 text-center" style={{ minWidth: 130 }}>Probe Size</th>
+   205→  5149→                    <th className="border border-cyan-900 px-2 py-2 text-center" style={{ minWidth: 150 }}>Serial Number</th>
+   206→  5150→                  </tr>
+   207→  5151→                </thead>
+   208→  5152→                <tbody>
+   209→  5153→                  {parseVwsProbes(header.vwsProbeDetails).map((probe, idx) => (
+   210→  5154→                    <tr key={idx} className="hover:bg-muted/30">
+   211→  5155→                      <td className="border border-zinc-300 px-2 py-1.5 font-medium text-zinc-700">
+   212→  5156→                        {probe.probeType === "Longitudinal Wave" ? "Longitudinal Wave Probe" : "Shear Wave Probe"}
+   213→  5157→                      </td>
+   214→  5158→                      <td className="border border-zinc-300 px-2 py-1.5 text-center text-zinc-700">
+   215→  5159→                        {probe.probeAngle}
+   216→  5160→                      </td>
+   217→  5161→                      <td className="border border-zinc-300 p-1">
+   218→  5162→                        <Input
+   219→  5163→                          className="h-8 text-xs"
+   220→  5164→                          value={probe.frequency}
+   221→  5165→                          onChange={(e) => updateVwsProbe(idx, { frequency: e.target.value })}
+   222→  5166→                          placeholder="e.g. 4 MHz"
+   223→  5167→                        />
+   224→  5168→                      </td>
+   225→  5169→                      <td className="border border-zinc-300 p-1">
+   226→  5170→                        <Input
+   227→  5171→                          className="h-8 text-xs"
+   228→  5172→                          value={probe.probeSize}
+   229→  5173→                          onChange={(e) => updateVwsProbe(idx, { probeSize: e.target.value })}
+   230→  5174→                          placeholder="e.g. 10 mm × 10 mm"
+   231→  5175→                        />
+   232→  5176→                      </td>
+   233→  5177→                      <td className="border border-zinc-300 p-1">
+   234→  5178→                        <Input
+   235→  5179→                          className="h-8 text-xs"
+   236→  5180→                          value={probe.serialNo}
+   237→  5181→                          onChange={(e) => updateVwsProbe(idx, { serialNo: e.target.value })}
+   238→  5182→                          placeholder="Probe serial number"
+   239→  5183→                        />
+   240→  5184→                      </td>
+   241→  5185→                    </tr>
+   242→  5186→                  ))}
+   243→  5187→                </tbody>
+   244→  5188→              </table>
+   245→  5189→            </div>
+   246→  5190→          </div>
+   247→  5191→        </CardContent>
+   248→  5192→      </Card>
+   249→  5193→
+   250→  5194→      {/* ═══ B. WELD SCAN TESTING DETAILS ═══
+   251→  5195→          Dynamic table — Vessel column set: Sl. No | Component |
+   252→  5196→          Plate / Weld ID | Weld Dimension | Probe Angle | Probe Frequency |
+   253→  5197→          Observation & Result. Rows can be added / removed, every cell is
+   254→  5198→          editable, serial numbers are auto-generated. Component and
+   255→  5199→          Plate / Weld ID offer suggestions but accept any custom value. */}
+   256→  5200→      <Card>
+   257→  5201→        <CardHeader>
+   258→  5202→          <div className="flex items-center justify-between">
+   259→  5203→            <div>
+   260→  5204→              <CardTitle className="text-base">Weld Scan Testing Details</CardTitle>
+   261→  5205→              <CardDescription>
+   262→  5206→                Add one row per weld / component examined. Serial numbers are
+   263→  5207→                auto-generated. Observation &amp; Result is free text — use the
+   264→  5208→                quick options or type your own.
+   265→  5209→              </CardDescription>
+   266→  5210→            </div>
+   267→  5211→            <Button onClick={addVwsRow} size="sm">
+   268→  5212→              <Plus className="mr-1 h-4 w-4" /> Add Row
+   269→  5213→            </Button>
+   270→  5214→          </div>
+   271→  5215→        </CardHeader>
+   272→  5216→        <CardContent className="p-0">
+   273→  5217→          <div className="overflow-x-auto">
+   274→  5218→            <table className="w-full text-xs">
+   275→  5219→              <thead className="bg-cyan-800 text-white">
+   276→  5220→                <tr>
+   277→  5221→                  <th className="border border-cyan-900 px-2 py-2 text-center" style={{ minWidth: 40 }}>Sl. No</th>
+   278→  5222→                  <th className="border border-cyan-900 px-2 py-2 text-center" style={{ minWidth: 140 }}>Component</th>
+   279→  5223→                  <th className="border border-cyan-900 px-2 py-2 text-center" style={{ minWidth: 170 }}>Plate / Weld ID</th>
+   280→  5224→                  <th className="border border-cyan-900 px-2 py-2 text-center" style={{ minWidth: 140 }}>Weld Dimension</th>
+   281→  5225→                  <th className="border border-cyan-900 px-2 py-2 text-center" style={{ minWidth: 110 }}>Probe Angle</th>
+   282→  5226→                  <th className="border border-cyan-900 px-2 py-2 text-center" style={{ minWidth: 130 }}>Probe Frequency</th>
+   283→  5227→                  <th className="border border-cyan-900 px-2 py-2 text-center" style={{ minWidth: 220 }}>Observation &amp; Result</th>
+   284→  5228→                  <th className="border border-cyan-900 px-2 py-2 text-center" style={{ minWidth: 70 }}>Actions</th>
+   285→  5229→                </tr>
+   286→  5230→              </thead>
+   287→  5231→              <tbody>
+   288→  5232→                {vwsRows.length === 0 && (
+   289→  5233→                  <tr>
+   290→  5234→                    <td colSpan={8} className="text-center py-6 text-muted-foreground border border-zinc-300">
+   291→  5235→                      No rows yet. Click <strong>Add Row</strong> to begin.
+   292→  5236→                    </td>
+   293→  5237→                  </tr>
+   294→  5238→                )}
+   295→  5239→                {vwsRows.map((row, idx) => (
+   296→  5240→                  <tr key={idx} className="hover:bg-muted/30">
+   297→  5241→                    <td className="border border-zinc-300 p-1 text-center font-mono tabular-nums">{idx + 1}</td>
+   298→  5242→                    <td className="border border-zinc-300 p-1">
+   299→  5243→                      <Input
+   300→  5244→                        className="h-8 text-xs"
+   301→  5245→                        list={`vws-component-suggestions-${idx}`}
+   302→  5246→                        value={row.component}
+   303→  5247→                        onChange={(e) => updateVwsRow(idx, { component: e.target.value })}
+   304→  5248→                        placeholder="e.g. Shell-1 / Head / Nozzle"
+   305→  5249→                      />
+   306→  5250→                      <datalist id={`vws-component-suggestions-${idx}`}>
+   307→  5251→                        {VWS_COMPONENT_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
+   308→  5252→                      </datalist>
+   309→  5253→                    </td>
+   310→  5254→                    <td className="border border-zinc-300 p-1">
+   311→  5255→                      <Input
+   312→  5256→                        className="h-8 text-xs"
+   313→  5257→                        list={`vws-weld-id-suggestions-${idx}`}
+   314→  5258→                        value={row.plateWeldId}
+   315→  5259→                        onChange={(e) => updateVwsRow(idx, { plateWeldId: e.target.value })}
+   316→  5260→                        placeholder="e.g. Circumferential Weld"
+   317→  5261→                      />
+   318→  5262→                      <datalist id={`vws-weld-id-suggestions-${idx}`}>
+   319→  5263→                        {VWS_PLATE_WELD_ID_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
+   320→  5264→                      </datalist>
+   321→  5265→                    </td>
+   322→  5266→                    <td className="border border-zinc-300 p-1">
+   323→  5267→                      <Input
+   324→  5268→                        className="h-8 text-xs"
+   325→  5269→                        value={row.weldDimension}
+   326→  5270→                        onChange={(e) => updateVwsRow(idx, { weldDimension: e.target.value })}
+   327→  5271→                        placeholder="e.g. L600 mm × T24 mm"
+   328→  5272→                      />
+   329→  5273→                    </td>
+   330→  5274→                    <td className="border border-zinc-300 p-1">
+   331→  5275→                      <Select
+   332→  5276→                        value={row.probeAngle || undefined}
+   333→  5277→                        onValueChange={(v) => updateVwsRow(idx, { probeAngle: v })}
+   334→  5278→                      >
+   335→  5279→                        <SelectTrigger className="h-8 text-xs">
+   336→  5280→                          <SelectValue placeholder="Select" />
+   337→  5281→                        </SelectTrigger>
+   338→  5282→                        <SelectContent>
+   339→  5283→                          {VWS_PROBE_ANGLE_OPTIONS.map((a) => (
+   340→  5284→                            <SelectItem key={a} value={a}>{a}</SelectItem>
+   341→  5285→                          ))}
+   342→  5286→                        </SelectContent>
+   343→  5287→                      </Select>
+   344→  5288→                    </td>
+   345→  5289→                    <td className="border border-zinc-300 p-1">
+   346→  5290→                      <Input
+   347→  5291→                        className="h-8 text-xs"
+   348→  5292→                        list={`vws-frequency-suggestions-${idx}`}
+   349→  5293→                        value={row.probeFrequency}
+   350→  5294→                        onChange={(e) => updateVwsRow(idx, { probeFrequency: e.target.value })}
+   351→  5295→                        placeholder="e.g. 4 MHz"
+   352→  5296→                      />
+   353→  5297→                      <datalist id={`vws-frequency-suggestions-${idx}`}>
+   354→  5298→                        {VWS_PROBE_FREQUENCY_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
+   355→  5299→                      </datalist>
+   356→  5300→                    </td>
+   357→  5301→                    <td className="border border-zinc-300 p-1">
+   358→  5302→                      <Textarea
+   359→  5303→                        rows={1}
+   360→  5304→                        className="text-xs min-h-[32px] py-1"
+   361→  5305→                        value={row.observationResult}
+   362→  5306→                        onChange={(e) => updateVwsRow(idx, { observationResult: e.target.value })}
+   363→  5307→                        placeholder="No Significant Indication Observed / Accept / Reject or custom text"
+   364→  5308→                      />
+   365→  5309→                      <div className="flex flex-wrap gap-1 mt-1">
+   366→  5310→                        {VWS_OBSERVATION_QUICK_OPTIONS.map((opt) => (
+   367→  5311→                          <button
+   368→  5312→                            key={opt}
+   369→  5313→                            type="button"
+   370→  5314→                            className={`px-1.5 py-0.5 text-[10px] rounded border transition-colors ${
+   371→  5315→                              row.observationResult === opt
+   372→  5316→                                ? "bg-cyan-700 text-white border-cyan-800"
+   373→  5317→                                : "bg-white text-zinc-600 border-zinc-300 hover:bg-cyan-50"
+   374→  5318→                            }`}
+   375→  5319→                            onClick={() => updateVwsRow(idx, { observationResult: opt })}
+   376→  5320→                          >
+   377→  5321→                            {opt}
+   378→  5322→                          </button>
+   379→  5323→                        ))}
+   380→  5324→                      </div>
+   381→  5325→                    </td>
+   382→  5326→                    <td className="border border-zinc-300 p-1">
+   383→  5327→                      <div className="flex justify-center">
+   384→  5328→                        <Button
+   385→  5329→                          size="sm"
+   386→  5330→                          variant="ghost"
+   387→  5331→                          className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+   388→  5332→                          onClick={() => removeVwsRow(idx)}
+   389→  5333→                          title="Remove row"
+   390→  5334→                        >
+   391→  5335→                          <Trash2 className="h-3 w-3" />
+   392→  5336→                        </Button>
+   393→  5337→                      </div>
+   394→  5338→                    </td>
+   395→  5339→                  </tr>
+   396→  5340→                ))}
+   397→  5341→              </tbody>
+   398→  5342→            </table>
+   399→  5343→          </div>
+   400→  5344→        </CardContent>
+   401→  5345→      </Card>
+   402→  5346→
+   403→  5347→      <Card className="bg-zinc-50">
+   404→  5348→        <CardContent className="p-4 text-xs text-muted-foreground space-y-1">
+   405→  5349→          <div><strong>Vessel Weld Scan:</strong> record the weld scan testing parameters (including the four-probe grid) and one row per weld / component examined.</div>
+   406→  5350→          <div><strong>Serial numbers:</strong> auto-generated (1, 2, 3…) and renumbered when rows are added or deleted.</div>
+   407→  5351→          <div><strong>Component / Weld ID:</strong> suggestions are offered (Shell-1, Head, Nozzle, Circumferential Weld…) but any custom value can be typed.</div>
+   408→  5352→          <div><strong>Photographs:</strong> upload Weld Scan photographs in the next step (Findings &amp; Photos) — they appear in the review page and the generated PDF.</div>
+   409→  5353→        </CardContent>
+   410→  5354→      </Card>
+   411→  5355→
+   412→  5356→      {/* Step 2 navigation */}
+   413→  5357→      <div className="flex items-center gap-2">
+   414→  5358→        <Button variant="ghost" onClick={goPrevious}>
+   415→  5359→          <ArrowLeft className="mr-2 h-4 w-4" /> Previous
+   416→  5360→        </Button>
+   417→  5361→        <Button variant="ghost" onClick={saveDraft} disabled={saving}>
+   418→  5362→          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+   419→  5363→          Save Draft
+   420→  5364→        </Button>
+   421→  5365→        <Button onClick={proceedToNext} disabled={saving}>
+   422→  5366→          Proceed to Next <ArrowRight className="ml-2 h-4 w-4" />
+   423→  5367→        </Button>
+   424→  5368→      </div>
+   425→  5369→      </>
+   426→  5370→      )} {/* end step 2 — VESSEL WELD SCAN */}
+   427→  5371→
+   428→  5372→      {/* ═══ STEP 2 (MPT): MAGNETIC PARTICLE TESTING PROCEDURE ═══ */}
+   429→  5373→      {step === 2 && header.reportType === "PIPELINE_MPT" && (
+   430→  5374→      <>
+   431→  5375→      {/* 5. MAGNETIC PARTICLE TESTING — Parameters */}
+   432→  5376→      <Card>
+   433→  5377→        <CardHeader>
+   434→  5378→          <CardTitle className="text-base flex items-center gap-2">
+   435→  5379→            <Magnet className="h-4 w-4 text-orange-700" />
+   436→  5380→            5.1 Magnetic Particle Testing Parameters
+   437→  5381→          </CardTitle>
+   438→  5382→          <CardDescription>
+   439→  5383→            Record the MPT inspection parameters. All fields are editable.
+   440→  5384→            Date fields use a calendar picker.
+   441→  5385→          </CardDescription>
+   442→  5386→        </CardHeader>
+   443→  5387→        <CardContent className="p-0">
+   444→  5388→          <div className="overflow-x-auto">
+   445→  5389→            <table className="w-full text-sm border-collapse">
+   446→  5390→              <tbody>
+   447→  5391→                {/* Date of Examination — calendar picker */}
+   448→  5392→                <tr className="border-b border-zinc-200">
+   449→  5393→                  <td className="bg-orange-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/3">
+   450→  5394→                    Date of Examination
+   451→  5395→                  </td>
+   452→  5396→                  <td className="px-2 py-1.5">
+   453→  5397→                    <Input type="date" className="h-8 text-sm"
+   454→  5398→                      value={header.mptDateOfExamination}
+   455→  5399→                      onChange={(e) => updateHeader("mptDateOfExamination", e.target.value)}
+   456→  5400→                    />
+   457→  5401→                  </td>
+   458→  5402→                </tr>
+   459→  5403→                {/* Typeable text fields */}
+   460→  5404→                {([
+   461→  5405→                  ["Testing Standard", "mptTestingStandard", "e.g. ASME Section V Article 7"],
+   462→  5406→                  ["Acceptance Criteria", "mptAcceptanceCriteria", "e.g. ASME Section VIII Div 1 Appendix 6"],
+   463→  5407→                  ["Surface preparation", "mptSurfacePreparation", "e.g. Cleaned with solvent, wire brushed"],
+   464→  5408→                  ["Surface temperature", "mptSurfaceTemperature", "e.g. 28 °C"],
+   465→  5409→                  ["Type of Instrument / SI.No", "mptInstrumentSerialNo", "e.g. SIMS / MPT – AC Yoke / 201501012123"],
+   466→  5410→                ] as const).map(([label, fieldKey, placeholder]) => (
+   467→  5411→                  <tr key={fieldKey} className="border-b border-zinc-200">
+   468→  5412→                    <td className="bg-orange-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+   469→  5413→                      {label}
+   470→  5414→                    </td>
+   471→  5415→                    <td className="px-2 py-1.5">
+   472→  5416→                      <Input className="h-8 text-sm"
+   473→  5417→                        value={header[fieldKey]}
+   474→  5418→                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+   475→  5419→                        placeholder={placeholder}
+   476→  5420→                      />
+   477→  5421→                    </td>
+   478→  5422→                  </tr>
+   479→  5423→                ))}
+   480→  5424→                {/* Instrument / Calibration Date — calendar picker */}
+   481→  5425→                <tr className="border-b border-zinc-200">
+   482→  5426→                  <td className="bg-orange-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+   483→  5427→                    Instrument / Calibration Date
+   484→  5428→                  </td>
+   485→  5429→                  <td className="px-2 py-1.5">
+   486→  5430→                    <Input type="date" className="h-8 text-sm"
+   487→  5431→                      value={header.mptCalibrationDate}
+   488→  5432→                      onChange={(e) => updateHeader("mptCalibrationDate", e.target.value)}
+   489→  5433→                    />
+   490→  5434→                  </td>
+   491→  5435→                </tr>
+   492→  5436→                {/* More typeable text fields */}
+   493→  5437→                {([
+   494→  5438→                  ["MPT Method", "mptMethod", "e.g. Wet Continuous"],
+   495→  5439→                  ["Type of Current", "mptTypeOfCurrent", "e.g. AC"],
+   496→  5440→                  ["AC Yoke Lifting Capacity", "mptAcYokeLiftingCapacity", "e.g. 5 kg / 50 N"],
+   497→  5441→                  ["Contrast Medium", "mptContrastMedium", "e.g. White contrast"],
+   498→  5442→                  ["Method of Pre cleaning", "mptMethodOfPreCleaning", "e.g. Solvent wiping"],
+   499→  5443→                  ["Method of applying White Contrast", "mptMethodOfApplyingWhiteContrast", "e.g. Spray"],
+   500→  5444→                  ["AC Yoke Pole Spacing", "mptAcYokePoleSpacing", "e.g. 150 mm"],
+   501→  5445→                  ["Magnetic Medium", "mptMagneticMedium", "e.g. Wet particle iron ink"],
+   502→  5446→                  ["Method of applying Magnetic Medium", "mptMethodOfApplyingMagneticMedium", "e.g. Spray"],
+   503→  5447→                  ["Development time", "mptDevelopmentTime", "e.g. 5 minutes"],
+   504→  5448→                  ["Interpretation time", "mptInterpretationTime", "e.g. 10 minutes"],
+   505→  5449→                  ["Lightning Equipment", "mptLightingEquipment", "e.g. LED torch ≥ 1000 lux"],
+   506→  5450→                  ["Post cleaning", "mptPostCleaning", "e.g. Solvent wipe"],
+   507→  5451→                ] as const).map(([label, fieldKey, placeholder]) => (
+   508→  5452→                  <tr key={fieldKey} className="border-b border-zinc-200">
+   509→  5453→                    <td className="bg-orange-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+   510→  5454→                      {label}
+   511→  5455→                    </td>
+   512→  5456→                    <td className="px-2 py-1.5">
+   513→  5457→                      <Input className="h-8 text-sm"
+   514→  5458→                        value={header[fieldKey]}
+   515→  5459→                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+   516→  5460→                        placeholder={placeholder}
+   517→  5461→                      />
+   518→  5462→                    </td>
+   519→  5463→                  </tr>
+   520→  5464→                ))}
+   521→  5465→              </tbody>
+   522→  5466→            </table>
+   523→  5467→          </div>
+   524→  5468→        </CardContent>
+   525→  5469→      </Card>
+   526→  5470→
+   527→  5471→      {/* Consumable Details */}
+   528→  5472→      <Card>
+   529→  5473→        <CardHeader>
+   530→  5474→          <CardTitle className="text-base flex items-center gap-2">
+   531→  5475→            <Magnet className="h-4 w-4 text-orange-700" />
+   532→  5476→            Consumable Details
+   533→  5477→          </CardTitle>
+   534→  5478→          <CardDescription>
+   535→  5479→            Enter the actual make, product name, lot number, expiry date and
+   536→  5480→            other relevant details. All fields are editable.
+   537→  5481→          </CardDescription>
+   538→  5482→        </CardHeader>
+   539→  5483→        <CardContent className="p-0">
+   540→  5484→          <div className="overflow-x-auto">
+   541→  5485→            <table className="w-full text-sm border-collapse">
+   542→  5486→              <tbody>
+   543→  5487→                {([
+   544→  5488→                  ["White Contrast", "mptWhiteContrast", "e.g. Make – ORION WCM-1"],
+   545→  5489→                  ["Wet Particle Iron Ink", "mptWetParticleIronInk", "e.g. Make – ORION MPI-14"],
+   546→  5490→                ] as const).map(([label, fieldKey, placeholder]) => (
+   547→  5491→                  <tr key={fieldKey} className="border-b border-zinc-200">
+   548→  5492→                    <td className="bg-orange-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/3">
+   549→  5493→                      {label}
+   550→  5494→                    </td>
+   551→  5495→                    <td className="px-2 py-1.5">
+   552→  5496→                      <Input className="h-8 text-sm"
+   553→  5497→                        value={header[fieldKey]}
+   554→  5498→                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+   555→  5499→                        placeholder={placeholder}
+   556→  5500→                      />
+   557→  5501→                    </td>
+   558→  5502→                  </tr>
+   559→  5503→                ))}
+   560→  5504→              </tbody>
+   561→
+   562→[showing lines 4945-5504 of 7006; use offset=5505 with limit to continue reading]

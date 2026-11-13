@@ -12,6 +12,7 @@ import {
   Cylinder,
   MoveHorizontal,
   MoveVertical,
+  Eye,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -85,10 +86,17 @@ const VESSEL_OPTIONS: TypeOption[] = [
     accent: "border-cyan-500 bg-cyan-50 hover:bg-cyan-100",
   },
   {
-    type: "PIPELINE_THICKNESS",
-    title: "Thickness Measurement",
-    subtitle: "Coming soon for vessels",
+    type: "VESSEL_UTM",
+    title: "UT Thickness Measurement",
+    subtitle: "UT thickness measurement for vessel shells, dish ends and nozzles",
     icon: Gauge,
+    accent: "border-emerald-500 bg-emerald-50 hover:bg-emerald-100",
+  },
+  {
+    type: "VESSEL_VISUAL",
+    title: "Visual Inspection",
+    subtitle: "Coming soon for vessels",
+    icon: Eye,
     accent: "border-zinc-300 bg-zinc-50",
     comingSoon: true,
   },
@@ -97,18 +105,40 @@ const VESSEL_OPTIONS: TypeOption[] = [
 // Vessel test types that require the orientation step (Horizontal /
 // Vertical) before the form opens. The selected orientation is saved
 // with the report and shown on the review page and in the PDF.
-const VESSEL_ORIENTATION_REQUIRED = new Set<PipelineReportType>(["VESSEL_DPT", "VESSEL_MPT"]);
+//
+// NOTE: VESSEL_DPT / VESSEL_MPT already required the orientation step
+// before this update (their existing workflow — preserved unchanged).
+// VESSEL_UTM is added here by the Vessel UT Thickness Measurement update:
+// the orientation determines the readings-table structure (clock
+// positions for horizontal vessels vs East/West/North/South directions
+// for vertical vessels). VESSEL_WELD_SCAN and VESSEL_VISUAL deliberately
+// do NOT appear here — no orientation step for them.
+const VESSEL_ORIENTATION_REQUIRED = new Set<PipelineReportType>([
+  "VESSEL_DPT",
+  "VESSEL_MPT",
+  "VESSEL_UTM",
+]);
+
+// Labels used by the Step-3 breadcrumb for the orientation-stage test
+// types.
+const ORIENTATION_STAGE_TEST_LABELS: Partial<Record<PipelineReportType, string>> = {
+  VESSEL_DPT: "Dye Penetrant Testing (DPT)",
+  VESSEL_MPT: "Magnetic Particle Testing (MPT)",
+  VESSEL_UTM: "UT Thickness Measurement",
+};
 
 type Stage = "equipment" | "test" | "orientation";
 
 export function PipelineReportTypeSelectorView() {
   const { setView, openNewPipelineReportWithSelection } = useAppStore();
-  // Stage 1: Equipment Type → Stage 2: Test Type → Stage 3 (Vessel DPT
-  // and Vessel MPT only): Vessel Orientation → form.
+  // Stage 1: Equipment Type → Stage 2: Test Type → Stage 3 (Vessel DPT,
+  // Vessel MPT and Vessel UT Thickness Measurement only): Vessel
+  // Orientation → form.
   const [stage, setStage] = useState<Stage>("equipment");
   const [equipmentType, setEquipmentType] = useState<"PIPING" | "VESSEL" | null>(null);
   // Test type picked in Stage 2. Kept so the orientation stage knows
-  // which vessel report type to open (VESSEL_DPT or VESSEL_MPT).
+  // which vessel report type to open (VESSEL_DPT, VESSEL_MPT or
+  // VESSEL_UTM).
   const [selectedTestType, setSelectedTestType] = useState<PipelineReportType | null>(null);
 
   const options = equipmentType === "VESSEL" ? VESSEL_OPTIONS : PIPING_OPTIONS;
@@ -121,8 +151,8 @@ export function PipelineReportTypeSelectorView() {
 
   function pickTest(opt: TypeOption) {
     if (opt.comingSoon) return;
-    // Vessel DPT and Vessel MPT require the orientation step before the
-    // form opens — it cannot be skipped.
+    // Vessel DPT, Vessel MPT and Vessel UT Thickness Measurement require
+    // the orientation step before the form opens — it cannot be skipped.
     if (VESSEL_ORIENTATION_REQUIRED.has(opt.type)) {
       setSelectedTestType(opt.type);
       setStage("orientation");
@@ -187,9 +217,8 @@ export function PipelineReportTypeSelectorView() {
               <span className="font-medium">
                 {stage === "test"
                   ? "…"
-                  : selectedTestType === "VESSEL_MPT"
-                    ? "Magnetic Particle Testing (MPT)"
-                    : "Dye Penetrant Testing (DPT)"}
+                  : (ORIENTATION_STAGE_TEST_LABELS[selectedTestType ?? ""] ??
+                     "Selected Test Type")}
               </span>
             </>
           )}
@@ -301,7 +330,7 @@ export function PipelineReportTypeSelectorView() {
         </div>
       )}
 
-      {/* ─── STAGE 3: VESSEL ORIENTATION (Vessel DPT + Vessel MPT) ─── */}
+      {/* ─── STAGE 3: VESSEL ORIENTATION (Vessel DPT / MPT / UT Thickness Measurement) ─── */}
       {stage === "orientation" && (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {([
@@ -372,8 +401,8 @@ export function PipelineReportTypeSelectorView() {
           header, inspection photo gallery with captions, and the existing approval workflow
           (Draft → Submitted for Review → Approved / Returned for Revision → Changes Pending
           Review). The selected equipment type, test type, and vessel orientation (for vessel
-          DPT / MPT reports) are shown in the report list, detail view, generated PDF, and
-          revision history.
+          DPT / MPT / UT Thickness Measurement reports) are shown in the report list, detail
+          view, generated PDF, and revision history.
         </CardContent>
       </Card>
     </div>

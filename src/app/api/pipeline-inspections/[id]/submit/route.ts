@@ -95,6 +95,28 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         { status: 400 },
       );
     }
+  } else if (reportType === "VESSEL_UTM") {
+    // Vessel UT Thickness Measurement readings live in the vutmShellRows /
+    // vutmDishRows / vutmNozzleRows JSON columns — require at least ONE
+    // measurement row across the three tables before submitting.
+    const countRows = (raw: string | null): number => {
+      try {
+        const parsed = JSON.parse(raw ?? "[]");
+        return Array.isArray(parsed) ? parsed.length : 0;
+      } catch {
+        return 0;
+      }
+    };
+    const utmRowCount =
+      countRows(existing.vutmShellRows) +
+      countRows(existing.vutmDishRows) +
+      countRows(existing.vutmNozzleRows);
+    if (utmRowCount === 0) {
+      return NextResponse.json(
+        { error: "Cannot submit a vessel UT thickness measurement report with no measurement rows. Add at least one shell, dish end or nozzle reading first." },
+        { status: 400 },
+      );
+    }
   } else if (reportType === "PIPELINE_CONDITION") {
     // Condition reports don't have child rows — require at least one of the
     // main free-text fields to be filled in.

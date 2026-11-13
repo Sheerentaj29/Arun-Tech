@@ -38,6 +38,7 @@ import {
 import { useAppStore } from "@/lib/store";
 import { apiFetch } from "@/lib/api-client";
 import { AuthImage } from "@/components/auth-image";
+import { vutmMinOfSpots } from "@/lib/vutm-rows";
 import { resolveClientLogo } from "@/lib/client-logo-mapping";
 import {
   parseThicknessTablesConfig,
@@ -61,8 +62,10 @@ interface FullReport {
     | "PIPELINE_WELD_SCAN"
     | "VESSEL_DPT"
     | "VESSEL_MPT"
-    | "VESSEL_WELD_SCAN";
-  // Equipment type + vessel orientation (VESSEL_DPT and VESSEL_MPT only)
+    | "VESSEL_WELD_SCAN"
+    | "VESSEL_UTM";
+  // Equipment type + vessel orientation (VESSEL_DPT, VESSEL_MPT and
+  // VESSEL_UTM only)
   equipmentType?: string | null;
   vesselOrientation?: string | null;
   clientId: string;
@@ -203,6 +206,29 @@ interface FullReport {
   vwsSurfaceFinish?: string | null;
   vwsExtentOfScanning?: string | null;
   vwsDetailRows?: string | null;
+  // ─── VESSEL UT THICKNESS MEASUREMENT FIELDS (VESSEL_UTM) ───
+  // Completely separate from the Piping Thickness Measurement
+  // (PIPELINE_THICKNESS) and from the Vessel Weld Scan vws* fields.
+  vutmDateOfExamination?: string | null;
+  vutmTestingStandard?: string | null;
+  vutmAcceptanceCriteria?: string | null;
+  vutmUtProcedure?: string | null;
+  vutmEquipmentMake?: string | null;
+  vutmEquipmentModel?: string | null;
+  vutmEquipmentSerialNo?: string | null;
+  vutmCalibrationDueDate?: string | null;
+  vutmCableLengthAndType?: string | null;
+  vutmLwProbeRows?: string | null;
+  vutmTypeOfCrystal?: string | null;
+  vutmCalibrationBlock?: string | null;
+  vutmSurfaceTemperature?: string | null;
+  vutmMethod?: string | null;
+  vutmCouplant?: string | null;
+  vutmSurfacePreparation?: string | null;
+  vutmSurfaceFinish?: string | null;
+  vutmShellRows?: string | null;
+  vutmDishRows?: string | null;
+  vutmNozzleRows?: string | null;
   // ─── UT (ULTRASONIC TEST) FIELDS ───
   utSubContract?: string | null;
   utProject?: string | null;
@@ -425,6 +451,11 @@ const REPORT_TYPE_LABEL: Record<string, { label: string; title: string; color: s
     label: "Vessel Weld Scan",
     title: "VESSEL WELD SCAN REPORT",
     color: "border-cyan-500 text-cyan-700",
+  },
+  VESSEL_UTM: {
+    label: "Vessel UT Thickness",
+    title: "VESSEL UT THICKNESS MEASUREMENT REPORT",
+    color: "border-emerald-500 text-emerald-700",
   },
   PIPELINE_MPT: {
     label: "MPT",
@@ -803,10 +834,10 @@ export function PipelineReportDetailView() {
             ["Location", report.plant.location ?? "—"],
             ["Plant Name", report.plant.name],
             ["Inspection Area", report.inspectionArea ?? "—"],
-            // Vessel reports (VESSEL_DPT / VESSEL_MPT) use equipment wording
-            // with the orientation row; Vessel Weld Scan uses equipment wording
-            // without an orientation row.
-            ...(report.reportType === "VESSEL_DPT" || report.reportType === "VESSEL_MPT"
+            // Vessel reports (VESSEL_DPT / VESSEL_MPT / VESSEL_UTM) use
+            // equipment wording with the orientation row; Vessel Weld Scan
+            // uses equipment wording without an orientation row.
+            ...(report.reportType === "VESSEL_DPT" || report.reportType === "VESSEL_MPT" || report.reportType === "VESSEL_UTM"
               ? [
                   ["Equipment / Vessel Description", report.pipelineDescription ?? "—"],
                   ["Equipment Identification No.", report.pipelineIdentificationNumber ?? "—"],
@@ -1540,6 +1571,353 @@ export function PipelineReportDetailView() {
           );
         })()}
 
+        {/* ─── VESSEL UT THICKNESS MEASUREMENT: PARAMETERS + READINGS ───
+            Shown only for VESSEL_UTM reports. Renders the grouped UT
+            Thickness Measurement Parameters (incl. the repeatable
+            Longitudinal Wave 0° probe grid) and the orientation-based
+            readings tables (shells at clock positions for horizontal
+            vessels / directions for vertical vessels, plus dish-end and
+            nozzle tables). Minimum Measured Thickness is recomputed from
+            the stored spot readings. Completely separate from the Piping
+            Thickness Measurement block above. */}
+        {report.reportType === "VESSEL_UTM" && (() => {
+          const utmIsHorizontal = report.vesselOrientation !== "VERTICAL";
+          let utmProbes: Array<Record<string, string>> = [];
+          let utmShellH: Array<Record<string, string | string[]>> = [];
+          let utmShellV: Array<Record<string, string | string[]>> = [];
+          let utmDish: Array<Record<string, string | string[]>> = [];
+          let utmNozzle: Array<Record<string, string | string[]>> = [];
+          try {
+            const parsed = JSON.parse(report.vutmLwProbeRows ?? "[]");
+            if (Array.isArray(parsed) && parsed.length > 0) utmProbes = parsed;
+          } catch {}
+          try {
+            const parsed = JSON.parse(report.vutmShellRows ?? "[]");
+            if (Array.isArray(parsed)) {
+              if (utmIsHorizontal) utmShellH = parsed; else utmShellV = parsed;
+            }
+          } catch {}
+          try {
+            const parsed = JSON.parse(report.vutmDishRows ?? "[]");
+            if (Array.isArray(parsed)) utmDish = parsed;
+          } catch {}
+          try {
+            const parsed = JSON.parse(report.vutmNozzleRows ?? "[]");
+            if (Array.isArray(parsed)) utmNozzle = parsed;
+          } catch {}
+          const utmParamGroups: Array<{ title: string; rows: Array<[string, string | null | undefined, boolean?]> }> = [
+            {
+              title: "General Information",
+              rows: [
+                ["Date of Examination", report.vutmDateOfExamination, true],
+                ["Testing Standard", report.vutmTestingStandard],
+                ["Acceptance Criteria", report.vutmAcceptanceCriteria],
+                ["UT Procedure", report.vutmUtProcedure],
+              ],
+            },
+            {
+              title: "Equipment Details",
+              rows: [
+                ["Equipment Make", report.vutmEquipmentMake],
+                ["Equipment Model", report.vutmEquipmentModel],
+                ["Equipment Serial Number", report.vutmEquipmentSerialNo],
+                ["Calibration Due Date", report.vutmCalibrationDueDate, true],
+              ],
+            },
+            {
+              title: "Cable & Crystal Details",
+              rows: [
+                ["Cable Length and Type", report.vutmCableLengthAndType],
+                ["Type of Crystal", report.vutmTypeOfCrystal],
+              ],
+            },
+            {
+              title: "Calibration Details",
+              rows: [
+                ["Calibration Block Dimension / MOC", report.vutmCalibrationBlock],
+              ],
+            },
+            {
+              title: "Other Testing Parameters",
+              rows: [
+                ["Surface Temperature", report.vutmSurfaceTemperature],
+                ["Method", report.vutmMethod],
+                ["Couplant", report.vutmCouplant],
+                ["Surface Preparation", report.vutmSurfacePreparation],
+                ["Surface Finish", report.vutmSurfaceFinish],
+              ],
+            },
+          ];
+          const minCell = (min: unknown) => (min && String(min).trim() ? String(min) : "—");
+          return (
+            <div className="mt-6 space-y-6">
+              {/* Equipment: Vessel + Orientation badges */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="outline" className="border-emerald-400 text-emerald-700">
+                  Equipment: Vessel
+                </Badge>
+                {report.vesselOrientation && (
+                  <Badge variant="outline" className="border-emerald-400 text-emerald-700">
+                    {report.vesselOrientation === "HORIZONTAL" ? "Horizontal Vessel" : "Vertical Vessel"}
+                  </Badge>
+                )}
+              </div>
+
+              {/* UT Thickness Measurement Parameters — grouped two-column table */}
+              <div>
+                <h3 className="mb-2 text-xs font-bold uppercase text-emerald-700 border-b border-emerald-300 pb-1">
+                  UT Thickness Measurement Parameters
+                </h3>
+                <table className="w-full border-collapse text-xs">
+                  <tbody>
+                    {utmParamGroups.map((group) => (
+                      <Fragment key={group.title}>
+                        <tr className="bg-emerald-100">
+                          <td colSpan={2} className="border border-zinc-300 px-3 py-1.5 font-semibold text-emerald-800">
+                            {group.title}
+                          </td>
+                        </tr>
+                        {group.rows.map(([label, value, isDate], idx) => {
+                          let v = value && String(value).trim() ? String(value).trim() : null;
+                          if (v && isDate) {
+                            try { v = new Date(v).toISOString().slice(0, 10); } catch {}
+                          }
+                          return (
+                            <tr key={`${group.title}-${idx}`} className="border-b border-zinc-200">
+                              <td className="bg-emerald-50 border-r border-zinc-200 px-3 py-1.5 font-medium text-zinc-700 w-1/3">
+                                {label}
+                              </td>
+                              <td className="px-3 py-1.5">
+                                {v ? v : <span className="text-muted-foreground">—</span>}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Probe Details — repeatable Longitudinal Wave (0°) grid */}
+              {utmProbes.length > 0 && (
+                <div>
+                  <h3 className="mb-2 text-xs font-bold uppercase text-emerald-700 border-b border-emerald-300 pb-1">
+                    Probe Details — Longitudinal Wave (0°)
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-emerald-700 text-white">
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Probe</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Probe Angle</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Frequency</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Size</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">S.No.</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {utmProbes.map((row, idx) => (
+                          <tr key={idx} className="hover:bg-muted/30">
+                            <td className="border border-zinc-300 px-2 py-1 font-medium">Longitudinal Wave Probe</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">0°</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.frequency || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.probeSize || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center font-mono">{row.serialNo || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* UT Thickness Measurement Readings — shell table */}
+              <div>
+                <h3 className="mb-2 text-xs font-bold uppercase text-emerald-700 border-b border-emerald-300 pb-1">
+                  UT Thickness Measurement Readings — Components{" "}
+                  {utmIsHorizontal ? "(Clock Positions)" : "(Directions)"}
+                </h3>
+                <div className="overflow-x-auto">
+                  {utmIsHorizontal ? (
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-emerald-700 text-white">
+                          <th rowSpan={2} className="border border-emerald-800 px-2 py-2 text-center align-middle">MOC</th>
+                          <th rowSpan={2} className="border border-emerald-800 px-2 py-2 text-center align-middle">Component Type</th>
+                          <th rowSpan={2} className="border border-emerald-800 px-2 py-2 text-center align-middle">Component ID</th>
+                          <th rowSpan={2} className="border border-emerald-800 px-2 py-2 text-center align-middle">Nominal Thickness (mm)</th>
+                          <th colSpan={4} className="border border-emerald-800 px-2 py-2 text-center">12 O&apos;clock</th>
+                          <th colSpan={4} className="border border-emerald-800 px-2 py-2 text-center">3 O&apos;clock</th>
+                          <th colSpan={4} className="border border-emerald-800 px-2 py-2 text-center">6 O&apos;clock</th>
+                          <th colSpan={4} className="border border-emerald-800 px-2 py-2 text-center">9 O&apos;clock</th>
+                          <th rowSpan={2} className="border border-emerald-800 px-2 py-2 text-center align-middle">Minimum Measured Thickness (mm)</th>
+                        </tr>
+                        <tr>
+                          {(["c12", "c3", "c6", "c9"] as const).flatMap((k) =>
+                            [1, 2, 3, 4].map((s) => (
+                              <th key={`${k}-${s}`} className="border border-emerald-800 px-1 py-1.5 text-center font-normal">Spot {s}</th>
+                            )),
+                          )}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {utmShellH.length === 0 && (
+                          <tr><td colSpan={21} className="text-center py-4 text-muted-foreground border border-zinc-300">No component measurement rows recorded.</td></tr>
+                        )}
+                        {utmShellH.map((row, idx) => (
+                          <tr key={idx} className="hover:bg-muted/30">
+                            <td className="border border-zinc-300 px-2 py-1">{String(row.moc || "—")}</td>
+                            <td className="border border-zinc-300 px-2 py-1">{String(row.componentType || "—")}</td>
+                            <td className="border border-zinc-300 px-2 py-1">{String(row.componentId || "—")}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{String(row.nominalThickness || "—")}</td>
+                            {(["c12", "c3", "c6", "c9"] as const).flatMap((k) =>
+                              [0, 1, 2, 3].map((si) => {
+                                const arr = Array.isArray(row[k]) ? (row[k] as string[]) : [];
+                                return (
+                                  <td key={`${k}-${si}`} className="border border-zinc-300 px-1 py-1 text-center">
+                                    {arr[si] && String(arr[si]).trim() ? String(arr[si]) : "—"}
+                                  </td>
+                                );
+                              }),
+                            )}
+                            <td className="border border-zinc-300 px-2 py-1 text-center font-mono font-semibold">
+                              {minCell(vutmMinOfSpots(row.c12, row.c3, row.c6, row.c9))}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-emerald-700 text-white">
+                          <th className="border border-emerald-800 px-2 py-2 text-center">MOC</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Component Type</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Direction</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Nominal Thickness (mm)</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Spot 1</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Spot 2</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Spot 3</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Spot 4</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Minimum Measured Thickness (mm)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {utmShellV.length === 0 && (
+                          <tr><td colSpan={9} className="text-center py-4 text-muted-foreground border border-zinc-300">No component measurement rows recorded.</td></tr>
+                        )}
+                        {utmShellV.map((row, idx) => (
+                          <tr key={idx} className="hover:bg-muted/30">
+                            <td className="border border-zinc-300 px-2 py-1">{String(row.moc || "—")}</td>
+                            <td className="border border-zinc-300 px-2 py-1">{String(row.componentType || "—")}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{String(row.direction || "—")}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{String(row.nominalThickness || "—")}</td>
+                            {(["spot1", "spot2", "spot3", "spot4"] as const).map((k) => (
+                              <td key={k} className="border border-zinc-300 px-2 py-1 text-center">
+                                {row[k] && String(row[k]).trim() ? String(row[k]) : "—"}
+                              </td>
+                            ))}
+                            <td className="border border-zinc-300 px-2 py-1 text-center font-mono font-semibold">
+                              {minCell(vutmMinOfSpots(row.spot1, row.spot2, row.spot3, row.spot4))}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+
+              {/* UT Thickness Measurement Readings — dish end table */}
+              {utmDish.length > 0 && (
+                <div>
+                  <h3 className="mb-2 text-xs font-bold uppercase text-emerald-700 border-b border-emerald-300 pb-1">
+                    Dish End Measurements
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-emerald-700 text-white">
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Dish</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Direction</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Spot 1</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Spot 2</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Spot 3</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Spot 4</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Minimum Measured Thickness (mm)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {utmDish.map((row, idx) => (
+                          <tr key={idx} className="hover:bg-muted/30">
+                            <td className="border border-zinc-300 px-2 py-1">{String(row.component || "—")}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{String(row.direction || "—")}</td>
+                            {(["spot1", "spot2", "spot3", "spot4"] as const).map((k) => (
+                              <td key={k} className="border border-zinc-300 px-2 py-1 text-center">
+                                {row[k] && String(row[k]).trim() ? String(row[k]) : "—"}
+                              </td>
+                            ))}
+                            <td className="border border-zinc-300 px-2 py-1 text-center font-mono font-semibold">
+                              {minCell(vutmMinOfSpots(row.spot1, row.spot2, row.spot3, row.spot4))}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* UT Thickness Measurement Readings — nozzle table */}
+              {utmNozzle.length > 0 && (
+                <div>
+                  <h3 className="mb-2 text-xs font-bold uppercase text-emerald-700 border-b border-emerald-300 pb-1">
+                    Nozzle Measurements
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-emerald-700 text-white">
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Nozzle ID</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Nominal Thickness (mm)</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Size</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Schedule</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">MOC</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Spot 1</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Spot 2</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Spot 3</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Spot 4</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Minimum Measured Thickness (mm)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {utmNozzle.map((row, idx) => (
+                          <tr key={idx} className="hover:bg-muted/30">
+                            <td className="border border-zinc-300 px-2 py-1 font-medium">{String(row.nozzleId || "—")}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{String(row.nominalThickness || "—")}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{String(row.size || "—")}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{String(row.schedule || "—")}</td>
+                            <td className="border border-zinc-300 px-2 py-1">{String(row.moc || "—")}</td>
+                            {(["spot1", "spot2", "spot3", "spot4"] as const).map((k) => (
+                              <td key={k} className="border border-zinc-300 px-2 py-1 text-center">
+                                {row[k] && String(row[k]).trim() ? String(row[k]) : "—"}
+                              </td>
+                            ))}
+                            <td className="border border-zinc-300 px-2 py-1 text-center font-mono font-semibold">
+                              {minCell(vutmMinOfSpots(row.spot1, row.spot2, row.spot3, row.spot4))}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* ─── 4. ENGINEERING DRAWINGS ───
             Shows the actual uploaded drawing files. Images (PNG/JPG/JPEG/
             WEBP) are served by /api/drawings/[id]/preview directly; PDF
@@ -2022,7 +2400,9 @@ export function PipelineReportDetailView() {
           return (
             <div className="mt-6">
               <h3 className="mb-2 text-xs font-bold uppercase text-zinc-700 border-b border-zinc-300 pb-1">
-                Inspection Photos ({galleryPhotos.length})
+                {report.reportType === "VESSEL_UTM"
+                  ? "Photographs – During UT Thickness Measurement"
+                  : "Inspection Photos"} ({galleryPhotos.length})
               </h3>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                 {galleryPhotos.map((photo) => {

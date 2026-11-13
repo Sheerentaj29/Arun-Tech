@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { recordAudit } from "@/lib/audit";
+import { normalizeVutmRows } from "@/lib/vutm-rows";
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const session = await getSession(req);
@@ -346,6 +347,43 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       vwsSurfaceFinish: body.vwsSurfaceFinish !== undefined ? (body.vwsSurfaceFinish?.trim() || null) : existing.vwsSurfaceFinish,
       vwsExtentOfScanning: body.vwsExtentOfScanning !== undefined ? (body.vwsExtentOfScanning?.trim() || null) : existing.vwsExtentOfScanning,
       vwsDetailRows: body.vwsDetailRows !== undefined ? (typeof body.vwsDetailRows === "string" ? body.vwsDetailRows : null) : existing.vwsDetailRows,
+      // ─── VESSEL UT THICKNESS MEASUREMENT FIELDS (reportType = VESSEL_UTM) ───
+      // Completely separate from the Piping Thickness Measurement
+      // (PIPELINE_THICKNESS / ThicknessMeasurement table) and from the
+      // Vessel Weld Scan vws* fields above. Minimum Measured Thickness is
+      // recomputed server-side from the spot readings, never trusted from
+      // the payload. The shell-row shape follows the report's orientation
+      // (the orientation currently being saved, falling back to the
+      // stored one).
+      vutmDateOfExamination: body.vutmDateOfExamination !== undefined ? (body.vutmDateOfExamination ? new Date(body.vutmDateOfExamination) : null) : existing.vutmDateOfExamination,
+      vutmTestingStandard: body.vutmTestingStandard !== undefined ? (body.vutmTestingStandard?.trim() || null) : existing.vutmTestingStandard,
+      vutmAcceptanceCriteria: body.vutmAcceptanceCriteria !== undefined ? (body.vutmAcceptanceCriteria?.trim() || null) : existing.vutmAcceptanceCriteria,
+      vutmUtProcedure: body.vutmUtProcedure !== undefined ? (body.vutmUtProcedure?.trim() || null) : existing.vutmUtProcedure,
+      vutmEquipmentMake: body.vutmEquipmentMake !== undefined ? (body.vutmEquipmentMake?.trim() || null) : existing.vutmEquipmentMake,
+      vutmEquipmentModel: body.vutmEquipmentModel !== undefined ? (body.vutmEquipmentModel?.trim() || null) : existing.vutmEquipmentModel,
+      vutmEquipmentSerialNo: body.vutmEquipmentSerialNo !== undefined ? (body.vutmEquipmentSerialNo?.trim() || null) : existing.vutmEquipmentSerialNo,
+      vutmCalibrationDueDate: body.vutmCalibrationDueDate !== undefined ? (body.vutmCalibrationDueDate ? new Date(body.vutmCalibrationDueDate) : null) : existing.vutmCalibrationDueDate,
+      vutmCableLengthAndType: body.vutmCableLengthAndType !== undefined ? (body.vutmCableLengthAndType?.trim() || null) : existing.vutmCableLengthAndType,
+      vutmLwProbeRows: body.vutmLwProbeRows !== undefined ? (typeof body.vutmLwProbeRows === "string" ? body.vutmLwProbeRows : null) : existing.vutmLwProbeRows,
+      vutmTypeOfCrystal: body.vutmTypeOfCrystal !== undefined ? (body.vutmTypeOfCrystal?.trim() || null) : existing.vutmTypeOfCrystal,
+      vutmCalibrationBlock: body.vutmCalibrationBlock !== undefined ? (body.vutmCalibrationBlock?.trim() || null) : existing.vutmCalibrationBlock,
+      vutmSurfaceTemperature: body.vutmSurfaceTemperature !== undefined ? (body.vutmSurfaceTemperature?.trim() || null) : existing.vutmSurfaceTemperature,
+      vutmMethod: body.vutmMethod !== undefined ? (body.vutmMethod?.trim() || null) : existing.vutmMethod,
+      vutmCouplant: body.vutmCouplant !== undefined ? (body.vutmCouplant?.trim() || null) : existing.vutmCouplant,
+      vutmSurfacePreparation: body.vutmSurfacePreparation !== undefined ? (body.vutmSurfacePreparation?.trim() || null) : existing.vutmSurfacePreparation,
+      vutmSurfaceFinish: body.vutmSurfaceFinish !== undefined ? (body.vutmSurfaceFinish?.trim() || null) : existing.vutmSurfaceFinish,
+      vutmShellRows:
+        body.vutmShellRows !== undefined
+          ? normalizeVutmRows(body.vutmShellRows, {
+              kind: "shell",
+              orientation:
+                (body.vesselOrientation === "HORIZONTAL" || body.vesselOrientation === "VERTICAL"
+                  ? body.vesselOrientation
+                  : (existing.vesselOrientation as "HORIZONTAL" | "VERTICAL" | null)),
+            })
+          : existing.vutmShellRows,
+      vutmDishRows: body.vutmDishRows !== undefined ? normalizeVutmRows(body.vutmDishRows, { kind: "dish" }) : existing.vutmDishRows,
+      vutmNozzleRows: body.vutmNozzleRows !== undefined ? normalizeVutmRows(body.vutmNozzleRows, { kind: "nozzle" }) : existing.vutmNozzleRows,
     },
   });
 

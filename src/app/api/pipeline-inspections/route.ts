@@ -18,6 +18,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { recordAudit } from "@/lib/audit";
+import { normalizeVutmRows } from "@/lib/vutm-rows";
 
 export async function GET(req: NextRequest) {
   const session = await getSession(req);
@@ -148,6 +149,7 @@ export async function POST(req: NextRequest) {
         "VESSEL_DPT",
         "VESSEL_MPT",
         "VESSEL_WELD_SCAN",
+        "VESSEL_UTM",
         "PIPELINE_VISUAL",
         "PIPELINE_CONDITION",
       ].includes(body.reportType)
@@ -155,13 +157,15 @@ export async function POST(req: NextRequest) {
         : "PIPELINE_THICKNESS",
       // ─── EQUIPMENT TYPE + VESSEL ORIENTATION ───
       // equipmentType: PIPING | VESSEL (from the selector flow).
-      // vesselOrientation: HORIZONTAL | VERTICAL — required for VESSEL_DPT
-      // and VESSEL_MPT, ignored for everything else.
+      // vesselOrientation: HORIZONTAL | VERTICAL — required for VESSEL_DPT,
+      // VESSEL_MPT and VESSEL_UTM, ignored for everything else.
       equipmentType: body.equipmentType === "PIPING" || body.equipmentType === "VESSEL"
         ? body.equipmentType
         : null,
       vesselOrientation:
-        (body.reportType === "VESSEL_DPT" || body.reportType === "VESSEL_MPT") &&
+        (body.reportType === "VESSEL_DPT" ||
+         body.reportType === "VESSEL_MPT" ||
+         body.reportType === "VESSEL_UTM") &&
         (body.vesselOrientation === "HORIZONTAL" || body.vesselOrientation === "VERTICAL")
           ? body.vesselOrientation
           : null,
@@ -346,6 +350,38 @@ export async function POST(req: NextRequest) {
       vwsSurfaceFinish: body.vwsSurfaceFinish?.trim() || null,
       vwsExtentOfScanning: body.vwsExtentOfScanning?.trim() || null,
       vwsDetailRows: typeof body.vwsDetailRows === "string" ? body.vwsDetailRows : null,
+      // ─── VESSEL UT THICKNESS MEASUREMENT FIELDS (reportType = VESSEL_UTM) ───
+      // Completely separate from the Piping Thickness Measurement
+      // (PIPELINE_THICKNESS / ThicknessMeasurement table) and from the
+      // Vessel Weld Scan vws* fields above. Minimum Measured Thickness is
+      // recomputed server-side from the spot readings, never trusted from
+      // the payload.
+      vutmDateOfExamination: body.vutmDateOfExamination ? new Date(body.vutmDateOfExamination) : null,
+      vutmTestingStandard: body.vutmTestingStandard?.trim() || null,
+      vutmAcceptanceCriteria: body.vutmAcceptanceCriteria?.trim() || null,
+      vutmUtProcedure: body.vutmUtProcedure?.trim() || null,
+      vutmEquipmentMake: body.vutmEquipmentMake?.trim() || null,
+      vutmEquipmentModel: body.vutmEquipmentModel?.trim() || null,
+      vutmEquipmentSerialNo: body.vutmEquipmentSerialNo?.trim() || null,
+      vutmCalibrationDueDate: body.vutmCalibrationDueDate ? new Date(body.vutmCalibrationDueDate) : null,
+      vutmCableLengthAndType: body.vutmCableLengthAndType?.trim() || null,
+      vutmLwProbeRows: typeof body.vutmLwProbeRows === "string" ? body.vutmLwProbeRows : null,
+      vutmTypeOfCrystal: body.vutmTypeOfCrystal?.trim() || null,
+      vutmCalibrationBlock: body.vutmCalibrationBlock?.trim() || null,
+      vutmSurfaceTemperature: body.vutmSurfaceTemperature?.trim() || null,
+      vutmMethod: body.vutmMethod?.trim() || null,
+      vutmCouplant: body.vutmCouplant?.trim() || null,
+      vutmSurfacePreparation: body.vutmSurfacePreparation?.trim() || null,
+      vutmSurfaceFinish: body.vutmSurfaceFinish?.trim() || null,
+      vutmShellRows: normalizeVutmRows(body.vutmShellRows, {
+        kind: "shell",
+        orientation:
+          body.vesselOrientation === "HORIZONTAL" || body.vesselOrientation === "VERTICAL"
+            ? body.vesselOrientation
+            : null,
+      }),
+      vutmDishRows: normalizeVutmRows(body.vutmDishRows, { kind: "dish" }),
+      vutmNozzleRows: normalizeVutmRows(body.vutmNozzleRows, { kind: "nozzle" }),
       isDemo: false,
     },
     include: {
