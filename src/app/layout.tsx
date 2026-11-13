@@ -14,9 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Inspection Report Automation · Equipment Master",
-  description: "Industrial inspection report automation system — Equipment Master Management module. Manage registered vessels, tanks, pipes, pumps and valves; track inspections and audit history.",
-  keywords: ["industrial inspection", "equipment master", "vessel inspection", "storage tank", "pressure vessel", "pipe inspection", "audit log"],
+  title: "Inspection Report Automation System",
+  description: "Industrial inspection report automation system — create piping and vessel inspection reports (DPT, MPT, Weld Scan, Thickness), submit them for review, and approve report history.",
+  keywords: ["industrial inspection", "inspection reports", "report history", "vessel inspection", "pipe inspection", "DPT", "MPT", "audit log"],
   authors: [{ name: "Inspection Automation" }],
   icons: {
     icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",

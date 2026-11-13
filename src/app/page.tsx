@@ -12,12 +12,7 @@ import { LoginScreen } from "@/components/login-screen";
 import { AppSidebar } from "@/components/layout/sidebar";
 import { AdminDashboardView } from "@/components/views/admin-dashboard-view";
 import { EmployeeDashboardView } from "@/components/views/employee-dashboard-view";
-import { EquipmentListView } from "@/components/views/equipment-list-view";
-import { EquipmentFormView } from "@/components/views/equipment-form-view";
-import { EquipmentDetailView } from "@/components/views/equipment-detail-view";
 import { ClientsView } from "@/components/views/clients-view";
-import { ImportView } from "@/components/views/import-view";
-import { InspectionsView } from "@/components/views/inspections-view";
 import { AuditLogView } from "@/components/views/audit-log-view";
 import { PipelineReportsListView } from "@/components/views/pipeline-reports-list-view";
 import { PipelineReportTypeSelectorView } from "@/components/views/pipeline-report-type-selector-view";
@@ -93,14 +88,12 @@ export default function Home() {
           {view === "dashboard" && (
             user.dashboardRole === "ADMIN" ? <AdminDashboardView /> : <EmployeeDashboardView />
           )}
-          {/* Equipment master */}
-          {view === "equipment" && <EquipmentListView />}
-          {view === "equipment-detail" && <EquipmentDetailView />}
-          {view === "equipment-form" && <EquipmentFormView />}
-          {/* Existing inspections + admin views */}
-          {view === "inspections" && <InspectionsView />}
+          {/* Admin views.
+              NOTE: Equipment Master (equipment / equipment-detail /
+              equipment-form), CSV Import / Export, and the legacy
+              equipment-inspections views were intentionally removed and
+              must NOT be re-added. */}
           {view === "clients" && <ClientsView />}
-          {view === "import" && <ImportView />}
           {view === "audit-logs" && <AuditLogView />}
           {/* Pipeline thickness reports */}
           {view === "pipeline-reports" && <PipelineReportsListView />}

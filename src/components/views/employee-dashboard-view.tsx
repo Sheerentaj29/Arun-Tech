@@ -68,6 +68,11 @@ const REPORT_TYPE_BADGE: Record<string, { label: string; color: string }> = {
   PIPELINE_THICKNESS: { label: "Thickness", color: "border-emerald-500 text-emerald-700" },
   PIPELINE_VISUAL:    { label: "Visual",    color: "border-blue-500 text-blue-700" },
   PIPELINE_CONDITION: { label: "Condition", color: "border-amber-500 text-amber-700" },
+  PIPELINE_DPT:       { label: "DPT/DPPT", color: "border-purple-500 text-purple-700" },
+  PIPELINE_MPT:       { label: "MPT",      color: "border-orange-500 text-orange-700" },
+  PIPELINE_WELD_SCAN: { label: "Weld Scan", color: "border-cyan-500 text-cyan-700" },
+  VESSEL_DPT:         { label: "Vessel DPT", color: "border-purple-500 text-purple-700" },
+  VESSEL_MPT:         { label: "Vessel MPT", color: "border-orange-500 text-orange-700" },
 };
 
 export function EmployeeDashboardView() {
@@ -306,10 +311,10 @@ export function EmployeeDashboardView() {
         <CardContent className="flex items-start gap-3 p-4">
           <Badge variant="outline" className="border-amber-500 text-amber-800 bg-white">DEMO</Badge>
           <p className="text-xs text-amber-900">
-            Use the sidebar to access Equipment Master and Inspection Reports. As an
-            employee, you can create new reports, edit your own drafts and returned
-            reports, and revise approved reports (creating a new revision that needs
-            admin approval). You can't approve your own reports or see other
+            Use the sidebar to access Report History. As an employee, you can
+            create new reports, edit your own drafts and returned reports, and
+            revise approved reports (creating a new revision that needs admin
+            approval). You can't approve your own reports or see other
             employees' reports.
           </p>
         </CardContent>

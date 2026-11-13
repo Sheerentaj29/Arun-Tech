@@ -130,6 +130,14 @@ const REPORT_TYPE_INFO: Record<PipelineReportType, {
     step2Label: "DPT Details",
     accent: "border-purple-500 text-purple-700",
   },
+  VESSEL_MPT: {
+    title: "VESSEL MAGNETIC PARTICLE TESTING REPORT",
+    shortLabel: "Vessel MPT",
+    formHeading: "New Vessel MPT Report",
+    formDescription: "Vessel magnetic particle testing with MPT parameters, consumable details, testing details table, and photographs.",
+    step2Label: "MPT Details",
+    accent: "border-orange-500 text-orange-700",
+  },
 };
 
 // ---------- TYPES ----------
@@ -194,8 +202,8 @@ interface ReportHeader {
   // sends it on POST (the API uses it on create; ignored on PUT).
   reportType: PipelineReportType;
   // Equipment type ("PIPING" | "VESSEL") + vessel orientation
-  // ("HORIZONTAL" | "VERTICAL", VESSEL_DPT only) selected in the
-  // report-creation flow. Persisted on the report.
+  // ("HORIZONTAL" | "VERTICAL", VESSEL_DPT and VESSEL_MPT only) selected
+  // in the report-creation flow. Persisted on the report.
   equipmentType: string;
   vesselOrientation: string;
   clientId: string;
@@ -321,6 +329,21 @@ interface ReportHeader {
   vdptDeveloperProduct: string;
   vdptDeveloperBatchNo: string;
   vdptDeveloperExpiry: string;
+  // ─── VESSEL MPT CONSUMABLE DETAILS ───
+  // Separate Make / Product / Lot Number / Expiry Date entry for each
+  // consumable (White Contrast, Wet Particle Iron Ink). Populated when
+  // reportType = VESSEL_MPT. The MPT parameters reuse the mpt* fields
+  // above; the testing-details rows live in the local vmptRows state and
+  // are persisted as the vmptRows JSON column.
+  vmptWhiteContrastMake: string;
+  vmptWhiteContrastProduct: string;
+  vmptWhiteContrastLotNo: string;
+  vmptWhiteContrastExpiry: string;
+  vmptInkMake: string;
+  vmptInkProduct: string;
+  vmptInkLotNo: string;
+  vmptInkExpiry: string;
+  vmptRows: string;
   // Condition fields default empty
   pipelineAgeYears: string;
   serviceFluid: string;
@@ -463,6 +486,16 @@ const EMPTY_HEADER: ReportHeader = {
   vdptDeveloperProduct: "",
   vdptDeveloperBatchNo: "",
   vdptDeveloperExpiry: "",
+  // Vessel MPT consumable details default empty
+  vmptWhiteContrastMake: "",
+  vmptWhiteContrastProduct: "",
+  vmptWhiteContrastLotNo: "",
+  vmptWhiteContrastExpiry: "",
+  vmptInkMake: "",
+  vmptInkProduct: "",
+  vmptInkLotNo: "",
+  vmptInkExpiry: "",
+  vmptRows: "[]",
   // Condition fields default empty
   pipelineAgeYears: "",
   serviceFluid: "",
@@ -575,6 +608,43 @@ const WELD_TYPE_OPTIONS = ["Butt Weld", "Fillet Weld"];
 // Weld-type options for the VESSEL DPT "Dye Penetrant Testing Details"
 // table (includes "Other" per the vessel report layout).
 const VESSEL_WELD_TYPE_OPTIONS = ["Fillet Weld", "Butt Weld", "Other"];
+
+// ─── VESSEL MPT TESTING-DETAILS ROW ───
+// One row of the "Magnetic Particle Testing Details" table on VESSEL_MPT
+// reports. Rows are stored as a JSON array on the report itself (the
+// vmptRows column) rather than in the shared DptObservation table — the
+// vessel MPT table has its own column set (Part Details | ID | Weld
+// Dimension | Size of Indication Approx. (mm) | Observation & Result).
+// Values are all typeable/free text — nothing is hardcoded.
+interface VmptDetailRow {
+  partDetails: string;
+  idNo: string;
+  weldDimension: string;
+  indicationSize: string;
+  observationResult: string;
+}
+const EMPTY_VMPT_ROW: VmptDetailRow = {
+  partDetails: "",
+  idNo: "",
+  weldDimension: "",
+  indicationSize: "",
+  observationResult: "",
+};
+function parseVmptRows(json: string | null | undefined): VmptDetailRow[] {
+  try {
+    const parsed = JSON.parse(json ?? "[]");
+    if (Array.isArray(parsed)) {
+      return parsed.map((r: Record<string, unknown>) => ({
+        partDetails: String(r.partDetails ?? ""),
+        idNo: String(r.idNo ?? ""),
+        weldDimension: String(r.weldDimension ?? ""),
+        indicationSize: String(r.indicationSize ?? ""),
+        observationResult: String(r.observationResult ?? ""),
+      }));
+    }
+  } catch {}
+  return [];
+}
 const CORROSION_LEVELS = ["None", "Light", "Moderate", "Severe", "N/A"];
 const CONDITION_RATINGS = ["Good", "Fair", "Poor", "Critical", "N/A"];
 const RISK_LEVELS = ["Low", "Medium", "High", "Critical"];
@@ -643,6 +713,9 @@ export function PipelineReportFormView() {
 
   // DPT observations for Step 2 (PIPELINE_DPT and VESSEL_DPT reports)
   const [dptObservations, setDptObservations] = useState<DptObservationRow[]>([]);
+  // Vessel MPT testing-details rows (VESSEL_MPT reports). Stored locally
+  // and persisted as the vmptRows JSON column whenever the header is saved.
+  const [vmptRows, setVmptRows] = useState<VmptDetailRow[]>([]);
   const [clients, setClients] = useState<ClientItem[]>([]);
   const [componentTypes, setComponentTypes] = useState<ComponentTypeItem[]>([]);
   const [standards, setStandards] = useState<PipeStandardItem[]>([]);
@@ -784,6 +857,16 @@ export function PipelineReportFormView() {
           vdptDeveloperProduct: r.vdptDeveloperProduct ?? "",
           vdptDeveloperBatchNo: r.vdptDeveloperBatchNo ?? "",
           vdptDeveloperExpiry: r.vdptDeveloperExpiry ?? "",
+          // Vessel MPT consumable details + testing-details rows
+          vmptWhiteContrastMake: r.vmptWhiteContrastMake ?? "",
+          vmptWhiteContrastProduct: r.vmptWhiteContrastProduct ?? "",
+          vmptWhiteContrastLotNo: r.vmptWhiteContrastLotNo ?? "",
+          vmptWhiteContrastExpiry: r.vmptWhiteContrastExpiry ?? "",
+          vmptInkMake: r.vmptInkMake ?? "",
+          vmptInkProduct: r.vmptInkProduct ?? "",
+          vmptInkLotNo: r.vmptInkLotNo ?? "",
+          vmptInkExpiry: r.vmptInkExpiry ?? "",
+          vmptRows: r.vmptRows ?? "[]",
           // MPT fields
           mptDateOfExamination: r.mptDateOfExamination ? r.mptDateOfExamination.slice(0, 10) : new Date().toISOString().slice(0, 10),
           mptTestingStandard: r.mptTestingStandard ?? "",
@@ -990,6 +1073,8 @@ export function PipelineReportFormView() {
         } else {
           setDptObservations([]);
         }
+        // Load Vessel MPT testing-details rows from the vmptRows JSON column
+        setVmptRows(parseVmptRows(r.vmptRows));
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -1219,6 +1304,12 @@ export function PipelineReportFormView() {
         payload.dptCustomColumns = header.dptCustomColumns;
         // Dye Penetrant Procedure fields are passed through verbatim —
         // they're all editable/typeable text fields.
+      } else if (header.reportType === "VESSEL_MPT") {
+        // Vessel MPT: the testing-details rows are stored as the vmptRows
+        // JSON column (the local vmptRows state is the source of truth).
+        // The consumable fields (vmpt*) and the MPT parameters (mpt*)
+        // pass through verbatim from the header spread.
+        payload.vmptRows = JSON.stringify(vmptRows);
       } else {
         payload.pipelineAgeYears = null;
       }
@@ -1552,8 +1643,12 @@ export function PipelineReportFormView() {
       if (dptObservations.length === 0) {
         toast.warning("No DPT observations yet. You can proceed, but you'll need to add at least one before submitting.");
       }
+    } else if (header.reportType === "VESSEL_MPT") {
+      if (vmptRows.length === 0) {
+        toast.warning("No Magnetic Particle Testing Details rows yet. You can proceed, but you'll need to add at least one before submitting.");
+      }
     }
-    // PIPELINE_CONDITION, PIPELINE_MPT, PIPELINE_WELD_SCAN have no row requirement.
+    // PIPELINE_CONDITION and PIPELINE_MPT (piping) have no row requirement.
     return true;
   }
 
@@ -2182,6 +2277,25 @@ export function PipelineReportFormView() {
     }
   }
 
+  // ─── VESSEL MPT TESTING-DETAILS ROW OPERATIONS (VESSEL_MPT) ───
+  // Rows live in local state and are persisted as the vmptRows JSON
+  // column whenever the header is saved (no per-row API calls).
+  function addVmptRow() {
+    setVmptRows((arr) => [...arr, { ...EMPTY_VMPT_ROW }]);
+  }
+
+  function updateVmptRow(idx: number, patch: Partial<VmptDetailRow>) {
+    setVmptRows((arr) => {
+      const next = [...arr];
+      next[idx] = { ...next[idx], ...patch };
+      return next;
+    });
+  }
+
+  function removeVmptRow(idx: number) {
+    setVmptRows((arr) => arr.filter((_, i) => i !== idx));
+  }
+
   // ─── SAVE DRAFT (saves header + custom columns without navigating) ───
   async function saveDraft() {
     if (header.reportType === "PIPELINE_THICKNESS") {
@@ -2383,7 +2497,7 @@ export function PipelineReportFormView() {
         <CardHeader>
           <CardTitle className="text-base">Report Header</CardTitle>
           <CardDescription>
-            {header.reportType === "VESSEL_DPT"
+            {header.reportType === "VESSEL_DPT" || header.reportType === "VESSEL_MPT"
               ? "Client, plant, and equipment / vessel identification. All fields editable by authorized users."
               : "Client, plant, and pipeline identification. All fields editable by authorized users."}
           </CardDescription>
@@ -2435,23 +2549,23 @@ export function PipelineReportFormView() {
             />
           </div>
           <div className="space-y-2 sm:col-span-2">
-            <Label>{header.reportType === "VESSEL_DPT" ? "Equipment / Vessel Description" : "Pipeline Description"}</Label>
+            <Label>{header.reportType === "VESSEL_DPT" || header.reportType === "VESSEL_MPT" ? "Equipment / Vessel Description" : "Pipeline Description"}</Label>
             <Input
               value={header.pipelineDescription}
               onChange={(e) => updateHeader("pipelineDescription", e.target.value)}
               placeholder={
-                header.reportType === "VESSEL_DPT"
+                header.reportType === "VESSEL_DPT" || header.reportType === "VESSEL_MPT"
                   ? "e.g. V-311 Final Separator, nozzle welds"
                   : "e.g. 2-inch water pipeline, top pipe rack, west side"
               }
             />
           </div>
           <div className="space-y-2">
-            <Label>{header.reportType === "VESSEL_DPT" ? "Equipment Identification No." : "Pipeline Identification No."}</Label>
+            <Label>{header.reportType === "VESSEL_DPT" || header.reportType === "VESSEL_MPT" ? "Equipment Identification No." : "Pipeline Identification No."}</Label>
             <Input
               value={header.pipelineIdentificationNumber}
               onChange={(e) => updateHeader("pipelineIdentificationNumber", e.target.value)}
-              placeholder={header.reportType === "VESSEL_DPT" ? "Equipment / tag number" : "PID line number"}
+              placeholder={header.reportType === "VESSEL_DPT" || header.reportType === "VESSEL_MPT" ? "Equipment / tag number" : "PID line number"}
               className="font-mono"
             />
           </div>
@@ -4282,6 +4396,298 @@ export function PipelineReportFormView() {
       </div>
       </>
       )} {/* end step 2 — VESSEL DPT */}
+
+      {/* ═══ STEP 2 (VESSEL MPT): MAGNETIC PARTICLE TESTING REPORT ═══ */}
+      {step === 2 && header.reportType === "VESSEL_MPT" && (
+      <>
+      {/* ═══ A. MAGNETIC PARTICLE TESTING PARAMETERS ═══ */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Magnet className="h-4 w-4 text-orange-700" />
+            Magnetic Particle Testing Parameters
+            {header.vesselOrientation && (
+              <Badge variant="outline" className="border-orange-400 text-orange-700 text-[10px]">
+                {header.vesselOrientation === "HORIZONTAL" ? "Horizontal Vessel" : "Vertical Vessel"}
+              </Badge>
+            )}
+          </CardTitle>
+          <CardDescription>
+            Record the magnetic particle testing parameters for this vessel
+            inspection. All fields are editable — type the value as it
+            applies to this examination. Leave a field blank if it is not
+            applicable.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <tbody>
+                {/* Date of Examination — editable date field */}
+                <tr className="border-b border-zinc-200">
+                  <td className="bg-orange-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/3">
+                    Date of Examination
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <Input
+                      type="date"
+                      className="h-8 text-sm"
+                      value={header.mptDateOfExamination}
+                      onChange={(e) => updateHeader("mptDateOfExamination", e.target.value)}
+                    />
+                  </td>
+                </tr>
+                {/* Typeable text fields */}
+                {([
+                  ["Testing Standard", "mptTestingStandard", "e.g. ASME Section V 2023, Article 7"],
+                  ["Acceptance Criteria", "mptAcceptanceCriteria", "e.g. ASME Section VIII Div. 1, Appx. 6"],
+                  ["Surface Preparation", "mptSurfacePreparation", "e.g. Grinding and wire brush"],
+                  ["Surface Temperature", "mptSurfaceTemperature", "e.g. 32 °C"],
+                  ["Type of Instrument / Sl. No.", "mptInstrumentSerialNo", "e.g. AC Yoke / 201501012123"],
+                  ["MPT Method", "mptMethod", "e.g. Wet Continuous"],
+                  ["Type of Current", "mptTypeOfCurrent", "e.g. AC"],
+                  ["AC Yoke Lifting Capacity", "mptAcYokeLiftingCapacity", "e.g. 5 kg / 50 N"],
+                  ["Contrast Medium", "mptContrastMedium", "e.g. White contrast"],
+                  ["Method of Pre-cleaning", "mptMethodOfPreCleaning", "e.g. Solvent cleaning"],
+                  ["Method of Applying White Contrast", "mptMethodOfApplyingWhiteContrast", "e.g. Spray"],
+                  ["AC Yoke Pole Spacing", "mptAcYokePoleSpacing", "e.g. 150 mm"],
+                  ["Magnetic Medium", "mptMagneticMedium", "e.g. Wet particle iron ink"],
+                  ["Method of Applying Magnetic Medium", "mptMethodOfApplyingMagneticMedium", "e.g. Spray"],
+                  ["Development Time", "mptDevelopmentTime", "e.g. 5 minutes"],
+                  ["Interpretation Time", "mptInterpretationTime", "e.g. 10 minutes"],
+                  ["Lighting Equipment", "mptLightingEquipment", "e.g. LED torch ≥ 1000 lux"],
+                  ["Post Cleaning", "mptPostCleaning", "e.g. Solvent wipe"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-orange-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ═══ B. CONSUMABLE DETAILS ═══
+          Separate Make / Product / Lot Number / Expiry Date entry for each
+          of the two consumables (White Contrast, Wet Particle Iron Ink).
+          All values are typeable — nothing is hardcoded from any sample. */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Magnet className="h-4 w-4 text-orange-700" />
+            Consumable Details
+          </CardTitle>
+          <CardDescription>
+            Enter the make, product / description, lot number, and expiry
+            date for each consumable used during the examination.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="bg-orange-800 text-white">
+                  <th className="border border-orange-900 px-2 py-2 text-center w-1/5">Consumable</th>
+                  <th className="border border-orange-900 px-2 py-2 text-center">Make</th>
+                  <th className="border border-orange-900 px-2 py-2 text-center">Product / Description</th>
+                  <th className="border border-orange-900 px-2 py-2 text-center">Lot Number</th>
+                  <th className="border border-orange-900 px-2 py-2 text-center">Expiry Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {([
+                  ["White Contrast", "vmptWhiteContrast"],
+                  ["Wet Particle Iron Ink", "vmptInk"],
+                ] as const).map(([label, prefix]) => (
+                  <tr key={prefix} className="border-b border-zinc-200">
+                    <td className="bg-orange-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[`${prefix}Make` as keyof ReportHeader] as string}
+                        onChange={(e) => updateHeader(`${prefix}Make` as keyof ReportHeader, e.target.value as never)}
+                        placeholder="e.g. Magnaflux"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[`${prefix}Product` as keyof ReportHeader] as string}
+                        onChange={(e) => updateHeader(`${prefix}Product` as keyof ReportHeader, e.target.value as never)}
+                        placeholder="Product / description"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[`${prefix}LotNo` as keyof ReportHeader] as string}
+                        onChange={(e) => updateHeader(`${prefix}LotNo` as keyof ReportHeader, e.target.value as never)}
+                        placeholder="Lot number"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[`${prefix}Expiry` as keyof ReportHeader] as string}
+                        onChange={(e) => updateHeader(`${prefix}Expiry` as keyof ReportHeader, e.target.value as never)}
+                        placeholder="e.g. Nov-2027"
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ═══ C. MAGNETIC PARTICLE TESTING DETAILS ═══
+          Editable table: Part Details | ID | Weld Dimension | Size of
+          Indication Approx. (mm) | Observation & Result. Rows can be
+          added / removed and every cell is editable. Serial numbers are
+          auto-generated. Nothing is hardcoded — all values are typed by
+          the user. */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base">Magnetic Particle Testing Details</CardTitle>
+              <CardDescription>
+                Add one row per part / weld examined. Serial numbers are
+                auto-generated. Observation &amp; Result is free text (e.g.
+                &quot;No relevant indication&quot;).
+              </CardDescription>
+            </div>
+            <Button onClick={addVmptRow} size="sm">
+              <Plus className="mr-1 h-4 w-4" /> Add Row
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-orange-800 text-white">
+                <tr>
+                  <th className="border border-orange-900 px-2 py-2 text-center" style={{ minWidth: 40 }}>Sl. No</th>
+                  <th className="border border-orange-900 px-2 py-2 text-center" style={{ minWidth: 160 }}>Part Details</th>
+                  <th className="border border-orange-900 px-2 py-2 text-center" style={{ minWidth: 90 }}>ID</th>
+                  <th className="border border-orange-900 px-2 py-2 text-center" style={{ minWidth: 120 }}>Weld Dimension</th>
+                  <th className="border border-orange-900 px-2 py-2 text-center" style={{ minWidth: 110 }}>Size of Indication Approx. (mm)</th>
+                  <th className="border border-orange-900 px-2 py-2 text-center" style={{ minWidth: 200 }}>Observation &amp; Result</th>
+                  <th className="border border-orange-900 px-2 py-2 text-center" style={{ minWidth: 70 }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {vmptRows.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="text-center py-6 text-muted-foreground border border-zinc-300">
+                      No rows yet. Click <strong>Add Row</strong> to begin.
+                    </td>
+                  </tr>
+                )}
+                {vmptRows.map((row, idx) => (
+                  <tr key={idx} className="hover:bg-muted/30">
+                    <td className="border border-zinc-300 p-1 text-center font-mono tabular-nums">{idx + 1}</td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input
+                        className="h-8 text-xs"
+                        value={row.partDetails}
+                        onChange={(e) => updateVmptRow(idx, { partDetails: e.target.value })}
+                        placeholder="e.g. Shell weld / nozzle weld"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input
+                        className="h-8 text-xs"
+                        value={row.idNo}
+                        onChange={(e) => updateVmptRow(idx, { idNo: e.target.value })}
+                        placeholder="ID"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input
+                        className="h-8 text-xs"
+                        value={row.weldDimension}
+                        onChange={(e) => updateVmptRow(idx, { weldDimension: e.target.value })}
+                        placeholder="e.g. 10 mm thk"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input
+                        type="text"
+                        className="h-8 text-xs text-center"
+                        value={row.indicationSize}
+                        onChange={(e) => updateVmptRow(idx, { indicationSize: e.target.value })}
+                        placeholder="e.g. Nil"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Textarea
+                        rows={1}
+                        className="text-xs min-h-[32px] py-1"
+                        value={row.observationResult}
+                        onChange={(e) => updateVmptRow(idx, { observationResult: e.target.value })}
+                        placeholder="e.g. No relevant indication"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <div className="flex justify-center">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+                          onClick={() => removeVmptRow(idx)}
+                          title="Remove row"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="bg-zinc-50">
+        <CardContent className="p-4 text-xs text-muted-foreground space-y-1">
+          <div><strong>Vessel MPT:</strong> record the magnetic particle testing parameters, consumable details, and one row per part / weld examined.</div>
+          <div><strong>Serial numbers:</strong> auto-generated (1, 2, 3…) and renumbered when rows are added or deleted.</div>
+          <div><strong>Photographs:</strong> upload MPT photographs in the next step (Findings &amp; Photos) — they appear in the review page and the generated PDF.</div>
+          <div><strong>Vessel orientation:</strong> {header.vesselOrientation === "HORIZONTAL" ? "Horizontal Vessel" : header.vesselOrientation === "VERTICAL" ? "Vertical Vessel" : "not set"} — selected when creating the report and shown on the review page and PDF.</div>
+        </CardContent>
+      </Card>
+
+      {/* Step 2 navigation */}
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" onClick={goPrevious}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> Previous
+        </Button>
+        <Button variant="ghost" onClick={saveDraft} disabled={saving}>
+          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+          Save Draft
+        </Button>
+        <Button onClick={proceedToNext} disabled={saving}>
+          Proceed to Next <ArrowRight className="ml-2 h-4 w-4" />
+        </Button>
+      </div>
+      </>
+      )} {/* end step 2 — VESSEL MPT */}
 
       {/* ═══ STEP 2 (MPT): MAGNETIC PARTICLE TESTING PROCEDURE ═══ */}
       {step === 2 && header.reportType === "PIPELINE_MPT" && (

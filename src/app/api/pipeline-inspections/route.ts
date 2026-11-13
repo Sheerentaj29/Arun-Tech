@@ -135,15 +135,18 @@ export async function POST(req: NextRequest) {
       // backward compat (so existing API callers that don't send it still
       // create thickness reports as before). Accept the four active piping
       // types (PIPELINE_THICKNESS, PIPELINE_DPT, PIPELINE_MPT,
-      // PIPELINE_WELD_SCAN), the vessel type (VESSEL_DPT), and the two
-      // legacy types (PIPELINE_VISUAL, PIPELINE_CONDITION) so existing
-      // reports of those types can still be created if needed.
+      // PIPELINE_WELD_SCAN), the vessel types (VESSEL_DPT, VESSEL_MPT),
+      // and the two legacy types (PIPELINE_VISUAL, PIPELINE_CONDITION) so
+      // existing reports of those types can still be created if needed.
+      // NOTE: PIPELINE_UT (UT / Ultrasonic Test Report) was intentionally
+      // removed and is NOT accepted — do not re-add it.
       reportType: [
         "PIPELINE_THICKNESS",
         "PIPELINE_DPT",
         "PIPELINE_MPT",
         "PIPELINE_WELD_SCAN",
         "VESSEL_DPT",
+        "VESSEL_MPT",
         "PIPELINE_VISUAL",
         "PIPELINE_CONDITION",
       ].includes(body.reportType)
@@ -151,13 +154,13 @@ export async function POST(req: NextRequest) {
         : "PIPELINE_THICKNESS",
       // ─── EQUIPMENT TYPE + VESSEL ORIENTATION ───
       // equipmentType: PIPING | VESSEL (from the selector flow).
-      // vesselOrientation: HORIZONTAL | VERTICAL — required for VESSEL_DPT,
-      // ignored for everything else.
+      // vesselOrientation: HORIZONTAL | VERTICAL — required for VESSEL_DPT
+      // and VESSEL_MPT, ignored for everything else.
       equipmentType: body.equipmentType === "PIPING" || body.equipmentType === "VESSEL"
         ? body.equipmentType
         : null,
       vesselOrientation:
-        body.reportType === "VESSEL_DPT" &&
+        (body.reportType === "VESSEL_DPT" || body.reportType === "VESSEL_MPT") &&
         (body.vesselOrientation === "HORIZONTAL" || body.vesselOrientation === "VERTICAL")
           ? body.vesselOrientation
           : null,
@@ -176,7 +179,6 @@ export async function POST(req: NextRequest) {
       primaryPhotoPath: body.primaryPhotoPath ?? null,
       status: "Draft",
       inspectorId: session.id,
-      inspectorName: session.name,
       findingsSummary: body.findingsSummary ?? null,
       comments: body.comments ?? null,
       inspectionDescription: body.inspectionDescription ?? null,
@@ -307,6 +309,16 @@ export async function POST(req: NextRequest) {
       vdptDeveloperProduct: body.vdptDeveloperProduct?.trim() || null,
       vdptDeveloperBatchNo: body.vdptDeveloperBatchNo?.trim() || null,
       vdptDeveloperExpiry: body.vdptDeveloperExpiry?.trim() || null,
+      // ─── VESSEL MPT CONSUMABLE DETAILS + TESTING DETAILS ROWS ───
+      vmptWhiteContrastMake: body.vmptWhiteContrastMake?.trim() || null,
+      vmptWhiteContrastProduct: body.vmptWhiteContrastProduct?.trim() || null,
+      vmptWhiteContrastLotNo: body.vmptWhiteContrastLotNo?.trim() || null,
+      vmptWhiteContrastExpiry: body.vmptWhiteContrastExpiry?.trim() || null,
+      vmptInkMake: body.vmptInkMake?.trim() || null,
+      vmptInkProduct: body.vmptInkProduct?.trim() || null,
+      vmptInkLotNo: body.vmptInkLotNo?.trim() || null,
+      vmptInkExpiry: body.vmptInkExpiry?.trim() || null,
+      vmptRows: typeof body.vmptRows === "string" ? body.vmptRows : null,
       isDemo: false,
     },
     include: {

@@ -310,6 +310,16 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       vdptDeveloperProduct: body.vdptDeveloperProduct !== undefined ? (body.vdptDeveloperProduct?.trim() || null) : existing.vdptDeveloperProduct,
       vdptDeveloperBatchNo: body.vdptDeveloperBatchNo !== undefined ? (body.vdptDeveloperBatchNo?.trim() || null) : existing.vdptDeveloperBatchNo,
       vdptDeveloperExpiry: body.vdptDeveloperExpiry !== undefined ? (body.vdptDeveloperExpiry?.trim() || null) : existing.vdptDeveloperExpiry,
+      // ─── VESSEL MPT CONSUMABLE DETAILS + TESTING DETAILS ROWS ───
+      vmptWhiteContrastMake: body.vmptWhiteContrastMake !== undefined ? (body.vmptWhiteContrastMake?.trim() || null) : existing.vmptWhiteContrastMake,
+      vmptWhiteContrastProduct: body.vmptWhiteContrastProduct !== undefined ? (body.vmptWhiteContrastProduct?.trim() || null) : existing.vmptWhiteContrastProduct,
+      vmptWhiteContrastLotNo: body.vmptWhiteContrastLotNo !== undefined ? (body.vmptWhiteContrastLotNo?.trim() || null) : existing.vmptWhiteContrastLotNo,
+      vmptWhiteContrastExpiry: body.vmptWhiteContrastExpiry !== undefined ? (body.vmptWhiteContrastExpiry?.trim() || null) : existing.vmptWhiteContrastExpiry,
+      vmptInkMake: body.vmptInkMake !== undefined ? (body.vmptInkMake?.trim() || null) : existing.vmptInkMake,
+      vmptInkProduct: body.vmptInkProduct !== undefined ? (body.vmptInkProduct?.trim() || null) : existing.vmptInkProduct,
+      vmptInkLotNo: body.vmptInkLotNo !== undefined ? (body.vmptInkLotNo?.trim() || null) : existing.vmptInkLotNo,
+      vmptInkExpiry: body.vmptInkExpiry !== undefined ? (body.vmptInkExpiry?.trim() || null) : existing.vmptInkExpiry,
+      vmptRows: body.vmptRows !== undefined ? (typeof body.vmptRows === "string" ? body.vmptRows : null) : existing.vmptRows,
     },
   });
 

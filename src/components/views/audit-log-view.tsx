@@ -80,8 +80,8 @@ export function AuditLogView() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Audit Log</h1>
         <p className="text-sm text-muted-foreground">
-          All create / update / delete / login events on equipment, clients, plants,
-          and inspections. Newest first.
+          All create / update / delete / login / submit / approve events on reports,
+          clients, plants, and reference data. Newest first.
         </p>
       </div>
 
@@ -157,12 +157,10 @@ export function AuditLogView() {
           <ShieldCheck className="h-5 w-5 shrink-0 text-muted-foreground" />
           <div className="text-xs text-muted-foreground">
             <strong className="text-foreground">Audit coverage:</strong> All
-            create / update / delete operations on equipment, clients, plants,
-            and inspections are recorded with the actor identity, timestamp, and
-            a human-readable summary. CSV imports, exports, and login events
-            are also tracked. Inspection <em>creation</em> is logged; inspection{" "}
-            <em>deletion</em> (via equipment cascade) is implicit and not
-            individually recorded in this prototype.
+            create / update / delete / submit / approve operations on inspection
+            reports, clients, plants, and reference data are recorded with the
+            actor identity, timestamp, and a human-readable summary. PDF
+            downloads and login events are also tracked.
           </div>
         </CardContent>
       </Card>

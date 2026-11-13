@@ -277,3 +277,116 @@ Work Log:
     existing approved thickness report opens and its PDF renders unchanged
   ✓ Employee role reaches the same selector flow; approval logic untouched
   ✓ Client logo mapping untouched (Aruntech + client logos render as before)
+
+---
+Task ID: 14
+Agent: main
+Task: Remove Equipment Master permanently, rename "Inspection Reports" → "Report History",
+preserve intentional removals, and implement Vessel Magnetic Particle Testing (MPT)
+with Horizontal/Vertical orientation flow.
+
+Work Log:
+- PART 1 — Equipment Master permanently removed (feature was superseded by the
+  report workflow: Create New Report → Equipment Type → Test Type → Fill →
+  Submit → Approve → Report History):
+    • Deleted views: equipment-list-view, equipment-form-view,
+      equipment-detail-view, import-view (equipment CSV import/export),
+      inspections-view (equipment-master inspection history), and the unused
+      legacy dashboard-view.
+    • Deleted API routes: /api/equipment (+ [id], [id]/inspections, catalog),
+      /api/import-export (template/preview/commit/export), /api/inspections,
+      and lib/domain/equipment-catalog.ts.
+    • store.ts: removed ViewKeys equipment/equipment-detail/equipment-form/
+      inspections/import and the openEquipment/openNewEquipment/
+      openEditEquipment actions + related state.
+    • page.tsx renders no equipment views; sidebar has no Equipment Master /
+      Inspections / CSV Import items; layout.tsx metadata + login-screen
+      subtitle no longer mention Equipment Master; dashboard demo banners,
+      clients-view (equipment count badge + delete warning), and audit-log
+      descriptions updated.
+    • Prisma models kept (no destructive migration); only UI + HTTP surface
+      removed. Verified: no sidebar link, button, nav item, or route reaches
+      Equipment Master.
+- PART 2 — "Inspection Reports" renamed to "Report History" (sidebar icon now
+  History; list heading, description, empty state updated). Purpose: shows
+  previously created / submitted / returned / approved reports. Single report
+  section in the nav — no duplicates.
+- PART 3 — Removal preservation audited: no UT/Ultrasonic Test Report anywhere
+  in the UI (selector, form, PDF, API whitelist); PIPELINE_UT accepts no new
+  creations; no Equipment Master nav/route; no duplicate report sections.
+  store.ts + API now document the intentional removals so future changes
+  don't re-add them.
+- PART 4 — Vessel MPT (VESSEL_MPT report type) implemented end-to-end:
+    • Selector: Vessel → Magnetic Particle Testing (MPT) card is now active
+      (orange); both VESSEL_DPT and VESSEL_MPT require the orientation step
+      (Horizontal Vessel | Vertical Vessel) — cannot be skipped; the step
+      indicator breadcrumb shows the chosen test type.
+    • Schema (additive): PipelineInspection.vmptWhiteContrast{Make,Product,
+      LotNo,Expiry}, vmptInk{Make,Product,LotNo,Expiry}, vmptRows (JSON
+      testing-details rows); vesselOrientation now documented for
+      VESSEL_DPT + VESSEL_MPT. prisma db push (no data loss) + generate.
+    • The 19 MPT parameters reuse the existing mpt* fields (Date of
+      Examination calendar picker + Testing Standard, Acceptance Criteria,
+      Surface Preparation, Surface Temperature, Type of Instrument / Sl. No.,
+      MPT Method, Type of Current, AC Yoke Lifting Capacity, Contrast Medium,
+      Method of Pre-cleaning, Method of Applying White Contrast, AC Yoke Pole
+      Spacing, Magnetic Medium, Method of Applying Magnetic Medium,
+      Development Time, Interpretation Time, Lighting Equipment, Post
+      Cleaning) — all editable, nothing hardcoded.
+    • Consumable Details: White Contrast + Wet Particle Iron Ink, each with
+      Make / Product / Description / Lot Number / Expiry Date.
+    • Magnetic Particle Testing Details: editable table Part Details | ID |
+      Weld Dimension | Size of Indication Approx. (mm) | Observation &
+      Result with add/remove rows and auto serial numbers (stored as
+      vmptRows JSON; persisted with the header save).
+    • Photographs: shared Step 3 gallery (multi-upload, captions, remove,
+      preview) — unchanged code path, verified for VESSEL_MPT in preview,
+      review page, and PDF.
+    • Form view: VESSEL_MPT REPORT_TYPE_INFO entry, header fields, edit-load,
+      payload/saveHeader, step-2 validation warning, vessel wording on Step 1
+      labels, dedicated Step 2 section (parameters + consumables + details).
+    • Detail (review) view: VESSEL_MPT label/title/badge, Equipment: Vessel +
+      orientation badges, Magnetic Particle Testing Parameters table,
+      Consumable Details grid, Magnetic Particle Testing Details table; cover
+      info grid now uses Equipment/Vessel wording + Vessel Orientation row for
+      both vessel types.
+    • PDF generator: VESSEL_MPT type ("VESSEL MAGNETIC PARTICLE TESTING
+      REPORT"), no-drawings list, cover vessel wording + orientation,
+      Parameters (with orientation line) → Consumable Details 5-column grid
+      (wider Consumable column so "Wet Particle Iron Ink" is not truncated)
+      → Testing Details table → shared Inspection Photographs gallery.
+    • API: POST/PUT accept VESSEL_MPT + vmpt* fields + vmptRows; orientation
+      accepted for VESSEL_DPT and VESSEL_MPT; submit route requires ≥1
+      vmptRows row for VESSEL_MPT. Reports list + dashboards show "Vessel
+      MPT" badges.
+- Fixed pre-existing runtime bug found during testing: DELETE handlers in
+  clients/[id], plants/[id], component-types/[id], pipe-standards/[id] called
+  getSession(req) with an undefined variable (_req) — would crash on delete;
+  fixed the parameter name. Also fixed duplicate inspectorName key in the
+  pipeline-inspections POST create payload.
+- Verified in browser (agent-browser) + API:
+  ✓ Sidebar (admin): Admin Dashboard, Report History, Employees, Clients &
+    Plants, Pipe Standards, Audit Log — no Equipment Master / Inspections /
+    CSV Import; employee sidebar: My Dashboard, Report History, Sign out.
+  ✓ Report History list renders with Vessel MPT / Vessel DPT badges.
+  ✓ Full flow: New Inspection Report → Vessel → MPT → Horizontal Vessel →
+    form (VMPT-COR-ENN-101 created).
+  ✓ MPT parameters, consumables, and 2 details rows saved; submit →
+    Approve (UI dialog) → Approved; empty-rows submit rejected (400).
+  ✓ Vertical orientation also stores correctly (API test report).
+  ✓ Review page shows parameters, consumables grid, details table, and 2
+    photos with captions; PDF (3 pages, approved) shows cover with vessel
+    wording + orientation, parameters, consumables, details table, and the
+    photo gallery with captions — nothing cut off.
+  ✓ Piping regression: Piping → 4 active test types, no orientation step,
+    no UT; existing Vessel DPT report opens unchanged (all sections).
+  ✓ Dashboards now show Vessel DPT / Vessel MPT badges correctly.
+  ✓ Client logo mapping untouched; approval workflow untouched.
+
+Stage Summary:
+- Equipment Master is fully removed (UI + routes); Report History is the
+  single report section; UT report remains removed; Vessel MPT works
+  end-to-end with orientation, parameters, consumables, multi-row details,
+  and photographs in preview / review / PDF.
+- Kept VMPT-COR-ENN-101 (approved) as a working Vessel MPT demo report;
+  API-only test reports were deleted.

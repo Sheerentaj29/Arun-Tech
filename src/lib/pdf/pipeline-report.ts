@@ -86,7 +86,8 @@ type ReportType =
   | "PIPELINE_DPT"
   | "PIPELINE_MPT"
   | "PIPELINE_WELD_SCAN"
-  | "VESSEL_DPT";
+  | "VESSEL_DPT"
+  | "VESSEL_MPT";
 
 const REPORT_TYPE_TITLE: Record<ReportType, string> = {
   PIPELINE_THICKNESS: "PIPELINE THICKNESS MEASUREMENT REPORT",
@@ -96,6 +97,7 @@ const REPORT_TYPE_TITLE: Record<ReportType, string> = {
   PIPELINE_MPT:       "MAGNETIC PARTICLE TESTING REPORT",
   PIPELINE_WELD_SCAN: "WELD SCAN REPORT",
   VESSEL_DPT:         "VESSEL DYE PENETRANT TESTING REPORT",
+  VESSEL_MPT:         "VESSEL MAGNETIC PARTICLE TESTING REPORT",
 };
 
 function getReportType(raw: any): ReportType {
@@ -106,7 +108,8 @@ function getReportType(raw: any): ReportType {
     v === "PIPELINE_DPT" ||
     v === "PIPELINE_MPT" ||
     v === "PIPELINE_WELD_SCAN" ||
-    v === "VESSEL_DPT"
+    v === "VESSEL_DPT" ||
+    v === "VESSEL_MPT"
   ) return v;
   return "PIPELINE_THICKNESS";
 }
@@ -120,6 +123,7 @@ const NO_DRAWINGS_REPORT_TYPES: ReportType[] = [
   "PIPELINE_WELD_SCAN",
   "PIPELINE_CONDITION",
   "VESSEL_DPT",
+  "VESSEL_MPT",
 ];
 
 export interface LinkedDrawing {
@@ -625,9 +629,9 @@ export async function generatePipelineReportPdf(
     ["Location", report.plant.location],
     ["Plant Name", report.plant.name],
     ["Unit Name", report.inspectionArea],
-    // For Vessel DPT reports the identification rows use vessel wording
-    // and the selected orientation is displayed on the cover.
-    ...(reportType === "VESSEL_DPT"
+    // For Vessel DPT / MPT reports the identification rows use vessel
+    // wording and the selected orientation is displayed on the cover.
+    ...(reportType === "VESSEL_DPT" || reportType === "VESSEL_MPT"
       ? [
           ["Equipment / Vessel Description", report.pipelineDescription],
           ["Equipment Identification No.", report.pipelineIdentificationNumber],
@@ -1756,6 +1760,233 @@ export async function generatePipelineReportPdf(
         doc.font(FONT_REGULAR).fontSize(8).fillColor("#666");
         doc.rect(MARGIN, y, vUsable, vRowH).stroke("#bbb");
         doc.text("No DPT details recorded.", MARGIN + 4, y + 9, { width: vUsable - 8, align: "center" });
+        doc.fillColor("#000");
+        y += vRowH;
+      }
+    }
+  } else if (reportType === "VESSEL_MPT") {
+    // ─── VESSEL MPT REPORT BODY ───
+    // Renders, in this order:
+    //   1. "Magnetic Particle Testing Parameters" — two-column table with
+    //      Vessel Orientation line + Date of Examination + 18 typeable
+    //      procedure fields (all editable in the form, nothing hardcoded).
+    //   2. "Consumable Details" — 2-row grid (White Contrast / Wet Particle
+    //      Iron Ink) × Make / Product / Lot Number / Expiry Date.
+    //   3. "Magnetic Particle Testing Details" — table with Part Details |
+    //      ID | Weld Dimension | Size of Indication Approx. (mm) |
+    //      Observation & Result. Rows come from the vmptRows JSON column.
+    //   4. Photographs are handled by the shared photo-gallery section
+    //      below ("Inspection Photographs").
+    startBodyOnFreshPage(160);
+
+    const vmptReport = report as any;
+
+    // ─── 1. MAGNETIC PARTICLE TESTING PARAMETERS ───
+    {
+      const procRowH = 18;
+      if (y + 24 + procRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 6;
+      doc.font(FONT_BOLD).fontSize(11).fillColor("#7c2d12");
+      doc.text("Magnetic Particle Testing Parameters", MARGIN, y);
+      doc.fillColor("#000");
+      y += 18;
+
+      // Vessel Orientation line — from the orientation selected in the
+      // report-creation flow and stored on the report.
+      const orientText =
+        vmptReport.vesselOrientation === "HORIZONTAL" ? "Horizontal Vessel"
+        : vmptReport.vesselOrientation === "VERTICAL" ? "Vertical Vessel"
+        : null;
+      if (orientText) {
+        doc.font(FONT_BOLD).fontSize(9).fillColor("#000");
+        doc.text(`Vessel Orientation: ${orientText}`, MARGIN, y);
+        y += 14;
+      }
+
+      const procedureRows: Array<[string, string | null]> = [
+        ["Date of Examination", vmptReport.mptDateOfExamination
+          ? new Date(vmptReport.mptDateOfExamination).toISOString().slice(0, 10)
+          : null],
+        ["Testing Standard", vmptReport.mptTestingStandard],
+        ["Acceptance Criteria", vmptReport.mptAcceptanceCriteria],
+        ["Surface Preparation", vmptReport.mptSurfacePreparation],
+        ["Surface Temperature", vmptReport.mptSurfaceTemperature],
+        ["Type of Instrument / Sl. No.", vmptReport.mptInstrumentSerialNo],
+        ["MPT Method", vmptReport.mptMethod],
+        ["Type of Current", vmptReport.mptTypeOfCurrent],
+        ["AC Yoke Lifting Capacity", vmptReport.mptAcYokeLiftingCapacity],
+        ["Contrast Medium", vmptReport.mptContrastMedium],
+        ["Method of Pre-cleaning", vmptReport.mptMethodOfPreCleaning],
+        ["Method of Applying White Contrast", vmptReport.mptMethodOfApplyingWhiteContrast],
+        ["AC Yoke Pole Spacing", vmptReport.mptAcYokePoleSpacing],
+        ["Magnetic Medium", vmptReport.mptMagneticMedium],
+        ["Method of Applying Magnetic Medium", vmptReport.mptMethodOfApplyingMagneticMedium],
+        ["Development Time", vmptReport.mptDevelopmentTime],
+        ["Interpretation Time", vmptReport.mptInterpretationTime],
+        ["Lighting Equipment", vmptReport.mptLightingEquipment],
+        ["Post Cleaning", vmptReport.mptPostCleaning],
+      ];
+
+      const procLabelW = (pageW - 2 * MARGIN) * 0.38;
+      const procValueW = (pageW - 2 * MARGIN) - procLabelW;
+      const procUsableW = pageW - 2 * MARGIN;
+
+      for (const [label, value] of procedureRows) {
+        if (y + procRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+        doc.rect(MARGIN, y, procLabelW, procRowH).fill("#fff7ed");
+        doc.rect(MARGIN + procLabelW, y, procValueW, procRowH).fill("#ffffff");
+        doc.rect(MARGIN, y, procUsableW, procRowH).stroke(TABLE_OUTER_BORDER);
+        doc.moveTo(MARGIN + procLabelW, y).lineTo(MARGIN + procLabelW, y + procRowH).stroke(TABLE_INNER_BORDER);
+        doc.font(FONT_BOLD).fontSize(8.5).fillColor("#000");
+        doc.text(label, MARGIN + 4, y + 5, { width: procLabelW - 8 });
+        doc.font(FONT_REGULAR).fontSize(8.5).fillColor("#000");
+        const valueText = value && value.trim() ? value.trim() : "—";
+        const maxW = procValueW - 8;
+        let displayText = valueText;
+        if (doc.widthOfString(displayText) > maxW) {
+          const charsToKeep = Math.floor((maxW / Math.max(1, doc.widthOfString(displayText))) * displayText.length);
+          displayText = displayText.slice(0, Math.max(1, charsToKeep - 1)) + "…";
+        }
+        doc.text(displayText, MARGIN + procLabelW + 4, y + 5, { width: maxW });
+        y += procRowH;
+      }
+      y += 8;
+    }
+
+    // ─── 2. CONSUMABLE DETAILS ───
+    // 2 rows (White Contrast / Wet Particle Iron Ink) × 5 columns
+    // (Consumable | Make | Product / Description | Lot Number | Expiry Date).
+    {
+      // drawDptTableHeader draws a fixed 36pt-tall header — advance y by
+      // the same amount so the first data row never overlaps the header.
+      const consHeaderH = 36;
+      const consRowH = 18;
+      if (y + 24 + consHeaderH + consRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 4;
+      doc.font(FONT_BOLD).fontSize(11).fillColor("#7c2d12");
+      doc.text("Consumable Details", MARGIN, y);
+      doc.fillColor("#000");
+      y += 18;
+
+      const consUsable = pageW - 2 * MARGIN;
+      const consColWidths = orientation === "landscape"
+        ? [100, 120, 200, 120, Math.max(100, consUsable - 100 - 120 - 200 - 120)]
+        : [75, 85, 140, 85, Math.max(80, consUsable - 75 - 85 - 140 - 85)];
+      const consHeaders = ["Consumable", "Make", "Product / Description", "Lot Number", "Expiry Date"];
+
+      drawDptTableHeader(doc, consHeaders, consColWidths, y, pageW);
+      y += consHeaderH;
+
+      const consumableRows: Array<[string, string | null, string | null, string | null, string | null]> = [
+        ["White Contrast", vmptReport.vmptWhiteContrastMake, vmptReport.vmptWhiteContrastProduct, vmptReport.vmptWhiteContrastLotNo, vmptReport.vmptWhiteContrastExpiry],
+        ["Wet Particle Iron Ink", vmptReport.vmptInkMake, vmptReport.vmptInkProduct, vmptReport.vmptInkLotNo, vmptReport.vmptInkExpiry],
+      ];
+
+      for (const row of consumableRows) {
+        if (y + consRowH > pageMaxY) {
+          addNewPage();
+          drawDptTableHeader(doc, consHeaders, consColWidths, MARGIN, pageW);
+          y = MARGIN + consHeaderH;
+        }
+        // Draw one bordered row of cells
+        doc.rect(MARGIN, y, consUsable, consRowH).stroke(TABLE_OUTER_BORDER);
+        let cx = MARGIN;
+        for (let i = 0; i < consHeaders.length; i++) {
+          const w = consColWidths[i];
+          if (i > 0) {
+            doc.moveTo(cx, y).lineTo(cx, y + consRowH).stroke(TABLE_INNER_BORDER);
+          }
+          doc.font(i === 0 ? FONT_BOLD : FONT_REGULAR).fontSize(8).fillColor("#000");
+          const cellText = (row[i] && String(row[i]).trim()) ? String(row[i]).trim() : (i === 0 ? "" : "—");
+          const maxW = w - 8;
+          let displayText = cellText;
+          if (doc.widthOfString(displayText) > maxW) {
+            const charsToKeep = Math.floor((maxW / Math.max(1, doc.widthOfString(displayText))) * displayText.length);
+            displayText = displayText.slice(0, Math.max(1, charsToKeep - 1)) + "…";
+          }
+          doc.text(displayText, cx + 4, y + 5, { width: maxW, align: "left" });
+          cx += w;
+        }
+        doc.fillColor("#000");
+        y += consRowH;
+      }
+      y += 10;
+    }
+
+    // ─── 3. MAGNETIC PARTICLE TESTING DETAILS ───
+    // Table: Sl. No | Part Details | ID | Weld Dimension | Size of
+    // Indication Approx. (mm) | Observation & Result. Rows come from the
+    // vmptRows JSON column stored on the report.
+    {
+      let vmptObs: Array<Record<string, string>> = [];
+      try {
+        const parsed = JSON.parse(vmptReport.vmptRows ?? "[]");
+        if (Array.isArray(parsed)) vmptObs = parsed;
+      } catch {}
+      const vHeaderH = 36;
+      const vRowH = 28;
+      const vUsable = pageW - 2 * MARGIN;
+      const vSlW = 36;
+      const vPartW = orientation === "landscape" ? 150 : 110;
+      const vIdW = orientation === "landscape" ? 70 : 55;
+      const vDimW = orientation === "landscape" ? 100 : 80;
+      const vSizeW = orientation === "landscape" ? 85 : 75;
+      const vObsW = Math.max(100, vUsable - vSlW - vPartW - vIdW - vDimW - vSizeW);
+      const vColWidths = [vSlW, vPartW, vIdW, vDimW, vSizeW, vObsW];
+      const vHeaders = ["Sl.\nNo", "Part Details", "ID", "Weld\nDimension", "Size of Indication\nApprox. (mm)", "Observation & Result"];
+
+      if (y + 24 + vHeaderH + vRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 4;
+      doc.font(FONT_BOLD).fontSize(11).fillColor("#7c2d12");
+      doc.text("Magnetic Particle Testing Details", MARGIN, y);
+      doc.fillColor("#000");
+      y += 16;
+
+      if (y + vHeaderH + vRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      drawDptTableHeader(doc, vHeaders, vColWidths, y, pageW);
+      y += vHeaderH;
+
+      for (let ri = 0; ri < vmptObs.length; ri++) {
+        const obs = vmptObs[ri];
+        if (y + vRowH > pageMaxY) {
+          addNewPage();
+          drawDptTableHeader(doc, vHeaders, vColWidths, MARGIN, pageW);
+          y = MARGIN + vHeaderH;
+        }
+        // Bordered row with 6 cells
+        doc.rect(MARGIN, y, vUsable, vRowH).stroke(TABLE_OUTER_BORDER);
+        const cells: string[] = [
+          String(ri + 1),
+          obs.partDetails ?? "—",
+          obs.idNo ?? "—",
+          obs.weldDimension ?? "—",
+          obs.indicationSize ?? "—",
+          obs.observationResult ?? "—",
+        ];
+        let cx = MARGIN;
+        for (let i = 0; i < cells.length; i++) {
+          const w = vColWidths[i];
+          if (i > 0) {
+            doc.moveTo(cx, y).lineTo(cx, y + vRowH).stroke(TABLE_INNER_BORDER);
+          }
+          doc.font(FONT_REGULAR).fontSize(8).fillColor("#000");
+          const maxW = w - 8;
+          let displayText = cells[i] ?? "—";
+          if (doc.widthOfString(displayText) > maxW) {
+            const charsToKeep = Math.floor((maxW / Math.max(1, doc.widthOfString(displayText))) * displayText.length);
+            displayText = displayText.slice(0, Math.max(1, charsToKeep - 1)) + "…";
+          }
+          doc.text(displayText, cx + 4, y + 5, { width: maxW, align: i === 0 ? "center" : "left" });
+          cx += w;
+        }
+        doc.fillColor("#000");
+        y += vRowH;
+      }
+
+      if (vmptObs.length === 0) {
+        doc.font(FONT_REGULAR).fontSize(8).fillColor("#666");
+        doc.rect(MARGIN, y, vUsable, vRowH).stroke("#bbb");
+        doc.text("No MPT details recorded.", MARGIN + 4, y + 9, { width: vUsable - 8, align: "center" });
         doc.fillColor("#000");
         y += vRowH;
       }

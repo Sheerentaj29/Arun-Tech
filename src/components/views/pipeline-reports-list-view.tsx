@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
-  Gauge,
+  History,
   Plus,
   Search,
   Loader2,
@@ -40,7 +40,7 @@ import { toast } from "sonner";
 interface PipelineReportListItem {
   id: string;
   reportNumber: string;
-  reportType: "PIPELINE_THICKNESS" | "PIPELINE_VISUAL" | "PIPELINE_CONDITION" | "PIPELINE_DPT" | "PIPELINE_MPT" | "PIPELINE_WELD_SCAN" | "VESSEL_DPT";
+  reportType: "PIPELINE_THICKNESS" | "PIPELINE_VISUAL" | "PIPELINE_CONDITION" | "PIPELINE_DPT" | "PIPELINE_MPT" | "PIPELINE_WELD_SCAN" | "VESSEL_DPT" | "VESSEL_MPT";
   inspectionDate: string;
   status: "Draft" | "Submitted" | "Approved" | "Rejected" | "Superseded";
   revisionNumber: number;
@@ -82,6 +82,7 @@ const REPORT_TYPE_LABEL: Record<string, { label: string; color: string }> = {
   PIPELINE_MPT:       { label: "MPT",      color: "border-orange-500 text-orange-700" },
   PIPELINE_WELD_SCAN: { label: "Weld Scan", color: "border-cyan-500 text-cyan-700" },
   VESSEL_DPT:         { label: "Vessel DPT", color: "border-purple-500 text-purple-700" },
+  VESSEL_MPT:         { label: "Vessel MPT", color: "border-orange-500 text-orange-700" },
 };
 
 export function PipelineReportsListView() {
@@ -128,13 +129,13 @@ export function PipelineReportsListView() {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <Gauge className="h-6 w-6 text-amber-600" /> Inspection Reports
+            <History className="h-6 w-6 text-amber-600" /> Report History
           </h1>
           <p className="text-sm text-muted-foreground">
-            Piping and vessel inspection reports — thickness measurement, DPT,
-            MPT, weld scan, visual inspection, and condition assessment.
-            Click <strong>New Inspection Report</strong> to
-            pick the equipment type and report type, then start a new inspection.
+            Previously created piping and vessel inspection reports — drafts,
+            reports submitted for review, returned reports, and approved reports.
+            Click <strong>New Inspection Report</strong> to pick the equipment
+            type and test type, then start a new inspection.
           </p>
         </div>
         {canCreate && (
@@ -198,7 +199,7 @@ export function PipelineReportsListView() {
           )}
           {!loading && items.length === 0 && (
             <div className="p-8 text-center text-muted-foreground text-sm">
-              No inspection reports found. Click <strong>New Inspection Report</strong> to create one.
+              No reports found. Click <strong>New Inspection Report</strong> to create one.
             </div>
           )}
           {!loading && items.length > 0 && (

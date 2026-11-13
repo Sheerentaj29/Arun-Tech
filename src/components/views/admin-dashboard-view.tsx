@@ -67,6 +67,11 @@ const REPORT_TYPE_BADGE: Record<string, { label: string; color: string }> = {
   PIPELINE_THICKNESS: { label: "Thickness", color: "border-emerald-500 text-emerald-700" },
   PIPELINE_VISUAL:    { label: "Visual",    color: "border-blue-500 text-blue-700" },
   PIPELINE_CONDITION: { label: "Condition", color: "border-amber-500 text-amber-700" },
+  PIPELINE_DPT:       { label: "DPT/DPPT", color: "border-purple-500 text-purple-700" },
+  PIPELINE_MPT:       { label: "MPT",      color: "border-orange-500 text-orange-700" },
+  PIPELINE_WELD_SCAN: { label: "Weld Scan", color: "border-cyan-500 text-cyan-700" },
+  VESSEL_DPT:         { label: "Vessel DPT", color: "border-purple-500 text-purple-700" },
+  VESSEL_MPT:         { label: "Vessel MPT", color: "border-orange-500 text-orange-700" },
 };
 
 const ACTION_COLOR: Record<string, string> = {
@@ -311,8 +316,8 @@ export function AdminDashboardView() {
           <Badge variant="outline" className="border-amber-500 text-amber-800 bg-white">DEMO</Badge>
           <p className="text-xs text-amber-900">
             The admin dashboard aggregates reports across all employees. Use the
-            sidebar to access Equipment Master, Inspection Reports, Pipe Standards
-            (admin reference data), Employees, Audit Log, and CSV Import/Export.
+            sidebar to access Report History, Employees, Clients &amp; Plants, Pipe
+            Standards (admin reference data), and the Audit Log.
           </p>
         </CardContent>
       </Card>

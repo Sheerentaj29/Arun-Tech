@@ -454,11 +454,11 @@ model PipelineInspection {
   // ─── EQUIPMENT TYPE + VESSEL FIELDS ───
   // equipmentType records the selection made in the report-creation flow
   // ("PIPING" or "VESSEL"). Null for legacy rows created before this
-  // field existed. vesselOrientation is required for VESSEL_DPT reports
-  // ("HORIZONTAL" or "VERTICAL") and is displayed on the review page and
-  // in the generated PDF.
+  // field existed. vesselOrientation is required for VESSEL_DPT and
+  // VESSEL_MPT reports ("HORIZONTAL" or "VERTICAL") and is displayed on
+  // the review page and in the generated PDF.
   equipmentType             String?  // PIPING | VESSEL
-  vesselOrientation         String?  // HORIZONTAL | VERTICAL (VESSEL_DPT only)
+  vesselOrientation         String?  // HORIZONTAL | VERTICAL (VESSEL_DPT and VESSEL_MPT only)
 
   // ─── VESSEL DPT CONSUMABLE DETAILS ───
   // Populated when reportType = VESSEL_DPT. Separate Make / Product /
@@ -476,6 +476,30 @@ model PipelineInspection {
   vdptDeveloperProduct      String?  // Developer — Product / Description
   vdptDeveloperBatchNo      String?  // Developer — Batch Number
   vdptDeveloperExpiry       String?  // Developer — Expiry Date
+
+  // ─── VESSEL MPT (MAGNETIC PARTICLE TESTING) FIELDS ───
+  // Populated when reportType = VESSEL_MPT. The 19 MPT procedure
+  // parameters reuse the existing mpt* fields above (identical field
+  // set — Type of Instrument / Sl. No., MPT Method, Type of Current,
+  // AC Yoke Lifting Capacity, Contrast Medium, AC Yoke Pole Spacing,
+  // Magnetic Medium, etc.). Only the consumables and the testing-details
+  // rows are vessel-specific:
+  //   • vmpt* consumable fields — separate Make / Product / Lot Number /
+  //     Expiry Date entry for each of the two consumables (White Contrast
+  //     and Wet Particle Iron Ink). All typeable text (expiry dates are
+  //     free text, e.g. "Nov-2027").
+  //   • vmptRows — JSON array of testing-details rows:
+  //     [{ "partDetails": "...", "idNo": "...", "weldDimension": "...",
+  //        "indicationSize": "...", "observationResult": "..." }]
+  vmptWhiteContrastMake     String?  // White Contrast — Make
+  vmptWhiteContrastProduct  String?  // White Contrast — Product / Description
+  vmptWhiteContrastLotNo    String?  // White Contrast — Lot Number
+  vmptWhiteContrastExpiry   String?  // White Contrast — Expiry Date
+  vmptInkMake               String?  // Wet Particle Iron Ink — Make
+  vmptInkProduct            String?  // Wet Particle Iron Ink — Product / Description
+  vmptInkLotNo              String?  // Wet Particle Iron Ink — Lot Number
+  vmptInkExpiry             String?  // Wet Particle Iron Ink — Expiry Date
+  vmptRows                  String?  // JSON testing-details rows (see above)
 
   isDemo                   Boolean  @default(false)
   createdAt                DateTime @default(now())

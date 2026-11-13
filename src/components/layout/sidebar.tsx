@@ -1,16 +1,12 @@
 "use client";
 
 import {
-  LayoutDashboard,
-  Database,
-  FileText,
   Building2,
-  Upload,
   ScrollText,
   ShieldCheck,
   LogOut,
   HardHat,
-  Gauge,
+  History,
   Ruler,
   Users,
 } from "lucide-react";
@@ -20,8 +16,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
 // All sidebar items. Each item declares which dashboard roles can see it.
-// ADMIN sees everything; EMPLOYEE sees only their own dashboard, equipment,
-// pipeline reports, and inspections.
+// ADMIN sees everything; EMPLOYEE sees only their own dashboard and reports.
+//
+// NOTE: Equipment Master (and its CSV Import/Export + equipment Inspections
+// views) was intentionally REMOVED from this application. Do NOT re-add
+// those navigation items. The navigation contains only report-workflow
+// sections with clear, non-duplicated purposes:
+//   • Report History  — previously created / submitted / approved reports
+//   • Employees, Clients & Plants, Pipe Standards, Audit Log — admin tools
 const NAV: Array<{
   key: ViewKey;
   label: string;
@@ -32,17 +34,13 @@ const NAV: Array<{
   { key: "admin-dashboard", label: "Admin Dashboard", icon: ShieldCheck, roles: ["ADMIN"] },
   // Employee's own dashboard
   { key: "employee-dashboard", label: "My Dashboard", icon: HardHat, roles: ["EMPLOYEE"] },
-  // Shared equipment master
-  { key: "equipment", label: "Equipment Master", icon: Database, roles: ["ADMIN", "EMPLOYEE"] },
-  // Inspection Reports (Piping + Vessel) — admin sees all, employee sees their own
-  { key: "pipeline-reports", label: "Inspection Reports", icon: Gauge, roles: ["ADMIN", "EMPLOYEE"] },
-  // Inspections (equipment-master inspection history — preserved)
-  { key: "inspections", label: "Inspections", icon: FileText, roles: ["ADMIN", "EMPLOYEE"] },
+  // Report History (Piping + Vessel reports; draft → review → approved).
+  // Single report section — there is deliberately no duplicate report nav item.
+  { key: "pipeline-reports", label: "Report History", icon: History, roles: ["ADMIN", "EMPLOYEE"] },
   // Admin-only views
   { key: "employees", label: "Employees", icon: Users, roles: ["ADMIN"] },
   { key: "clients", label: "Clients & Plants", icon: Building2, roles: ["ADMIN"] },
   { key: "pipe-standards", label: "Pipe Standards", icon: Ruler, roles: ["ADMIN"] },
-  { key: "import", label: "CSV Import / Export", icon: Upload, roles: ["ADMIN"] },
   { key: "audit-logs", label: "Audit Log", icon: ScrollText, roles: ["ADMIN"] },
 ];
 
@@ -152,6 +150,4 @@ export function AppSidebar() {
   );
 }
 
-// Keep LayoutDashboard import warm for potential future use
-const _ = LayoutDashboard;
-export { _ };
+// (no legacy LayoutDashboard export — removed with the Equipment Master era)

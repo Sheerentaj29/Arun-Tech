@@ -75,7 +75,9 @@ interface ClientItem {
   notes: string | null;
   isDemo: boolean;
   plants: PlantItem[];
-  _count: { equipment: number };
+  // NOTE: Equipment Master was removed from the application. The clients
+  // API may still return an equipment count for legacy data, but the UI
+  // no longer displays equipment anywhere.
 }
 
 interface ClientForm {
@@ -322,8 +324,6 @@ export function ClientsView() {
                           <CardDescription className="text-xs">
                             {c.industry ?? "Industry not specified"}
                             {" · "}
-                            {c._count.equipment} equipment
-                            {" · "}
                             {c.plants.length} plants
                           </CardDescription>
                         </div>
@@ -343,8 +343,8 @@ export function ClientsView() {
                           <AlertDialogHeader>
                             <AlertDialogTitle>Delete {c.name}?</AlertDialogTitle>
                             <AlertDialogDescription>
-                              This will permanently delete the client and all its plants,
-                              equipment, and inspections. This action cannot be undone.
+                              This will permanently delete the client and all its plants.
+                              This action cannot be undone.
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>

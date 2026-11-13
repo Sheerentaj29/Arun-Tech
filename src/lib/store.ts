@@ -1,6 +1,12 @@
-// Global app state for the Equipment Master UI.
+// Global app state for the Inspection Report Automation UI.
 // Tracks current session, navigation target, and refresh counters
 // so list views can re-fetch after mutations.
+//
+// NOTE: Equipment Master was intentionally REMOVED from this application.
+// Its views, routes, and navigation were deleted and must NOT be re-added.
+// The report workflow is: Create New Report → Select Equipment Type
+// (Piping/Vessel) → Select Test Type → Fill Report → Submit for Review →
+// Approve → Report History.
 
 import { create } from "zustand";
 
@@ -8,16 +14,10 @@ export type ViewKey =
   // Role-specific dashboards (only these two are shown per spec)
   | "admin-dashboard"
   | "employee-dashboard"
-  // Equipment master
-  | "equipment"
-  | "equipment-detail"
-  | "equipment-form"
-  // Existing inspection + audit + admin views
-  | "inspections"
+  // Admin views
   | "clients"
-  | "import"
   | "audit-logs"
-  // Pipeline thickness reports
+  // Inspection reports (Report History) — Piping + Vessel
   | "pipeline-reports"
   | "pipeline-report-type-selector"
   | "pipeline-report-form"
@@ -50,6 +50,12 @@ interface AppUser {
 //   • PIPELINE_WELD_SCAN  → Weld Scan Report (Piping)
 //   • VESSEL_DPT          → Vessel Dye Penetrant Testing Report (Vessel,
 //                           requires a Horizontal / Vertical orientation)
+//   • VESSEL_MPT          → Vessel Magnetic Particle Testing Report (Vessel,
+//                           requires a Horizontal / Vertical orientation)
+//
+// NOTE: no PIPELINE_UT / UT Report type exists — the UT report was
+// intentionally removed and must NOT be re-added. Likewise, Equipment
+// Master was removed — do not re-add it.
 //
 // Legacy report types (kept type-compatible for existing DB rows):
 //   • PIPELINE_VISUAL     → Pipeline Visual Inspection Report (legacy)
@@ -60,6 +66,7 @@ export type PipelineReportType =
   | "PIPELINE_MPT"
   | "PIPELINE_WELD_SCAN"
   | "VESSEL_DPT"
+  | "VESSEL_MPT"
   | "PIPELINE_VISUAL"
   | "PIPELINE_CONDITION";
 
@@ -68,16 +75,13 @@ export type PipelineReportType =
 // whether the inspection was performed on piping or a vessel.
 export type EquipmentType = "PIPING" | "VESSEL";
 
-// Vessel orientation — required ONLY for VESSEL_DPT reports. Selected
-// in the selector before the form opens, stored on the report, and
-// shown in the review page / PDF.
+// Vessel orientation — required for VESSEL_DPT and VESSEL_MPT reports.
+// Selected in the selector before the form opens, stored on the report,
+// and shown in the review page / PDF.
 export type VesselOrientation = "HORIZONTAL" | "VERTICAL";
 
 interface AppState {
   view: ViewKey;
-  selectedEquipmentId: string | null;
-  editingEquipmentId: string | null;
-  inspectionClientId: string | null;
   selectedPipelineReportId: string | null;
   editingPipelineReportId: string | null;
   // When opening the form for a NEW report, this holds the report type
@@ -95,9 +99,6 @@ interface AppState {
   setView: (v: ViewKey) => void;
   /** Navigate to the role-appropriate dashboard. */
   goToMyDashboard: () => void;
-  openEquipment: (id: string) => void;
-  openNewEquipment: () => void;
-  openEditEquipment: (id: string) => void;
   openPipelineReport: (id: string) => void;
   /** Show the report type selector (then the user picks a type → openNewPipelineReportWithType). */
   openNewPipelineReport: () => void;
@@ -105,8 +106,8 @@ interface AppState {
   openNewPipelineReportWithType: (type: PipelineReportType) => void;
   /**
    * Open the form for a new report with the full selector selection:
-   * report type + equipment type (Piping/Vessel) +, for VESSEL_DPT,
-   * the vessel orientation (Horizontal/Vertical).
+   * report type + equipment type (Piping/Vessel) +, for VESSEL_DPT and
+   * VESSEL_MPT, the vessel orientation (Horizontal/Vertical).
    */
   openNewPipelineReportWithSelection: (
     type: PipelineReportType,
@@ -121,9 +122,6 @@ interface AppState {
 
 export const useAppStore = create<AppState>((set, get) => ({
   view: "dashboard",
-  selectedEquipmentId: null,
-  editingEquipmentId: null,
-  inspectionClientId: null,
   selectedPipelineReportId: null,
   editingPipelineReportId: null,
   pendingPipelineReportType: null,
@@ -140,9 +138,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     set({ view: u.dashboardRole === "ADMIN" ? "admin-dashboard" : "employee-dashboard" });
   },
-  openEquipment: (id) => set({ view: "equipment-detail", selectedEquipmentId: id }),
-  openNewEquipment: () => set({ view: "equipment-form", editingEquipmentId: null }),
-  openEditEquipment: (id) => set({ view: "equipment-form", editingEquipmentId: id }),
   openPipelineReport: (id) => set({ view: "pipeline-report-detail", selectedPipelineReportId: id }),
   // Default: show the report type selector screen (Step 1: Equipment Type).
   openNewPipelineReport: () =>
@@ -165,7 +160,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }),
   // Full selection from the staged selector:
   //   type + equipment type (Piping/Vessel) + optional vessel orientation
-  //   (required for VESSEL_DPT).
+  //   (required for VESSEL_DPT and VESSEL_MPT).
   openNewPipelineReportWithSelection: (type, equipmentType, vesselOrientation = null) =>
     set({
       view: "pipeline-report-form",

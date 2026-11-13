@@ -59,8 +59,9 @@ interface FullReport {
     | "PIPELINE_DPT"
     | "PIPELINE_MPT"
     | "PIPELINE_WELD_SCAN"
-    | "VESSEL_DPT";
-  // Equipment type + vessel orientation (VESSEL_DPT only)
+    | "VESSEL_DPT"
+    | "VESSEL_MPT";
+  // Equipment type + vessel orientation (VESSEL_DPT and VESSEL_MPT only)
   equipmentType?: string | null;
   vesselOrientation?: string | null;
   clientId: string;
@@ -165,6 +166,16 @@ interface FullReport {
   vdptDeveloperProduct?: string | null;
   vdptDeveloperBatchNo?: string | null;
   vdptDeveloperExpiry?: string | null;
+  // ─── VESSEL MPT CONSUMABLE DETAILS + TESTING DETAILS ROWS ───
+  vmptWhiteContrastMake?: string | null;
+  vmptWhiteContrastProduct?: string | null;
+  vmptWhiteContrastLotNo?: string | null;
+  vmptWhiteContrastExpiry?: string | null;
+  vmptInkMake?: string | null;
+  vmptInkProduct?: string | null;
+  vmptInkLotNo?: string | null;
+  vmptInkExpiry?: string | null;
+  vmptRows?: string | null;
   // ─── UT (ULTRASONIC TEST) FIELDS ───
   utSubContract?: string | null;
   utProject?: string | null;
@@ -377,6 +388,11 @@ const REPORT_TYPE_LABEL: Record<string, { label: string; title: string; color: s
     label: "Vessel DPT",
     title: "VESSEL DYE PENETRANT TESTING REPORT",
     color: "border-purple-500 text-purple-700",
+  },
+  VESSEL_MPT: {
+    label: "Vessel MPT",
+    title: "VESSEL MAGNETIC PARTICLE TESTING REPORT",
+    color: "border-orange-500 text-orange-700",
   },
   PIPELINE_MPT: {
     label: "MPT",
@@ -755,8 +771,20 @@ export function PipelineReportDetailView() {
             ["Location", report.plant.location ?? "—"],
             ["Plant Name", report.plant.name],
             ["Inspection Area", report.inspectionArea ?? "—"],
-            ["Pipeline Description", report.pipelineDescription ?? "—"],
-            ["Pipeline Identification No.", report.pipelineIdentificationNumber ?? "—"],
+            // Vessel reports (VESSEL_DPT / VESSEL_MPT) use equipment wording
+            ...(report.reportType === "VESSEL_DPT" || report.reportType === "VESSEL_MPT"
+              ? [
+                  ["Equipment / Vessel Description", report.pipelineDescription ?? "—"],
+                  ["Equipment Identification No.", report.pipelineIdentificationNumber ?? "—"],
+                  ["Vessel Orientation",
+                    report.vesselOrientation === "HORIZONTAL" ? "Horizontal Vessel"
+                    : report.vesselOrientation === "VERTICAL" ? "Vertical Vessel"
+                    : "—"],
+                ]
+              : [
+                  ["Pipeline Description", report.pipelineDescription ?? "—"],
+                  ["Pipeline Identification No.", report.pipelineIdentificationNumber ?? "—"],
+                ]),
             ["Isometric Drawing No.", report.isometricDrawingNumber ?? "—"],
             ["Material of Construction (MOC)", report.materialOfConstruction ?? "—"],
             ["Applicable Standard", `${report.applicableStandard ?? "—"} ${report.standardEdition ?? ""}`.trim()],
@@ -958,6 +986,143 @@ export function PipelineReportDetailView() {
             </div>
           </div>
         )}
+
+        {/* ─── VESSEL MPT: PARAMETERS + CONSUMABLE DETAILS ───
+            Shown only for VESSEL_MPT reports. The testing-details rows
+            are stored in the vmptRows JSON column and rendered in the
+            Inspection Tables section below. */}
+        {report.reportType === "VESSEL_MPT" && (() => {
+          let vmptRows: Array<Record<string, string>> = [];
+          try {
+            const parsed = JSON.parse(report.vmptRows ?? "[]");
+            if (Array.isArray(parsed)) vmptRows = parsed;
+          } catch {}
+          return (
+          <div className="mt-6 space-y-6">
+            {/* Vessel orientation + equipment type */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge variant="outline" className="border-orange-400 text-orange-700">
+                Equipment: Vessel
+              </Badge>
+              {report.vesselOrientation && (
+                <Badge variant="outline" className="border-orange-400 text-orange-700">
+                  {report.vesselOrientation === "HORIZONTAL" ? "Horizontal Vessel" : "Vertical Vessel"}
+                </Badge>
+              )}
+            </div>
+
+            {/* 3. Magnetic Particle Testing Parameters */}
+            <div>
+              <h3 className="mb-2 text-xs font-bold uppercase text-orange-700 border-b border-orange-300 pb-1">
+                3. Magnetic Particle Testing Parameters
+              </h3>
+              <table className="w-full border-collapse text-xs">
+                <tbody>
+                  {([
+                    ["Date of Examination", report.mptDateOfExamination ? new Date(report.mptDateOfExamination).toISOString().slice(0, 10) : null],
+                    ["Testing Standard", report.mptTestingStandard],
+                    ["Acceptance Criteria", report.mptAcceptanceCriteria],
+                    ["Surface Preparation", report.mptSurfacePreparation],
+                    ["Surface Temperature", report.mptSurfaceTemperature],
+                    ["Type of Instrument / Sl. No.", report.mptInstrumentSerialNo],
+                    ["MPT Method", report.mptMethod],
+                    ["Type of Current", report.mptTypeOfCurrent],
+                    ["AC Yoke Lifting Capacity", report.mptAcYokeLiftingCapacity],
+                    ["Contrast Medium", report.mptContrastMedium],
+                    ["Method of Pre-cleaning", report.mptMethodOfPreCleaning],
+                    ["Method of Applying White Contrast", report.mptMethodOfApplyingWhiteContrast],
+                    ["AC Yoke Pole Spacing", report.mptAcYokePoleSpacing],
+                    ["Magnetic Medium", report.mptMagneticMedium],
+                    ["Method of Applying Magnetic Medium", report.mptMethodOfApplyingMagneticMedium],
+                    ["Development Time", report.mptDevelopmentTime],
+                    ["Interpretation Time", report.mptInterpretationTime],
+                    ["Lighting Equipment", report.mptLightingEquipment],
+                    ["Post Cleaning", report.mptPostCleaning],
+                  ] as Array<[string, string | null | undefined]>).map(([label, value], idx) => (
+                    <tr key={idx} className="border-b border-zinc-200">
+                      <td className="bg-orange-50 border-r border-zinc-200 px-3 py-1.5 font-medium text-zinc-700 w-1/3">
+                        {label}
+                      </td>
+                      <td className="px-3 py-1.5">
+                        {value && String(value).trim() ? value : <span className="text-muted-foreground">—</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Consumable Details — Make / Product / Lot Number / Expiry per consumable */}
+            <div>
+              <h3 className="mb-2 text-xs font-bold uppercase text-orange-700 border-b border-orange-300 pb-1">
+                Consumable Details
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-orange-800 text-white">
+                      <th className="border border-orange-900 px-2 py-2 text-center">Consumable</th>
+                      <th className="border border-orange-900 px-2 py-2 text-center">Make</th>
+                      <th className="border border-orange-900 px-2 py-2 text-center">Product / Description</th>
+                      <th className="border border-orange-900 px-2 py-2 text-center">Lot Number</th>
+                      <th className="border border-orange-900 px-2 py-2 text-center">Expiry Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {([
+                      ["White Contrast", report.vmptWhiteContrastMake, report.vmptWhiteContrastProduct, report.vmptWhiteContrastLotNo, report.vmptWhiteContrastExpiry],
+                      ["Wet Particle Iron Ink", report.vmptInkMake, report.vmptInkProduct, report.vmptInkLotNo, report.vmptInkExpiry],
+                    ] as Array<[string, string | null | undefined, string | null | undefined, string | null | undefined, string | null | undefined]>).map(([label, make, product, lotNo, expiry], idx) => (
+                      <tr key={idx} className="hover:bg-muted/30">
+                        <td className="bg-orange-50 border border-zinc-300 px-3 py-1.5 font-medium text-zinc-700">{label}</td>
+                        <td className="border border-zinc-300 px-3 py-1.5">{make && make.trim() ? make : <span className="text-muted-foreground">—</span>}</td>
+                        <td className="border border-zinc-300 px-3 py-1.5">{product && product.trim() ? product : <span className="text-muted-foreground">—</span>}</td>
+                        <td className="border border-zinc-300 px-3 py-1.5">{lotNo && lotNo.trim() ? lotNo : <span className="text-muted-foreground">—</span>}</td>
+                        <td className="border border-zinc-300 px-3 py-1.5">{expiry && expiry.trim() ? expiry : <span className="text-muted-foreground">—</span>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Magnetic Particle Testing Details table */}
+            {vmptRows.length > 0 && (
+              <div>
+                <h3 className="mb-2 text-xs font-bold uppercase text-orange-700 border-b border-orange-300 pb-1">
+                  Magnetic Particle Testing Details ({vmptRows.length})
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-orange-800 text-white">
+                        <th className="border border-orange-900 px-2 py-2 text-center">Sl. No</th>
+                        <th className="border border-orange-900 px-2 py-2 text-center">Part Details</th>
+                        <th className="border border-orange-900 px-2 py-2 text-center">ID</th>
+                        <th className="border border-orange-900 px-2 py-2 text-center">Weld Dimension</th>
+                        <th className="border border-orange-900 px-2 py-2 text-center">Size of Indication Approx. (mm)</th>
+                        <th className="border border-orange-900 px-2 py-2 text-center">Observation &amp; Result</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {vmptRows.map((row, idx) => (
+                        <tr key={idx} className="hover:bg-muted/30">
+                          <td className="border border-zinc-300 px-2 py-1 text-center font-mono">{idx + 1}</td>
+                          <td className="border border-zinc-300 px-2 py-1">{row.partDetails ?? "—"}</td>
+                          <td className="border border-zinc-300 px-2 py-1">{row.idNo ?? "—"}</td>
+                          <td className="border border-zinc-300 px-2 py-1">{row.weldDimension ?? "—"}</td>
+                          <td className="border border-zinc-300 px-2 py-1 text-center">{row.indicationSize ?? "—"}</td>
+                          <td className="border border-zinc-300 px-2 py-1">{row.observationResult ?? "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+          );
+        })()}
 
         {/* ─── MPT (MAGNETIC PARTICLE TESTING) PROCEDURE + CONSUMABLES ───
             Shown only for MPT reports. The observation rows are stored in

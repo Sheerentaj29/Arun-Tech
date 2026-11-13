@@ -88,7 +88,7 @@ export function LoginScreen({ sessionExpired = false, onDismissExpired }: LoginS
             <h1 className="text-2xl font-bold tracking-tight text-zinc-900">
               Inspection Report Automation
             </h1>
-            <p className="text-sm text-zinc-500">Equipment Master Management Module</p>
+            <p className="text-sm text-zinc-500">Inspection Reports — Piping &amp; Vessel</p>
           </div>
         </div>
 

@@ -1,0 +1,825 @@
+     1→// Equipment Master Management - Industrial Inspection Report Automation System
+     2→// Prisma schema
+     3→
+     4→generator client {
+     5→  provider = "prisma-client-js"
+     6→}
+     7→
+     8→datasource db {
+     9→  provider = "sqlite"
+    10→  url      = env("DATABASE_URL")
+    11→}
+    12→
+    13→// =====================================================
+    14→// AUTH & USERS
+    15→// =====================================================
+    16→
+    17→model User {
+    18→  id           String   @id @default(cuid())
+    19→  email        String   @unique
+    20→  name         String
+    21→  passwordHash String
+    22→  role         String   @default("EMPLOYEE") // ADMIN | EMPLOYEE | INSPECTOR | APPROVER (INSPECTOR/APPROVER treated as Employee for routing)
+    23→  active       Boolean  @default(true)
+    24→  createdAt    DateTime @default(now())
+    25→  updatedAt    DateTime @updatedAt
+    26→
+    27→  equipment           Equipment[]           @relation("EquipmentCreatedBy")
+    28→  inspections         Inspection[]
+    29→  auditLogs           AuditLog[]
+    30→  pipelineInspections PipelineInspection[]  @relation("PipelineInspectionInspector")
+    31→  approvedReports     PipelineInspection[]  @relation("PipelineInspectionApprover")
+    32→  returnedReports     PipelineInspection[]  @relation("PipelineInspectionReturnedBy")
+    33→  pipeStandardEdits   PipeStandard[]        @relation("PipeStandardVerifiedBy")
+    34→  revisedReports      ReportRevision[]      @relation("ReportRevisionRevisedBy")
+    35→  approvedRevisions   ReportRevision[]      @relation("ReportRevisionApprovedBy")
+    36→}
+    37→
+    38→// =====================================================
+    39→// CLIENTS & PLANTS
+    40→// =====================================================
+    41→
+    42→model Client {
+    43→  id           String   @id @default(cuid())
+    44→  name         String   @unique
+    45→  industry     String?
+    46→  contactName  String?
+    47→  contactEmail String?
+    48→  contactPhone String?
+    49→  address      String?
+    50→  logoPath     String?
+    51→  notes        String?
+    52→  isDemo       Boolean  @default(false)
+    53→  createdAt    DateTime @default(now())
+    54→  updatedAt    DateTime @updatedAt
+    55→
+    56→  plants               Plant[]
+    57→  equipment            Equipment[]
+    58→  pipelineInspections  PipelineInspection[]
+    59→  engineeringDrawings  EngineeringDrawing[]
+    60→}
+    61→
+    62→model Plant {
+    63→  id        String   @id @default(cuid())
+    64→  clientId  String
+    65→  name      String
+    66→  location  String?
+    67→  address   String?
+    68→  notes     String?
+    69→  isDemo    Boolean  @default(false)
+    70→  createdAt DateTime @default(now())
+    71→  updatedAt DateTime @updatedAt
+    72→
+    73→  client    Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+    74→  equipment Equipment[]
+    75→  pipelineInspections PipelineInspection[]
+    76→  engineeringDrawings  EngineeringDrawing[]
+    77→}
+    78→
+    79→// =====================================================
+    80→// EQUIPMENT MASTER
+    81→// =====================================================
+    82→
+    83→model Equipment {
+    84→  id                String   @id @default(cuid())
+    85→  equipmentId       String   // human-readable unique ID, e.g. EQ-001
+    86→  name              String
+    87→  category          String   // STORAGE | PRESSURE | SEPARATION | UTILITY | PIPE | VALVE | PUMP | OTHER
+    88→  type              String   // e.g. "Chemical Storage Tank"
+    89→  orientation       String?  // Horizontal | Vertical | Inclined | Not Applicable
+    90→
+    91→  // Dimensional data — nullable because not every field applies to every type.
+    92→  diameter          Float?   // mm
+    93→  height            Float?   // mm
+    94→  length            Float?   // mm
+    95→  width             Float?   // mm
+    96→  capacity          Float?   // m3
+    97→  wallThickness     Float?   // mm
+    98→  // Pipe / heat-exchanger specific
+    99→  nominalDiameter   Float?   // mm (DN)
+   100→  outsideDiameter   Float?   // mm (OD)
+   101→  tubeLength        Float?   // mm (heat exchanger)
+   102→  shellDiameter     Float?   // mm (heat exchanger)
+   103→
+   104→  material          String?
+   105→  manufacturer      String?
+   106→  serialNumber      String?
+   107→
+   108→  clientId          String
+   109→  plantId           String
+   110→  tagNumber         String?
+   111→  dimensionSource   String?  // Approved Engineering Drawing | Manufacturer Drawing | Nameplate | Field Measurement
+   112→  verificationStatus String   @default("Unverified") // Verified | Unverified
+   113→
+   114→  isDemo            Boolean  @default(false)
+   115→  notes             String?
+   116→
+   117→  createdById       String
+   118→  createdAt         DateTime @default(now())
+   119→  updatedAt         DateTime @updatedAt
+   120→
+   121→  client     Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+   122→  plant      Plant        @relation(fields: [plantId], references: [id], onDelete: Cascade)
+   123→  createdBy  User         @relation("EquipmentCreatedBy", fields: [createdById], references: [id])
+   124→  inspections Inspection[]
+   125→  engineeringDrawings  EngineeringDrawing[]
+   126→
+   127→  @@unique([clientId, equipmentId])
+   128→  @@index([clientId])
+   129→  @@index([plantId])
+   130→  @@index([category])
+   131→  @@index([type])
+   132→}
+   133→
+   134→// =====================================================
+   135→// INSPECTIONS
+   136→// =====================================================
+   137→
+   138→model Inspection {
+   139→  id              String   @id @default(cuid())
+   140→  equipmentId     String
+   141→  inspectorId     String
+   142→  inspectionDate  DateTime
+   143→  inspectionType  String   // Visual | UT Thickness | Penetrant | Radiography | Pressure Test | Other
+   144→  status          String   @default("Completed") // Scheduled | In-Progress | Completed | Failed
+   145→  summary         String?
+   146→  observations    String?
+   147→  // Free-form recorded measurements as JSON: [{label, value, unit, notes}]
+   148→  measurements    String?
+   149→  photoCount      Int      @default(0)
+   150→  reportPath      String?
+   151→  isDemo          Boolean  @default(false)
+   152→  createdAt       DateTime @default(now())
+   153→  updatedAt       DateTime @updatedAt
+   154→
+   155→  equipment Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+   156→  inspector User      @relation(fields: [inspectorId], references: [id])
+   157→
+   158→  @@index([equipmentId])
+   159→  @@index([inspectorId])
+   160→}
+   161→
+   162→// =====================================================
+   163→// AUDIT LOG
+   164→// =====================================================
+   165→
+   166→model AuditLog {
+   167→  id        String   @id @default(cuid())
+   168→  userId    String?
+   169→  userName  String?
+   170→  action    String   // CREATE | UPDATE | DELETE | LOGIN | EXPORT | IMPORT | APPROVE | OVERRIDE
+   171→  entity    String   // Equipment | Client | Plant | Inspection | User | PipelineInspection | PipeStandard | ComponentType
+   172→  entityId  String?
+   173→  details   String?
+   174→  createdAt DateTime @default(now())
+   175→
+   176→  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+   177→
+   178→  @@index([entity])
+   179→  @@index([userId])
+   180→}
+   181→
+   182→// =====================================================
+   183→// PIPE STANDARD REFERENCE DATA (ASME B36.10M / B36.19M)
+   184→// =====================================================
+   185→// Wall thickness values seeded from the publicly published ASME
+   186→// reference tables for the most commonly used nominal pipe sizes and
+   187→// schedules. These values MUST be re-verified against the licensed /
+   188→// official ASME standard edition by an authorized administrator before
+   189→// production use. An admin can edit, add, or delete entries, and every
+   190→// edit is recorded with verifiedBy + verifiedAt + audit log entry.
+   191→
+   192→model PipeStandard {
+   193→  id              String   @id @default(cuid())
+   194→  standard        String   // "ASME B36.10M" | "ASME B36.19M"
+   195→  edition         String   // e.g. "2018"
+   196→  nominalSizeInch String   // e.g. "2" or "1/2"
+   197→  nominalSizeMm   Float   // e.g. 60.3
+   198→  dn              String   // e.g. "DN50"
+   199→  schedule        String   // e.g. "SCH 40", "STD", "XS", "XXS", "SCH 40S"
+   200→  wallThicknessMm Float   // nominal wall thickness in mm
+   201→  oD_mm           Float?   // outside diameter (mm) when applicable
+   202→  isVerified      Boolean  @default(false)
+   203→  verifiedById    String?
+   204→  verifiedAt      DateTime?
+   205→  notes           String?
+   206→  createdAt       DateTime @default(now())
+   207→  updatedAt       DateTime @updatedAt
+   208→
+   209→  verifiedBy      User?    @relation("PipeStandardVerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
+   210→  measurements    ThicknessMeasurement[]
+   211→
+   212→  @@unique([standard, edition, nominalSizeInch, schedule])
+   213→  @@index([standard, nominalSizeInch])
+   214→}
+   215→
+   216→// =====================================================
+   217→// COMPONENT TYPES (editable dropdown)
+   218→// =====================================================
+   219→// PIPE, ELBOW, TEE, REDUCER, FLANGE, OTHER. Admin-extensible.
+   220→
+   221→model ComponentType {
+   222→  id        String   @id @default(cuid())
+   223→  code      String   @unique // PIPE, ELBOW, TEE, REDUCER, FLANGE, OTHER
+   224→  label     String   // display label
+   225→  sortOrder Int      @default(0)
+   226→  active    Boolean  @default(true)
+   227→  createdAt DateTime @default(now())
+   228→  updatedAt DateTime @updatedAt
+   229→
+   230→  thicknessMeasurements ThicknessMeasurement[]
+   231→}
+   232→
+   233→// =====================================================
+   234→// PIPELINE INSPECTION REPORT
+   235→// =====================================================
+   236→// A single UT thickness measurement report on a pipeline section.
+   237→// Header captures client/plant/pipeline identity; rows are individual
+   238→// measurement points (ThicknessMeasurement).
+   239→
+   240→model PipelineInspection {
+   241→  id                       String   @id @default(cuid())
+   242→  reportNumber             String   // human-readable report number, e.g. "UT-COR-ENN-001"
+   243→  // ─── Report type selector ───
+   244→  // PIPELINE_THICKNESS  → Pipeline Thickness Measurement Report (existing)
+   245→  // PIPELINE_VISUAL     → Pipeline Visual Inspection Report
+   246→  // PIPELINE_CONDITION  → Pipeline Inspection / Condition Assessment Report
+   247→  // PIPELINE_DPT        → DPT / DPPT Dye Penetrant Testing Report
+   248→  // Existing rows get the default (PIPELINE_THICKNESS) so no data is lost.
+   249→  reportType               String   @default("PIPELINE_THICKNESS")
+   250→  clientId                 String
+   251→  plantId                  String
+   252→  inspectionArea           String?  // free text / searchable
+   253→  pipelineDescription      String?  // free text / searchable
+   254→  pipelineIdentificationNumber String? // free text / searchable
+   255→  isometricDrawingNumber   String? // free text / searchable
+   256→  materialOfConstruction   String? // e.g. Carbon Steel, SS316
+   257→  applicableStandard       String? // e.g. "ASME B36.10M"
+   258→  standardEdition          String? // e.g. "2018"
+   259→
+   260→  inspectionDate           DateTime @default(now()) // preserved for backward compat
+   261→  fromDate                 DateTime? // Start date of inspection/service activity
+   262→  toDate                   DateTime?   // End date of inspection/service activity
+   263→  primaryPhotoPath         String?  // Path to the primary inspection photo (pipeline/vessel/equipment)
+   264→  // Approval workflow statuses:
+   265→  //   Draft                  — employee is still editing the report
+   266→  //   Submitted for Review    — employee has submitted; waiting for admin
+   267→  //   Returned for Revision   — admin returned with comments; employee must fix and resubmit
+   268→  //   Approved                — admin approved; PDF is the current approved version
+   269→  //   Changes Pending Review  — employee edited an Approved report; new revision pending admin review
+   270→  status                   String   @default("Draft")
+   271→  revisionNumber           Int      @default(1)
+   272→
+   273→  inspectorId              String
+   274→  inspectorName            String   // editable — inspector's name as typed by the user
+   275→  approvedByName           String?  // editable — approver's name as typed by the user (also auto-filled during approval if empty)
+   276→  findingsSummary          String?  // overall findings section
+   277→  comments                 String?  // general comments
+   278→  // Large multiline inspection description for Step 3 of the form
+   279→  inspectionDescription     String?
+   280→  // Custom column definitions stored as JSON: [{id, name, unit}]
+   281→  // These are user-added columns beyond the 11 default system columns.
+   282→  customColumns            String?
+   283→
+   284→  // ─── Multi-table grouping (additive, optional) ───
+   285→  // JSON array describing every Thickness table in this report:
+   286→  //   [{ "id": "default", "label": "Thickness Pipeline Table 1", "sortOrder": 0 },
+   287→  //    { "id": "t_1700000000000", "label": "Thickness Pipeline Table 2", "sortOrder": 1 }]
+   288→  // Null/empty → single default table (legacy behaviour). Each row in
+   289→  // ThicknessMeasurement carries a `tableGroup` matching one of these ids.
+   290→  thicknessTablesConfig    String?
+   291→  // Photos stored as JSON array (legacy): [{path, caption, uploadedAt}]
+   292→  // Also tracked individually via the ReportPhoto model below for
+   293→  // proper relational storage and retrieval.
+   294→  photos                   String?
+   295→
+   296→  // Override tracking (admin-approved nominal thickness override)
+   297→  overrideReason           String?
+   298→  overrideAppliedById      String?
+   299→  overrideAppliedAt        DateTime?
+   300→
+   301→  // Approval tracking (when admin approves)
+   302→  approvedById             String?
+   303→  approvedAt               DateTime?
+   304→  approvalNotes            String?
+   305→
+   306→  // Return-for-revision tracking (when admin returns the report)
+   307→  returnedById             String?
+   308→  returnedAt               DateTime?
+   309→  reviewComments           String?  // mandatory when admin returns for revision
+   310→
+   311→  // Pointer to the currently-approved revision (when status=Approved or
+   312→  // Changes Pending Review). Null when the report has never been approved.
+   313→  currentApprovedRevisionId String?
+   314→
+   315→  // PDF artifact (generated PDF path) — always reflects the latest revision
+   316→  pdfPath                  String?
+   317→  signedPdfPath            String?
+   318→
+   319→  // ─── PIPELINE CONDITION ASSESSMENT fields ───
+   320→  // Single-instance per report (no child rows needed). Populated when
+   321→  // reportType = PIPELINE_CONDITION. Stored as nullable scalars so the
+   322→  // existing thickness-measurement workflow is not affected.
+   323→  pipelineAgeYears         Float?   // Pipeline Age, if available
+   324→  serviceFluid             String?  // Service / Fluid
+   325→  operatingCondition       String?  // Operating Condition (Normal / Elevated / Cyclic / etc.)
+   326→  overallConditionRating   String?  // Overall Condition Rating (Excellent / Good / Fair / Poor)
+   327→  corrosionCondition       String?  // Corrosion Condition (free text)
+   328→  damageAssessment         String?  // Damage Assessment (free text)
+   329→  previousInspectionRef    String?  // Previous Inspection Reference (report no / date)
+   330→  currentInspectionFindings String? // Current Inspection Findings (free text, multi-line)
+   331→  riskPriorityLevel        String?  // Risk / Priority Level (Low / Medium / High / Critical)
+   332→  recommendations          String?  // Recommendations (free text, multi-line)
+   333→  nextInspectionRecommendation String? // Next Inspection Recommendation
+   334→
+   335→  // ─── NEW REPORT SECTIONS (all report types) ───
+   336→  // These appear after the measurement/observation data and before the
+   337→  // inspection photos in the final PDF. They are editable in the form
+   338→  // (Step 4: Findings & Photos) and visible during review.
+   339→  siteObservationSummary   String?  // Summary of Site Observations
+   340→  results                  String?  // Results
+   341→  conclusion               String?  // Conclusion
+   342→
+   343→  // ─── SIGN-OFF FIELDS ───
+   344→  // The existing inspectorName / approver fields are preserved.
+   345→  // New fields for the three-signatory sign-off:
+   346→  //   Inspected By → inspectorName (existing) + inspectorDesignation (new)
+   347→  //   Second Reviewed By → secondReviewedByName + secondReviewedByDesignation + secondReviewedAt
+   348→  //   Approved By → approver.name (existing) + approvedByDesignation (new) + approvedAt (existing)
+   349→  inspectorDesignation       String?  // Designation of the inspector
+   350→  secondReviewedById         String?  // User who did the second review
+   351→  secondReviewedByName       String?  // Name snapshot
+   352→  secondReviewedByDesignation String? // Designation
+   353→  secondReviewedAt           DateTime? // Date of second review
+   354→  approvedByDesignation      String?  // Designation of the approver
+   355→
+   356→  // ─── DPT / DPPT REPORT FIELDS ───
+   357→  // Populated when reportType = PIPELINE_DPT
+   358→  dptDateOfExamination       DateTime? // Date of Examination (editable)
+   359→  dptSolventCleaner          String?  // Solvent / Cleaner material used (Consumable Details)
+   360→  dptPenetrant               String?  // Penetrant material used (Consumable Details)
+   361→  dptDeveloper               String?  // Developer material used (Consumable Details)
+   362→  dptCustomColumns           String?  // JSON: [{id, name, unit}] custom columns for DPT table
+   363→
+   364→  // ─── DYE PENETRANT PROCEDURE FIELDS ───
+   365→  // Populated when reportType = PIPELINE_DPT. Two-column "DYE PENETRANT
+   366→  // PROCEDURE" section in the PDF, with the field name on the left and
+   367→  // the editable value on the right. All values are typeable/editable.
+   368→  dptTestingStandard                String? // Testing Standard
+   369→  dptAcceptanceCriteria             String? // Acceptance Criteria
+   370→  dptSurfacePreparation             String? // Surface Preparation
+   371→  dptSurfaceTemperature             String? // Surface Temperature
+   372→  dptPenetrantType                  String? // Penetrant Type
+   373→  dptPenetrantProcess               String? // Penetrant Process
+   374→  dptMethodOfPreCleaning            String? // Method of Pre-cleaning
+   375→  dptDryingTimeAfterPreCleaning     String? // Drying Time After Pre-cleaning
+   376→  dptMethodOfApplyingPenetrant      String? // Method of Applying Penetrant
+   377→  dptPenetratingTime                String? // Penetrating Time
+   378→  dptMethodOfRemovingExcessPenetrant String? // Method of Removing Excess Penetrant
+   379→  dptMethodOfApplyingDeveloper      String? // Method of Applying Developer
+   380→  dptDevelopmentTime                String? // Development Time
+   381→  dptInterpretationTime             String? // Interpretation Time
+   382→  dptLightingEquipment              String? // Lighting Equipment
+   383→  dptPostCleaning                   String? // Post Cleaning
+   384→
+   385→  // ─── MPT (MAGNETIC PARTICLE TESTING) PROCEDURE FIELDS ───
+   386→  // Populated when reportType = PIPELINE_MPT. Two-column
+   387→  // "MAGNETIC PARTICLE TESTING PARAMETERS" section in the PDF.
+   388→  // All values are typeable/editable unless noted.
+   389→  mptDateOfExamination              DateTime? // Date of Examination (calendar picker)
+   390→  mptTestingStandard                String? // Testing Standard
+   391→  mptAcceptanceCriteria             String? // Acceptance Criteria
+   392→  mptSurfacePreparation             String? // Surface preparation
+   393→  mptSurfaceTemperature             String? // Surface temperature
+   394→  mptInstrumentSerialNo             String? // Type of Instrument / SI.No
+   395→  mptCalibrationDate                DateTime? // Instrument / Calibration Date (calendar picker)
+   396→  mptMethod                         String? // MPT Method
+   397→  mptTypeOfCurrent                  String? // Type of Current
+   398→  mptAcYokeLiftingCapacity          String? // AC Yoke Lifting Capacity
+   399→  mptContrastMedium                 String? // Contrast Medium
+   400→  mptMethodOfPreCleaning            String? // Method of Pre cleaning
+   401→  mptMethodOfApplyingWhiteContrast  String? // Method of applying White Contrast
+   402→  mptAcYokePoleSpacing              String? // AC Yoke Pole Spacing
+   403→  mptMagneticMedium                 String? // Magnetic Medium
+   404→  mptMethodOfApplyingMagneticMedium String? // Method of applying Magnetic Medium
+   405→  mptDevelopmentTime                String? // Development time
+   406→  mptInterpretationTime             String? // Interpretation time
+   407→  mptLightingEquipment              String? // Lightning Equipment
+   408→  mptPostCleaning                   String? // Post cleaning
+   409→  // MPT Consumable Details
+   410→  mptWhiteContrast                  String? // White Contrast (consumable)
+   411→  mptWetParticleIronInk             String? // Wet Particle Iron Ink (consumable)
+   412→  // MPT custom columns for the observation table
+   413→  mptCustomColumns                  String?  // JSON: [{id, name, unit}]
+   414→
+   415→  // ─── UT (ULTRASONIC TEST) REPORT FIELDS ───
+   416→  // Populated when reportType = PIPELINE_UT. UT-specific header fields
+   417→  // stored directly on the report. Multi-row tables (equipment, probes,
+   418→  // test results) are stored as JSON strings.
+   419→  utSubContract                     String?  // Sub Contract
+   420→  utProject                         String?  // Project
+   421→  utJobLocation                     String?  // Job Location
+   422→  utJobDescription                  String?  // Job Description
+   423→  utMaterial                        String?  // Material
+   424→  utCouplant                        String?  // Couplant
+   425→  utReferenceDocuments              String?  // Reference Documents
+   426→  utProcedureNo                     String?  // UT Procedure No.
+   427→  utAcceptanceStandard              String?  // Acceptance Standard
+   428→  utUfdDetails                      String?  // UFD Details (multiline text)
+   429→  // Scanning details (single-instance fields)
+   430→  utCalibrationBlock                String?  // Calibration Block (DAC Block)
+   431→  utExtentOfExamination             String?  // Extent of Examination
+   432→  utSurfaceCondition                String?  // Surface Condition
+   433→  utReferenceLevel                  String?  // Reference Level
+   434→  utFlawSizingTechnique             String?  // Flaw Sizing Technique
+   435→  utInspectionNote                  String?  // Inspection note (multiline, below Test Results)
+   436→  // Multi-row tables stored as JSON
+   437→  utEquipmentRows                   String?  // JSON: [{equipmentType, machineMake, model, mcSrNo, calibrationDueDate}]
+   438→  utProbeRows                       String?  // JSON: [{probeType, probeAngle, frequency, size, probeNo, range, referenceDb, scanningDb}]
+   439→  utTestResultRows                  String?  // JSON: [{description, beamId, noOfJoints, thickness, weldType, moc, totalMeter, results}]
+   440→  utCustomColumns                   String?  // JSON: [{id, name, unit}] (reserved for future)
+   441→
+   442→  // ─── WELD SCAN SPECIFIC FIELDS ───
+   443→  // Populated when reportType = PIPELINE_WELD_SCAN. Stored as JSON strings.
+   444→  // Multi-row tables for instrument details, probe details, and test results.
+   445→  wsScanningCalibrationBlock        String?  // Calibration Block (typeable)
+   446→  wsScanningReferenceLevel          String?  // Reference Level (typeable)
+   447→  wsScanningExtentOfExamination     String?  // Extent of Examination (typeable)
+   448→  wsScanningSurfaceCondition        String?  // Surface Condition (dropdown)
+   449→  wsScanningFlawSizingTechnique     String?  // Flaw Sizing Technique (dropdown)
+   450→  wsInstrumentRows                  String?  // JSON: [{equipmentType, machineMake, model, mcSrNo, calibrationDueDate}]
+   451→  wsProbeRows                       String?  // JSON: [{probeType, probeAngle, frequency, size, probeNo, range, referenceDb, scanningDb}]
+   452→  wsTestResultRows                  String?  // JSON: [{description, identificationNo, weldType, probe, bp, sd, depth, echoHeight, length, observation, result}]
+   453→
+   454→  // ─── EQUIPMENT TYPE + VESSEL FIELDS ───
+   455→  // equipmentType records the selection made in the report-creation flow
+   456→  // ("PIPING" or "VESSEL"). Null for legacy rows created before this
+   457→  // field existed. vesselOrientation is required for VESSEL_DPT reports
+   458→  // ("HORIZONTAL" or "VERTICAL") and is displayed on the review page and
+   459→  // in the generated PDF.
+   460→  equipmentType             String?  // PIPING | VESSEL
+   461→  vesselOrientation         String?  // HORIZONTAL | VERTICAL (VESSEL_DPT only)
+   462→
+   463→  // ─── VESSEL DPT CONSUMABLE DETAILS ───
+   464→  // Populated when reportType = VESSEL_DPT. Separate Make / Product /
+   465→  // Batch Number / Expiry Date entry for each of the three consumables.
+   466→  // All typeable text (expiry dates are free text, e.g. "Nov-2027").
+   467→  vdptSolventMake           String?  // Solvent — Make
+   468→  vdptSolventProduct        String?  // Solvent — Product / Description
+   469→  vdptSolventBatchNo        String?  // Solvent — Batch Number
+   470→  vdptSolventExpiry         String?  // Solvent — Expiry Date
+   471→  vdptPenetrantMake         String?  // Penetrant — Make
+   472→  vdptPenetrantProduct      String?  // Penetrant — Product / Description
+   473→  vdptPenetrantBatchNo      String?  // Penetrant — Batch Number
+   474→  vdptPenetrantExpiry       String?  // Penetrant — Expiry Date
+   475→  vdptDeveloperMake         String?  // Developer — Make
+   476→  vdptDeveloperProduct      String?  // Developer — Product / Description
+   477→  vdptDeveloperBatchNo      String?  // Developer — Batch Number
+   478→  vdptDeveloperExpiry       String?  // Developer — Expiry Date
+   479→
+   480→  isDemo                   Boolean  @default(false)
+   481→  createdAt                DateTime @default(now())
+   482→  updatedAt                DateTime @updatedAt
+   483→
+   484→  client      Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+   485→  plant       Plant       @relation(fields: [plantId], references: [id], onDelete: Cascade)
+   486→  inspector   User        @relation("PipelineInspectionInspector", fields: [inspectorId], references: [id])
+   487→  approver    User?       @relation("PipelineInspectionApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+   488→  returnedBy  User?       @relation("PipelineInspectionReturnedBy", fields: [returnedById], references: [id], onDelete: SetNull)
+   489→  measurements ThicknessMeasurement[]
+   490→  visualObservations VisualInspectionObservation[]
+   491→  dptObservations DptObservation[]
+   492→  revisions   ReportRevision[]
+   493→  reportPhotos ReportPhoto[]
+   494→  drawingLinks DrawingInspectionLink[]
+   495→  certificates InspectionCertificate[]
+   496→
+   497→  @@unique([clientId, reportNumber])
+   498→  @@index([clientId])
+   499→  @@index([plantId])
+   500→  @@index([inspectorId])
+   501→  @@index([status])
+   502→  @@index([reportType])
+   503→}
+   504→
+   505→// =====================================================
+   506→// THICKNESS MEASUREMENT ROW
+   507→// =====================================================
+   508→// One row per measurement point. The first two columns (Dia mm (inch),
+   509→// Pipe Schedule) are stored as structured values; the third column
+   510→// (Nominal Thickness) is calculated from PipeStandard and may be
+   511→// overridden only with a recorded reason. The four clock-position
+   512→// measurements support an explicit status (Measured | NotMeasured |
+   513→// NotApplicable) so missing data is never converted to zero.
+   514→
+   515→model ThicknessMeasurement {
+   516→  id                    String   @id @default(cuid())
+   517→  pipelineInspectionId String
+   518→  pointNo               String   // free text, e.g. "P-1"
+   519→  sortOrder             Int      @default(0)
+   520→
+   521→  // ─── Multi-table grouping (additive, default "default") ───
+   522→  // When a Thickness report contains multiple tables, each row belongs to
+   523→  // exactly one table group. Existing rows (and any new row in a
+   524→  // single-table report) get "default" — so the existing single-table
+   525→  // workflow keeps working unchanged. The list of table groups itself is
+   526→  // stored as JSON on the parent PipelineInspection.thicknessTablesConfig.
+   527→  tableGroup            String   @default("default")
+   528→
+   529→  // First two fixed columns
+   530→  pipeSizeInch          String   // e.g. "2", "1/2", "6" (matches PipeStandard.nominalSizeInch)
+   531→  pipeSchedule          String   // e.g. "SCH 40", "STD"
+   532→
+   533→  // Third column (calculated from standards; override captured separately)
+   534→  nominalThicknessMm    Float?   // snapshot from PipeStandard at row creation/update
+   535→  nominalOverride       Float?   // authorized override value (with reason at report level)
+   536→  standardId            String?  // FK to PipeStandard used to compute nominalThicknessMm
+   537→
+   538→  // Fourth column
+   539→  componentTypeId        String?
+   540→  componentTypeCode      String   // snapshot code (PIPE | ELBOW | TEE | REDUCER | FLANGE | OTHER)
+   541→
+   542→  // Columns 5-9: clock-position measurements with explicit status
+   543→  northMm               Float?
+   544→  northStatus            String   @default("NotMeasured") // Measured | NotMeasured | NotApplicable
+   545→  eastMm                 Float?
+   546→  eastStatus             String   @default("NotMeasured")
+   547→  southMm               Float?
+   548→  southStatus            String   @default("NotMeasured")
+   549→  westMm                 Float?
+   550→  westStatus             String   @default("NotMeasured")
+   551→
+   552→  // Column 10: observed minimum (calculated; null if no valid measurements)
+   553→  observedMinimumMm     Float?
+   554→  observedMinimumOverride Float? // authorized override with reason
+   555→
+   556→  // Column 11: findings / comments
+   557→  findingsComments      String?
+   558→  // Custom column values stored as JSON: {"col_id_1": "5.2", "col_id_2": "N/A"}
+   559→  // Each key corresponds to a custom column defined on the parent PipelineInspection.
+   560→  customColumnValues    String?
+   561→
+   562→  createdAt             DateTime @default(now())
+   563→  updatedAt             DateTime @updatedAt
+   564→
+   565→  pipelineInspection    PipelineInspection @relation(fields: [pipelineInspectionId], references: [id], onDelete: Cascade)
+   566→  componentType         ComponentType?     @relation(fields: [componentTypeId], references: [id], onDelete: SetNull)
+   567→  standard              PipeStandard?      @relation(fields: [standardId], references: [id], onDelete: SetNull)
+   568→
+   569→  @@index([pipelineInspectionId])
+   570→  @@index([pipeSizeInch, pipeSchedule])
+   571→}
+   572→
+   573→// =====================================================
+   574→// VISUAL INSPECTION OBSERVATION ROW
+   575→// =====================================================
+   576→// One row per inspection point for the Pipeline Visual Inspection Report.
+   577→// Each row captures the visual condition at a distinct point/location along
+   578→// the pipeline. Photos are linked via the existing ReportPhoto model and
+   579→// can be associated with a specific observation via photoObsId below.
+   580→
+   581→model VisualInspectionObservation {
+   582→  id                          String   @id @default(cuid())
+   583→  pipelineInspectionId        String
+   584→  pointNo                     String   // e.g. "V-1", "PIP-001"
+   585→  sortOrder                   Int      @default(0)
+   586→  location                    String?  // Inspection Point / Location (free text)
+   587→
+   588→  // Visual inspection fields
+   589→  pipelineCondition           String?  // Pipeline Condition (Good / Fair / Poor / etc.)
+   590→  externalSurfaceCondition    String?  // External Surface Condition
+   591→  coatingPaintCondition       String?  // Coating / Paint Condition
+   592→  corrosionObserved           String?  // Corrosion Observed (None / Light / Moderate / Severe)
+   593→  leakageObserved             String?  // Leakage Observed (Yes / No / Suspected)
+   594→  damageOrDeformation         String?  // Damage or Deformation
+   595→  supportsHangersCondition    String?  // Supports and Hangers Condition
+   596→  weldJointCondition          String?  // Weld Joint Condition
+   597→  insulationCondition         String?  // Insulation Condition (if applicable)
+   598→  findings                    String?  // Findings (free text)
+   599→  recommendations             String?  // Recommendations (free text)
+   600→  inspectorComments           String?  // Inspector Comments (free text)
+   601→
+   602→  createdAt                   DateTime @default(now())
+   603→  updatedAt                   DateTime @updatedAt
+   604→
+   605→  pipelineInspection          PipelineInspection @relation(fields: [pipelineInspectionId], references: [id], onDelete: Cascade)
+   606→
+   607→  @@index([pipelineInspectionId])
+   608→}
+   609→
+   610→// =====================================================
+   611→// REPORT REVISION HISTORY
+   612→// =====================================================
+   613→// Every save of an Approved report creates a new revision snapshot.
+   614→// Earlier revisions remain accessible for audit / retrieval.
+   615→
+   616→model ReportRevision {
+   617→  id                String   @id @default(cuid())
+   618→  pipelineInspectionId String
+   619→  revisionNumber    Int
+   620→  revisionDate      DateTime @default(now())
+   621→  // Each revision tracks its own status in the approval workflow:
+   622→  //   Draft | Submitted for Review | Returned for Revision | Approved | Changes Pending Review | Superseded
+   623→  // A revision is "Superseded" once a later revision is approved.
+   624→  status            String   @default("Draft")
+   625→  revisedById       String?
+   626→  revisedByName     String?
+   627→  // Snapshot of the report header at this revision (for display + audit)
+   628→  changeDescription String?
+   629→  pdfPath           String?
+   630→  snapshotData      String?  // JSON snapshot of the full report at this revision
+   631→  // Review fields (when admin reviews this specific revision)
+   632→  reviewComments    String?
+   633→  approvedById      String?
+   634→  approvedAt       DateTime?
+   635→  approvedByName   String?
+   636→  createdAt         DateTime @default(now())
+   637→
+   638→  pipelineInspection PipelineInspection @relation(fields: [pipelineInspectionId], references: [id], onDelete: Cascade)
+   639→  revisedBy          User?             @relation("ReportRevisionRevisedBy", fields: [revisedById], references: [id], onDelete: SetNull)
+   640→  approvedBy         User?             @relation("ReportRevisionApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+   641→
+   642→  @@index([pipelineInspectionId])
+   643→  @@index([status])
+   644→}
+   645→
+   646→// =====================================================
+   647→// REPORT PHOTOS (persistent file storage)
+   648→// =====================================================
+   649→// Each photo is stored as a file on disk (storage/photos/) and tracked
+   650→// in this table with its filename, caption, and upload metadata.
+   651→// Photos are included in the generated PDF and preserved with approved
+   652→// report revisions.
+   653→
+   654→model ReportPhoto {
+   655→  id                   String   @id @default(cuid())
+   656→  pipelineInspectionId String
+   657→  fileName             String   // original file name from upload
+   658→  filePath             String   // absolute path on disk (storage/photos/...)
+   659→  fileSize             Int      // bytes
+   660→  mimeType             String   // image/jpeg, image/png, etc.
+   661→  caption              String?  // optional: "Overall pipeline view", "Corrosion observed", etc.
+   662→  sortOrder            Int      @default(0)
+   663→  // Category: "PRIMARY" = primary inspection photo (first page of PDF),
+   664→  //           "INSPECTION" = regular inspection photo (gallery section).
+   665→  // When the primary photo is uploaded via /primary-photo, the ReportPhoto
+   666→  // row is tagged PRIMARY so it can be excluded from the Inspection
+   667→  // Photographs gallery. Regular photo uploads are tagged INSPECTION.
+   668→  category             String   @default("INSPECTION")
+   669→  uploadedById         String?
+   670→  uploadedByName       String?
+   671→  createdAt            DateTime @default(now())
+   672→
+   673→  pipelineInspection PipelineInspection @relation(fields: [pipelineInspectionId], references: [id], onDelete: Cascade)
+   674→
+   675→  @@index([pipelineInspectionId])
+   676→  @@index([category])
+   677→}
+   678→
+   679→// =====================================================
+   680→// ENGINEERING DRAWINGS
+   681→// =====================================================
+   682→// Engineering drawings (AutoCAD DWG/DXF, PDF, images) uploaded by
+   683→// admins/employees. Each drawing has metadata (title, number, type,
+   684→// revision) and one or more file revisions stored on disk.
+   685→// Drawings can be associated with clients, plants, equipment, and
+   686→// inspection reports.
+   687→
+   688→model EngineeringDrawing {
+   689→  id              String   @id @default(cuid())
+   690→  title           String   // human-readable drawing title
+   691→  drawingNumber   String   // e.g. "ISO-PIPE-001"
+   692→  drawingType     String   // Plant Layout | P&ID | Isometric | Pipeline Layout | GA | Mechanical | Structural | Electrical | Instrumentation | Other
+   693→  description     String?
+   694→  
+   695→  clientId        String
+   696→  plantId         String?
+   697→  equipmentId     String?  // optional link to Equipment Master
+   698→  
+   699→  // Which revision is currently active
+   700→  activeRevisionId String?
+   701→  
+   702→  isDemo          Boolean  @default(false)
+   703→  createdAt       DateTime @default(now())
+   704→  updatedAt       DateTime @updatedAt
+   705→  
+   706→  client          Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+   707→  plant           Plant?       @relation(fields: [plantId], references: [id], onDelete: SetNull)
+   708→  equipment       Equipment?   @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
+   709→  revisions       DrawingRevision[]
+   710→  inspectionLinks DrawingInspectionLink[]
+   711→  
+   712→  @@unique([clientId, drawingNumber])
+   713→  @@index([clientId])
+   714→  @@index([plantId])
+   715→  @@index([equipmentId])
+   716→  @@index([drawingType])
+   717→}
+   718→
+   719→model DrawingRevision {
+   720→  id              String   @id @default(cuid())
+   721→  drawingId       String
+   722→  revisionNumber  String   // "Rev 0", "Rev 1", "Rev 2", etc.
+   723→  revisionDate    DateTime @default(now())
+   724→  
+   725→  // File storage
+   726→  fileName        String   // original filename from upload
+   727→  filePath        String   // absolute path on disk (storage/drawings/...)
+   728→  fileSize        Int      // bytes
+   729→  mimeType        String   // detected MIME type
+   730→  fileExtension   String   // .dwg, .dxf, .pdf, .png, etc.
+   731→  
+   732→  // Preview (for image/PDF formats only; null for DWG/DXF)
+   733→  previewPath     String?  // path to generated preview image (if applicable)
+   734→  
+   735→  // Upload metadata
+   736→  uploadedById    String?
+   737→  uploadedByName  String?
+   738→  notes           String?
+   739→  isActive        Boolean  @default(false)
+   740→  createdAt       DateTime @default(now())
+   741→  
+   742→  drawing         EngineeringDrawing @relation(fields: [drawingId], references: [id], onDelete: Cascade)
+   743→  
+   744→  @@index([drawingId])
+   745→  @@index([isActive])
+   746→}
+   747→
+   748→// Links drawings to specific inspection reports
+   749→model DrawingInspectionLink {
+   750→  id                      String   @id @default(cuid())
+   751→  drawingId               String
+   752→  drawingRevisionId       String?  // specific revision (null = use active)
+   753→  pipelineInspectionId    String
+   754→  attachedById            String?
+   755→  attachedByName          String?
+   756→  createdAt               DateTime @default(now())
+   757→  
+   758→  drawing                 EngineeringDrawing @relation(fields: [drawingId], references: [id], onDelete: Cascade)
+   759→  pipelineInspection      PipelineInspection @relation(fields: [pipelineInspectionId], references: [id], onDelete: Cascade)
+   760→  
+   761→  @@unique([drawingId, pipelineInspectionId])
+   762→  @@index([drawingId])
+   763→  @@index([pipelineInspectionId])
+   764→}
+   765→
+   766→// =====================================================
+   767→// INSPECTION CERTIFICATES
+   768→// =====================================================
+   769→// Certificates uploaded for an inspection report, split into two
+   770→// categories:
+   771→//   EQUIPMENT — calibration certificates for instruments/equipment
+   772→//   PERSONNEL — certificates associated with inspectors/personnel
+   773→
+   774→model InspectionCertificate {
+   775→  id                   String   @id @default(cuid())
+   776→  pipelineInspectionId String
+   777→  category             String   // "EQUIPMENT" | "PERSONNEL"
+   778→  title                String   // certificate name/title
+   779→  fileName             String   // original filename
+   780→  filePath             String   // path on disk
+   781→  fileSize             Int      // bytes
+   782→  mimeType             String   // detected MIME type
+   783→  fileExtension        String   // .pdf, .png, .jpg, .jpeg
+   784→  sortOrder            Int      @default(0)
+   785→  uploadedById         String?
+   786→  uploadedByName       String?
+   787→  createdAt            DateTime @default(now())
+   788→
+   789→  pipelineInspection   PipelineInspection @relation(fields: [pipelineInspectionId], references: [id], onDelete: Cascade)
+   790→
+   791→  @@index([pipelineInspectionId])
+   792→  @@index([category])
+   793→}
+   794→
+   795→// =====================================================
+   796→// DPT / DPPT OBSERVATION ROW
+   797→// =====================================================
+   798→// One row per DPT inspection point. Serial numbers are auto-generated
+   799→// (1, 2, 3...) and renumbered when rows are added/deleted.
+   800→// Each row has: description, weld type, result (Accept/Reject),
+   801→// remarks, and custom column values.
+   802→
+   803→model DptObservation {
+   804→  id                    String   @id @default(cuid())
+   805→  pipelineInspectionId  String
+   806→  serialNo              Int      @default(1) // auto-generated sequential number
+   807→  sortOrder             Int      @default(0)
+   808→
+   809→  description           String?  // Description of the inspected area/component
+   810→  weldType              String?  // Weld type (Butt Weld, Fillet Weld, etc.)
+   811→  indicationSize        String?  // Indication Size (mm) — typeable
+   812→  result                String   @default("Accept") // Accept | Reject
+   813→  remarks               String?  // Additional observations/remarks
+   814→
+   815→  // Custom column values stored as JSON: {"col_id_1": "value", ...}
+   816→  customColumnValues    String?
+   817→
+   818→  createdAt             DateTime @default(now())
+   819→  updatedAt             DateTime @updatedAt
+   820→
+   821→  pipelineInspection    PipelineInspection @relation(fields: [pipelineInspectionId], references: [id], onDelete: Cascade)
+   822→
+   823→  @@index([pipelineInspectionId])
+   824→}
+   825→

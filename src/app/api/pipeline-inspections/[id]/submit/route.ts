@@ -68,6 +68,19 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         { status: 400 },
       );
     }
+  } else if (reportType === "VESSEL_MPT") {
+    // Vessel MPT testing-details rows live in the vmptRows JSON column.
+    let vmptRowCount = 0;
+    try {
+      const parsed = JSON.parse(existing.vmptRows ?? "[]");
+      if (Array.isArray(parsed)) vmptRowCount = parsed.length;
+    } catch {}
+    if (vmptRowCount === 0) {
+      return NextResponse.json(
+        { error: "Cannot submit a vessel MPT report with no testing-details rows. Add at least one row first." },
+        { status: 400 },
+      );
+    }
   } else if (reportType === "PIPELINE_CONDITION") {
     // Condition reports don't have child rows — require at least one of the
     // main free-text fields to be filled in.
