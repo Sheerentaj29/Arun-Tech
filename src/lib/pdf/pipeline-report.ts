@@ -85,7 +85,8 @@ type ReportType =
   | "PIPELINE_CONDITION"
   | "PIPELINE_DPT"
   | "PIPELINE_MPT"
-  | "PIPELINE_WELD_SCAN";
+  | "PIPELINE_WELD_SCAN"
+  | "VESSEL_DPT";
 
 const REPORT_TYPE_TITLE: Record<ReportType, string> = {
   PIPELINE_THICKNESS: "PIPELINE THICKNESS MEASUREMENT REPORT",
@@ -94,6 +95,7 @@ const REPORT_TYPE_TITLE: Record<ReportType, string> = {
   PIPELINE_DPT:       "DYE PENETRANT TESTING REPORT",
   PIPELINE_MPT:       "MAGNETIC PARTICLE TESTING REPORT",
   PIPELINE_WELD_SCAN: "WELD SCAN REPORT",
+  VESSEL_DPT:         "VESSEL DYE PENETRANT TESTING REPORT",
 };
 
 function getReportType(raw: any): ReportType {
@@ -103,7 +105,8 @@ function getReportType(raw: any): ReportType {
     v === "PIPELINE_CONDITION" ||
     v === "PIPELINE_DPT" ||
     v === "PIPELINE_MPT" ||
-    v === "PIPELINE_WELD_SCAN"
+    v === "PIPELINE_WELD_SCAN" ||
+    v === "VESSEL_DPT"
   ) return v;
   return "PIPELINE_THICKNESS";
 }
@@ -116,6 +119,7 @@ const NO_DRAWINGS_REPORT_TYPES: ReportType[] = [
   "PIPELINE_MPT",
   "PIPELINE_WELD_SCAN",
   "PIPELINE_CONDITION",
+  "VESSEL_DPT",
 ];
 
 export interface LinkedDrawing {
@@ -156,6 +160,7 @@ export interface PdfReportInput {
       sortOrder: number;
       description: string | null;
       weldType: string | null;
+      indicationSize?: string | null;
       result: string;
       remarks: string | null;
       customColumnValues: string | null;
@@ -620,9 +625,23 @@ export async function generatePipelineReportPdf(
     ["Location", report.plant.location],
     ["Plant Name", report.plant.name],
     ["Unit Name", report.inspectionArea],
-    ["Pipeline Description", report.pipelineDescription],
-    ["Pipeline Identification No.", report.pipelineIdentificationNumber],
-    ["Isometric Drawing No.", report.isometricDrawingNumber],
+    // For Vessel DPT reports the identification rows use vessel wording
+    // and the selected orientation is displayed on the cover.
+    ...(reportType === "VESSEL_DPT"
+      ? [
+          ["Equipment / Vessel Description", report.pipelineDescription],
+          ["Equipment Identification No.", report.pipelineIdentificationNumber],
+          ["Isometric Drawing No.", report.isometricDrawingNumber],
+          ["Vessel Orientation",
+            (report as any).vesselOrientation === "HORIZONTAL" ? "Horizontal Vessel"
+            : (report as any).vesselOrientation === "VERTICAL" ? "Vertical Vessel"
+            : null],
+        ] as Array<[string, string | null | undefined]>
+      : [
+          ["Pipeline Description", report.pipelineDescription],
+          ["Pipeline Identification No.", report.pipelineIdentificationNumber],
+          ["Isometric Drawing No.", report.isometricDrawingNumber],
+        ] as Array<[string, string | null | undefined]>),
     ["Material of Construction (MOC)", report.materialOfConstruction],
     ["Applicable Standard",
       `${report.applicableStandard ?? "—"} ${report.standardEdition ?? ""}`.trim()],
@@ -1520,6 +1539,226 @@ export async function generatePipelineReportPdf(
       doc.text("No DPT observations recorded.", MARGIN + 4, y + 9, { width: pageW - 2 * MARGIN - 8, align: "center" });
       doc.fillColor("#000");
       y += dptRowH;
+    }
+  } else if (reportType === "VESSEL_DPT") {
+    // ─── VESSEL DPT REPORT BODY ───
+    // Renders, in this order:
+    //   1. "DYE PENETRANT TESTING PARAMETERS" — two-column table with
+    //      Vessel Orientation + Date of Examination + 16 typeable fields.
+    //   2. "Consumable Details" — 3-row grid (Solvent / Penetrant /
+    //      Developer) × Make / Product / Batch Number / Expiry Date.
+    //   3. "Dye Penetrant Testing Details" — table with Part Details |
+    //      Type of Weld | Size of Indication Approx. (mm) |
+    //      Observation & Result.
+    //   4. Photographs are handled by the shared photo-gallery section
+    //      below ("Inspection Photographs").
+    startBodyOnFreshPage(160);
+
+    const vdptReport = report as any;
+
+    // ─── 1. DYE PENETRANT TESTING PARAMETERS ───
+    {
+      const procRowH = 18;
+      if (y + 24 + procRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 6;
+      doc.font(FONT_BOLD).fontSize(11).fillColor("#3a1d4a");
+      doc.text("Dye Penetrant Testing Parameters", MARGIN, y);
+      doc.fillColor("#000");
+      y += 18;
+
+      // Vessel Orientation line — from the orientation selected in the
+      // report-creation flow and stored on the report.
+      const orientText =
+        vdptReport.vesselOrientation === "HORIZONTAL" ? "Horizontal Vessel"
+        : vdptReport.vesselOrientation === "VERTICAL" ? "Vertical Vessel"
+        : null;
+      if (orientText) {
+        doc.font(FONT_BOLD).fontSize(9).fillColor("#000");
+        doc.text(`Vessel Orientation: ${orientText}`, MARGIN, y);
+        y += 14;
+      }
+
+      const procedureRows: Array<[string, string | null]> = [
+        ["Date of Examination", vdptReport.dptDateOfExamination
+          ? new Date(vdptReport.dptDateOfExamination).toISOString().slice(0, 10)
+          : null],
+        ["Testing Standard", vdptReport.dptTestingStandard],
+        ["Acceptance Criteria", vdptReport.dptAcceptanceCriteria],
+        ["Surface Preparation", vdptReport.dptSurfacePreparation],
+        ["Surface Temperature", vdptReport.dptSurfaceTemperature],
+        ["Penetrant Type", vdptReport.dptPenetrantType],
+        ["Penetrant Process", vdptReport.dptPenetrantProcess],
+        ["Method of Pre-cleaning", vdptReport.dptMethodOfPreCleaning],
+        ["Drying Time After Pre-cleaning", vdptReport.dptDryingTimeAfterPreCleaning],
+        ["Method of Applying Penetrant", vdptReport.dptMethodOfApplyingPenetrant],
+        ["Penetrating Time", vdptReport.dptPenetratingTime],
+        ["Method of Removing Excess Penetrant", vdptReport.dptMethodOfRemovingExcessPenetrant],
+        ["Method of Applying Developer", vdptReport.dptMethodOfApplyingDeveloper],
+        ["Development Time", vdptReport.dptDevelopmentTime],
+        ["Interpretation Time", vdptReport.dptInterpretationTime],
+        ["Lighting Equipment", vdptReport.dptLightingEquipment],
+        ["Post Cleaning", vdptReport.dptPostCleaning],
+      ];
+
+      const procLabelW = (pageW - 2 * MARGIN) * 0.38;
+      const procValueW = (pageW - 2 * MARGIN) - procLabelW;
+      const procUsableW = pageW - 2 * MARGIN;
+
+      for (const [label, value] of procedureRows) {
+        if (y + procRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+        doc.rect(MARGIN, y, procLabelW, procRowH).fill("#f3e8fb");
+        doc.rect(MARGIN + procLabelW, y, procValueW, procRowH).fill("#ffffff");
+        doc.rect(MARGIN, y, procUsableW, procRowH).stroke(TABLE_OUTER_BORDER);
+        doc.moveTo(MARGIN + procLabelW, y).lineTo(MARGIN + procLabelW, y + procRowH).stroke(TABLE_INNER_BORDER);
+        doc.font(FONT_BOLD).fontSize(8.5).fillColor("#000");
+        doc.text(label, MARGIN + 4, y + 5, { width: procLabelW - 8 });
+        doc.font(FONT_REGULAR).fontSize(8.5).fillColor("#000");
+        const valueText = value && value.trim() ? value.trim() : "—";
+        const maxW = procValueW - 8;
+        let displayText = valueText;
+        if (doc.widthOfString(displayText) > maxW) {
+          const charsToKeep = Math.floor((maxW / Math.max(1, doc.widthOfString(displayText))) * displayText.length);
+          displayText = displayText.slice(0, Math.max(1, charsToKeep - 1)) + "…";
+        }
+        doc.text(displayText, MARGIN + procLabelW + 4, y + 5, { width: maxW });
+        y += procRowH;
+      }
+      y += 8;
+    }
+
+    // ─── 2. CONSUMABLE DETAILS ───
+    // 3 rows (Solvent / Penetrant / Developer) × 5 columns
+    // (Consumable | Make | Product / Description | Batch Number | Expiry Date).
+    {
+      // drawDptTableHeader draws a fixed 36pt-tall header — advance y by
+      // the same amount so the first data row never overlaps the header.
+      const consHeaderH = 36;
+      const consRowH = 18;
+      if (y + 24 + consHeaderH + consRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 4;
+      doc.font(FONT_BOLD).fontSize(11).fillColor("#3a1d4a");
+      doc.text("Consumable Details", MARGIN, y);
+      doc.fillColor("#000");
+      y += 18;
+
+      const consUsable = pageW - 2 * MARGIN;
+      const consColWidths = orientation === "landscape"
+        ? [70, 130, 210, 130, Math.max(100, consUsable - 70 - 130 - 210 - 130)]
+        : [55, 90, 150, 90, Math.max(80, consUsable - 55 - 90 - 150 - 90)];
+      const consHeaders = ["Consumable", "Make", "Product / Description", "Batch Number", "Expiry Date"];
+
+      drawDptTableHeader(doc, consHeaders, consColWidths, y, pageW);
+      y += consHeaderH;
+
+      const consumableRows: Array<[string, string | null, string | null, string | null, string | null]> = [
+        ["Solvent", vdptReport.vdptSolventMake, vdptReport.vdptSolventProduct, vdptReport.vdptSolventBatchNo, vdptReport.vdptSolventExpiry],
+        ["Penetrant", vdptReport.vdptPenetrantMake, vdptReport.vdptPenetrantProduct, vdptReport.vdptPenetrantBatchNo, vdptReport.vdptPenetrantExpiry],
+        ["Developer", vdptReport.vdptDeveloperMake, vdptReport.vdptDeveloperProduct, vdptReport.vdptDeveloperBatchNo, vdptReport.vdptDeveloperExpiry],
+      ];
+
+      for (const row of consumableRows) {
+        if (y + consRowH > pageMaxY) {
+          addNewPage();
+          drawDptTableHeader(doc, consHeaders, consColWidths, MARGIN, pageW);
+          y = MARGIN + consHeaderH;
+        }
+        // Draw one bordered row of cells
+        doc.rect(MARGIN, y, consUsable, consRowH).stroke(TABLE_OUTER_BORDER);
+        let cx = MARGIN;
+        for (let i = 0; i < consHeaders.length; i++) {
+          const w = consColWidths[i];
+          if (i > 0) {
+            doc.moveTo(cx, y).lineTo(cx, y + consRowH).stroke(TABLE_INNER_BORDER);
+          }
+          doc.font(i === 0 ? FONT_BOLD : FONT_REGULAR).fontSize(8).fillColor("#000");
+          const cellText = (row[i] && String(row[i]).trim()) ? String(row[i]).trim() : (i === 0 ? "" : "—");
+          const maxW = w - 8;
+          let displayText = cellText;
+          if (doc.widthOfString(displayText) > maxW) {
+            const charsToKeep = Math.floor((maxW / Math.max(1, doc.widthOfString(displayText))) * displayText.length);
+            displayText = displayText.slice(0, Math.max(1, charsToKeep - 1)) + "…";
+          }
+          doc.text(displayText, cx + 4, y + 5, { width: maxW, align: i === 0 ? "left" : "left" });
+          cx += w;
+        }
+        doc.fillColor("#000");
+        y += consRowH;
+      }
+      y += 10;
+    }
+
+    // ─── 3. DYE PENETRANT TESTING DETAILS ───
+    // Table: Sl. No | Part Details | Type of Weld | Size of Indication
+    // Approx. (mm) | Observation & Result. Rows come from the shared
+    // DptObservation storage (description → Part Details, weldType →
+    // Type of Weld, indicationSize → Size of Indication, remarks →
+    // Observation & Result).
+    {
+      const vdptObs = vdptReport.dptObservations ?? report.dptObservations ?? [];
+      const vHeaderH = 36;
+      const vRowH = 28;
+      const vUsable = pageW - 2 * MARGIN;
+      const vSlW = 36;
+      const vPartW = orientation === "landscape" ? 170 : 120;
+      const vWeldW = orientation === "landscape" ? 90 : 70;
+      const vSizeW = orientation === "landscape" ? 90 : 80;
+      const vObsW = Math.max(100, vUsable - vSlW - vPartW - vWeldW - vSizeW);
+      const vColWidths = [vSlW, vPartW, vWeldW, vSizeW, vObsW];
+      const vHeaders = ["Sl.\nNo", "Part Details", "Type of\nWeld", "Size of Indication\nApprox. (mm)", "Observation & Result"];
+
+      if (y + 24 + vHeaderH + vRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 4;
+      doc.font(FONT_BOLD).fontSize(11).fillColor("#3a1d4a");
+      doc.text("Dye Penetrant Testing Details", MARGIN, y);
+      doc.fillColor("#000");
+      y += 16;
+
+      if (y + vHeaderH + vRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      drawDptTableHeader(doc, vHeaders, vColWidths, y, pageW);
+      y += vHeaderH;
+
+      for (const obs of vdptObs) {
+        if (y + vRowH > pageMaxY) {
+          addNewPage();
+          drawDptTableHeader(doc, vHeaders, vColWidths, MARGIN, pageW);
+          y = MARGIN + vHeaderH;
+        }
+        // Bordered row with 5 cells
+        doc.rect(MARGIN, y, vUsable, vRowH).stroke(TABLE_OUTER_BORDER);
+        const cells: string[] = [
+          String(obs.serialNo ?? ""),
+          obs.description ?? "—",
+          obs.weldType ?? "—",
+          (obs as any).indicationSize ?? "—",
+          obs.remarks ?? "—",
+        ];
+        let cx = MARGIN;
+        for (let i = 0; i < cells.length; i++) {
+          const w = vColWidths[i];
+          if (i > 0) {
+            doc.moveTo(cx, y).lineTo(cx, y + vRowH).stroke(TABLE_INNER_BORDER);
+          }
+          doc.font(FONT_REGULAR).fontSize(8).fillColor("#000");
+          const maxW = w - 8;
+          let displayText = cells[i] ?? "—";
+          if (doc.widthOfString(displayText) > maxW) {
+            const charsToKeep = Math.floor((maxW / Math.max(1, doc.widthOfString(displayText))) * displayText.length);
+            displayText = displayText.slice(0, Math.max(1, charsToKeep - 1)) + "…";
+          }
+          doc.text(displayText, cx + 4, y + 5, { width: maxW, align: i === 0 ? "center" : "left" });
+          cx += w;
+        }
+        doc.fillColor("#000");
+        y += vRowH;
+      }
+
+      if (vdptObs.length === 0) {
+        doc.font(FONT_REGULAR).fontSize(8).fillColor("#666");
+        doc.rect(MARGIN, y, vUsable, vRowH).stroke("#bbb");
+        doc.text("No DPT details recorded.", MARGIN + 4, y + 9, { width: vUsable - 8, align: "center" });
+        doc.fillColor("#000");
+        y += vRowH;
+      }
     }
   } else if (reportType === "PIPELINE_MPT") {
     // ─── MPT (MAGNETIC PARTICLE TESTING) REPORT BODY ───

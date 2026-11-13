@@ -311,7 +311,7 @@ export function AdminDashboardView() {
           <Badge variant="outline" className="border-amber-500 text-amber-800 bg-white">DEMO</Badge>
           <p className="text-xs text-amber-900">
             The admin dashboard aggregates reports across all employees. Use the
-            sidebar to access Equipment Master, Pipeline Reports, Pipe Standards
+            sidebar to access Equipment Master, Inspection Reports, Pipe Standards
             (admin reference data), Employees, Audit Log, and CSV Import/Export.
           </p>
         </CardContent>

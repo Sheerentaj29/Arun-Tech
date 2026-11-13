@@ -214,3 +214,66 @@ Features NOT implemented (called out as prototype):
      the same one (no concurrent-editing conflict detection — last save wins)
   9. Production password hashing still uses SHA-256 (same limitation as Task 1)
   10. Reorder via drag-and-drop (only Move up / Move down buttons implemented)
+
+---
+Task ID: 13
+Agent: main
+Task: Rename section to "Inspection Reports" + add Vessel equipment type with Vessel DPT report (Horizontal/Vertical orientation flow)
+
+Work Log:
+- Renamed user-facing labels "Pipeline Reports" → "Inspection Reports" (sidebar, list
+  heading, New Report button, dashboard helper texts, selector heading). Internal view
+  keys / file names kept unchanged (pipeline-reports etc.) per user instruction.
+- Report selection flow re-implemented as a staged wizard in
+  pipeline-report-type-selector-view.tsx:
+    Step 1 Equipment Type (Piping | Vessel)
+    Step 2 Test Type (Piping: DPT / MPT / Weld Scan / Thickness — all active;
+            Vessel: DPT active, MPT / Weld Scan / Thickness shown as Coming soon)
+    Step 3 (Vessel DPT only): Vessel Orientation (Horizontal Vessel | Vertical Vessel)
+  Clean cards with no long explanatory descriptions; no UT report reintroduced.
+- Store (src/lib/store.ts): added VESSEL_DPT to PipelineReportType, new
+  EquipmentType / VesselOrientation types, pendingEquipmentType / pendingVesselOrientation
+  state, openNewPipelineReportWithSelection action; openNewPipelineReport /
+  openNewPipelineReportWithType / openEditPipelineReport reset the new fields.
+- Prisma schema (additive only): PipelineInspection.equipmentType (PIPING|VESSEL),
+  vesselOrientation (HORIZONTAL|VERTICAL), and 12 Vessel-DPT consumable fields
+  (vdpt{Solvent,Penetrant,Developer}{Make,Product,BatchNo,Expiry}); prisma db push
+  (no data loss) + prisma generate.
+- API: POST/PUT /api/pipeline-inspections accept VESSEL_DPT + equipmentType +
+  vesselOrientation (validated values) + vdpt* consumable fields; submit route now
+  enforces "at least one observation row" for VESSEL_DPT (same DptObservation storage
+  as piping DPT). GET unchanged (full scalar projection already returned).
+- Form view: VESSEL_DPT entry in REPORT_TYPE_INFO ("New Vessel DPT Report",
+  "Vessel DPT" badge); header fields + edit-load + payload for the new columns;
+  new Step 2 section with (A) Dye Penetrant Testing Parameters (Date of Examination +
+  16 typeable procedure fields, orientation badge), (B) Consumable Details grid
+  (Solvent/Penetrant/Developer × Make/Product/Batch Number/Expiry Date — all typeable,
+  nothing hardcoded), (C) Dye Penetrant Testing Details editable table
+  (Part Details | Type of Weld [Fillet/Butt/Other] | Size of Indication Approx. (mm) |
+  Observation & Result) with add/remove rows and auto serial numbers; step 1 labels
+  switch to Equipment/Vessel wording for vessel reports; DPT custom-columns / draft
+  save / step navigation branches extended to VESSEL_DPT; photos via the existing
+  Step 3 photo gallery (unchanged).
+- Detail (review) view: VESSEL_DPT label/title/badge, Equipment: Vessel + orientation
+  badges, Dye Penetrant Testing Parameters table, Consumable Details grid, and
+  Dye Penetrant Testing Details table; photo gallery unchanged.
+- PDF generator (src/lib/pdf/pipeline-report.ts): VESSEL_DPT report type
+  ("VESSEL DYE PENETRANT TESTING REPORT"), no-drawings list, cover info rows use
+  Equipment/Vessel wording + Vessel Orientation row, body renders Parameters
+  (with Vessel Orientation line) → Consumable Details 5-column grid → Dye Penetrant
+  Testing Details table → shared Inspection Photographs gallery; fixed header-height
+  mismatch (36pt) in the vessel consumables table.
+- Verified in browser (agent-browser):
+  ✓ Inspection Reports list renders; Vessel DPT badge on list row
+  ✓ Full flow: New Inspection Report → Vessel → DPT → Horizontal Vessel → form
+  ✓ Vessel DPT form saved (VDPT-COR-ENN-001), 3 nozzle rows (N6/N4/N3, Fillet Weld,
+    Nil, No relevant indication) saved with auto serial numbers
+  ✓ Photo uploaded with caption; visible on review page and in PDF gallery
+  ✓ Submit → Approved workflow completed via API (status transitions verified)
+  ✓ Approved PDF (3 pages): cover with vessel labels + orientation, parameters,
+    consumables grid, testing details table, photographs — all present, nothing cut off
+  ✓ Piping regression: selector shows 4 piping options without orientation step;
+    piping DPT form unchanged (Description/Weld Type/Result/Remarks + custom columns);
+    existing approved thickness report opens and its PDF renders unchanged
+  ✓ Employee role reaches the same selector flow; approval logic untouched
+  ✓ Client logo mapping untouched (Aruntech + client logos render as before)

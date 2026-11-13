@@ -34,8 +34,8 @@ const NAV: Array<{
   { key: "employee-dashboard", label: "My Dashboard", icon: HardHat, roles: ["EMPLOYEE"] },
   // Shared equipment master
   { key: "equipment", label: "Equipment Master", icon: Database, roles: ["ADMIN", "EMPLOYEE"] },
-  // Pipeline thickness reports — admin sees all, employee sees their own
-  { key: "pipeline-reports", label: "Pipeline Reports", icon: Gauge, roles: ["ADMIN", "EMPLOYEE"] },
+  // Inspection Reports (Piping + Vessel) — admin sees all, employee sees their own
+  { key: "pipeline-reports", label: "Inspection Reports", icon: Gauge, roles: ["ADMIN", "EMPLOYEE"] },
   // Inspections (equipment-master inspection history — preserved)
   { key: "inspections", label: "Inspections", icon: FileText, roles: ["ADMIN", "EMPLOYEE"] },
   // Admin-only views

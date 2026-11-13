@@ -44,10 +44,12 @@ interface AppUser {
 // (the type is read from the API response in that case).
 //
 // Active report types (shown in the selector):
-//   • PIPELINE_THICKNESS  → Pipeline Thickness Measurement Report
-//   • PIPELINE_DPT        → DPT / DPPT Dye Penetrant Testing Report
-//   • PIPELINE_MPT        → Magnetic Particle Testing Report (placeholder)
-//   • PIPELINE_WELD_SCAN  → Weld Scan Report (placeholder)
+//   • PIPELINE_THICKNESS  → Pipeline Thickness Measurement Report (Piping)
+//   • PIPELINE_DPT        → DPT / DPPT Dye Penetrant Testing Report (Piping)
+//   • PIPELINE_MPT        → Magnetic Particle Testing Report (Piping)
+//   • PIPELINE_WELD_SCAN  → Weld Scan Report (Piping)
+//   • VESSEL_DPT          → Vessel Dye Penetrant Testing Report (Vessel,
+//                           requires a Horizontal / Vertical orientation)
 //
 // Legacy report types (kept type-compatible for existing DB rows):
 //   • PIPELINE_VISUAL     → Pipeline Visual Inspection Report (legacy)
@@ -57,8 +59,19 @@ export type PipelineReportType =
   | "PIPELINE_DPT"
   | "PIPELINE_MPT"
   | "PIPELINE_WELD_SCAN"
+  | "VESSEL_DPT"
   | "PIPELINE_VISUAL"
   | "PIPELINE_CONDITION";
+
+// Equipment type chosen in the report-creation flow (Step 1 of the
+// selector). Persisted on the report so the list / review / PDF know
+// whether the inspection was performed on piping or a vessel.
+export type EquipmentType = "PIPING" | "VESSEL";
+
+// Vessel orientation — required ONLY for VESSEL_DPT reports. Selected
+// in the selector before the form opens, stored on the report, and
+// shown in the review page / PDF.
+export type VesselOrientation = "HORIZONTAL" | "VERTICAL";
 
 interface AppState {
   view: ViewKey;
@@ -71,6 +84,12 @@ interface AppState {
   // the user picked in the selector screen. Cleared after the form
   // consumes it (so reopening the form later doesn't reuse a stale type).
   pendingPipelineReportType: PipelineReportType | null;
+  // Equipment type picked in the selector ("PIPING" or "VESSEL"). Stored
+  // on the created report; null when editing an existing report.
+  pendingEquipmentType: EquipmentType | null;
+  // Vessel orientation picked in the selector for VESSEL_DPT reports
+  // ("HORIZONTAL" or "VERTICAL"). Null for all other report types.
+  pendingVesselOrientation: VesselOrientation | null;
   refreshKey: number;
   user: AppUser | null;
   setView: (v: ViewKey) => void;
@@ -84,6 +103,16 @@ interface AppState {
   openNewPipelineReport: () => void;
   /** Open the form for a new report of the given type. */
   openNewPipelineReportWithType: (type: PipelineReportType) => void;
+  /**
+   * Open the form for a new report with the full selector selection:
+   * report type + equipment type (Piping/Vessel) +, for VESSEL_DPT,
+   * the vessel orientation (Horizontal/Vertical).
+   */
+  openNewPipelineReportWithSelection: (
+    type: PipelineReportType,
+    equipmentType: EquipmentType | null,
+    vesselOrientation?: VesselOrientation | null,
+  ) => void;
   openEditPipelineReport: (id: string) => void;
   setEditingPipelineReportId: (id: string) => void;
   setUser: (u: AppUser | null) => void;
@@ -98,6 +127,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   selectedPipelineReportId: null,
   editingPipelineReportId: null,
   pendingPipelineReportType: null,
+  pendingEquipmentType: null,
+  pendingVesselOrientation: null,
   refreshKey: 0,
   user: null,
   setView: (v) => set({ view: v }),
@@ -113,14 +144,44 @@ export const useAppStore = create<AppState>((set, get) => ({
   openNewEquipment: () => set({ view: "equipment-form", editingEquipmentId: null }),
   openEditEquipment: (id) => set({ view: "equipment-form", editingEquipmentId: id }),
   openPipelineReport: (id) => set({ view: "pipeline-report-detail", selectedPipelineReportId: id }),
-  // Default: show the report type selector screen.
+  // Default: show the report type selector screen (Step 1: Equipment Type).
   openNewPipelineReport: () =>
-    set({ view: "pipeline-report-type-selector", editingPipelineReportId: null, pendingPipelineReportType: null }),
+    set({
+      view: "pipeline-report-type-selector",
+      editingPipelineReportId: null,
+      pendingPipelineReportType: null,
+      pendingEquipmentType: null,
+      pendingVesselOrientation: null,
+    }),
   // After the user picks a type, set it and switch to the form view.
+  // (No equipment type / orientation — used by legacy callers.)
   openNewPipelineReportWithType: (type) =>
-    set({ view: "pipeline-report-form", editingPipelineReportId: null, pendingPipelineReportType: type }),
+    set({
+      view: "pipeline-report-form",
+      editingPipelineReportId: null,
+      pendingPipelineReportType: type,
+      pendingEquipmentType: null,
+      pendingVesselOrientation: null,
+    }),
+  // Full selection from the staged selector:
+  //   type + equipment type (Piping/Vessel) + optional vessel orientation
+  //   (required for VESSEL_DPT).
+  openNewPipelineReportWithSelection: (type, equipmentType, vesselOrientation = null) =>
+    set({
+      view: "pipeline-report-form",
+      editingPipelineReportId: null,
+      pendingPipelineReportType: type,
+      pendingEquipmentType: equipmentType,
+      pendingVesselOrientation: vesselOrientation,
+    }),
   openEditPipelineReport: (id) =>
-    set({ view: "pipeline-report-form", editingPipelineReportId: id, pendingPipelineReportType: null }),
+    set({
+      view: "pipeline-report-form",
+      editingPipelineReportId: id,
+      pendingPipelineReportType: null,
+      pendingEquipmentType: null,
+      pendingVesselOrientation: null,
+    }),
   setEditingPipelineReportId: (id) => set({ editingPipelineReportId: id }),
   setUser: (u) =>
     set((s) => ({

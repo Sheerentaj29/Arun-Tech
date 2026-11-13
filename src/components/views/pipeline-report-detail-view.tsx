@@ -58,7 +58,11 @@ interface FullReport {
     | "PIPELINE_CONDITION"
     | "PIPELINE_DPT"
     | "PIPELINE_MPT"
-    | "PIPELINE_WELD_SCAN";
+    | "PIPELINE_WELD_SCAN"
+    | "VESSEL_DPT";
+  // Equipment type + vessel orientation (VESSEL_DPT only)
+  equipmentType?: string | null;
+  vesselOrientation?: string | null;
   clientId: string;
   plantId: string;
   inspectionArea: string | null;
@@ -148,6 +152,19 @@ interface FullReport {
   dptInterpretationTime?: string | null;
   dptLightingEquipment?: string | null;
   dptPostCleaning?: string | null;
+  // ─── VESSEL DPT CONSUMABLE DETAILS ───
+  vdptSolventMake?: string | null;
+  vdptSolventProduct?: string | null;
+  vdptSolventBatchNo?: string | null;
+  vdptSolventExpiry?: string | null;
+  vdptPenetrantMake?: string | null;
+  vdptPenetrantProduct?: string | null;
+  vdptPenetrantBatchNo?: string | null;
+  vdptPenetrantExpiry?: string | null;
+  vdptDeveloperMake?: string | null;
+  vdptDeveloperProduct?: string | null;
+  vdptDeveloperBatchNo?: string | null;
+  vdptDeveloperExpiry?: string | null;
   // ─── UT (ULTRASONIC TEST) FIELDS ───
   utSubContract?: string | null;
   utProject?: string | null;
@@ -354,6 +371,11 @@ const REPORT_TYPE_LABEL: Record<string, { label: string; title: string; color: s
   PIPELINE_DPT: {
     label: "DPT/DPPT",
     title: "DYE PENETRANT TESTING REPORT",
+    color: "border-purple-500 text-purple-700",
+  },
+  VESSEL_DPT: {
+    label: "Vessel DPT",
+    title: "VESSEL DYE PENETRANT TESTING REPORT",
     color: "border-purple-500 text-purple-700",
   },
   PIPELINE_MPT: {
@@ -839,6 +861,100 @@ export function PipelineReportDetailView() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* ─── VESSEL DPT: PARAMETERS + CONSUMABLE DETAILS ───
+            Shown only for VESSEL_DPT reports. The testing-details rows
+            are stored in the shared DptObservation table and rendered in
+            the Inspection Tables section below. */}
+        {report.reportType === "VESSEL_DPT" && (
+          <div className="mt-6 space-y-6">
+            {/* Vessel orientation + equipment type */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge variant="outline" className="border-purple-400 text-purple-700">
+                Equipment: Vessel
+              </Badge>
+              {report.vesselOrientation && (
+                <Badge variant="outline" className="border-purple-400 text-purple-700">
+                  {report.vesselOrientation === "HORIZONTAL" ? "Horizontal Vessel" : "Vertical Vessel"}
+                </Badge>
+              )}
+            </div>
+
+            {/* 3. Dye Penetrant Testing Parameters */}
+            <div>
+              <h3 className="mb-2 text-xs font-bold uppercase text-purple-700 border-b border-purple-300 pb-1">
+                3. Dye Penetrant Testing Parameters
+              </h3>
+              <table className="w-full border-collapse text-xs">
+                <tbody>
+                  {([
+                    ["Date of Examination", report.dptDateOfExamination ? new Date(report.dptDateOfExamination).toISOString().slice(0, 10) : null],
+                    ["Testing Standard", report.dptTestingStandard],
+                    ["Acceptance Criteria", report.dptAcceptanceCriteria],
+                    ["Surface Preparation", report.dptSurfacePreparation],
+                    ["Surface Temperature", report.dptSurfaceTemperature],
+                    ["Penetrant Type", report.dptPenetrantType],
+                    ["Penetrant Process", report.dptPenetrantProcess],
+                    ["Method of Pre-cleaning", report.dptMethodOfPreCleaning],
+                    ["Drying Time After Pre-cleaning", report.dptDryingTimeAfterPreCleaning],
+                    ["Method of Applying Penetrant", report.dptMethodOfApplyingPenetrant],
+                    ["Penetrating Time", report.dptPenetratingTime],
+                    ["Method of Removing Excess Penetrant", report.dptMethodOfRemovingExcessPenetrant],
+                    ["Method of Applying Developer", report.dptMethodOfApplyingDeveloper],
+                    ["Development Time", report.dptDevelopmentTime],
+                    ["Interpretation Time", report.dptInterpretationTime],
+                    ["Lighting Equipment", report.dptLightingEquipment],
+                    ["Post Cleaning", report.dptPostCleaning],
+                  ] as Array<[string, string | null | undefined]>).map(([label, value], idx) => (
+                    <tr key={idx} className="border-b border-zinc-200">
+                      <td className="bg-purple-50 border-r border-zinc-200 px-3 py-1.5 font-medium text-zinc-700 w-1/3">
+                        {label}
+                      </td>
+                      <td className="px-3 py-1.5">
+                        {value && value.trim() ? value : <span className="text-muted-foreground">—</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Consumable Details — Make / Product / Batch / Expiry per consumable */}
+            <div>
+              <h3 className="mb-2 text-xs font-bold uppercase text-purple-700 border-b border-purple-300 pb-1">
+                Consumable Details
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-purple-800 text-white">
+                      <th className="border border-purple-900 px-2 py-2 text-center">Consumable</th>
+                      <th className="border border-purple-900 px-2 py-2 text-center">Make</th>
+                      <th className="border border-purple-900 px-2 py-2 text-center">Product / Description</th>
+                      <th className="border border-purple-900 px-2 py-2 text-center">Batch Number</th>
+                      <th className="border border-purple-900 px-2 py-2 text-center">Expiry Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {([
+                      ["Solvent", report.vdptSolventMake, report.vdptSolventProduct, report.vdptSolventBatchNo, report.vdptSolventExpiry],
+                      ["Penetrant", report.vdptPenetrantMake, report.vdptPenetrantProduct, report.vdptPenetrantBatchNo, report.vdptPenetrantExpiry],
+                      ["Developer", report.vdptDeveloperMake, report.vdptDeveloperProduct, report.vdptDeveloperBatchNo, report.vdptDeveloperExpiry],
+                    ] as Array<[string, string | null | undefined, string | null | undefined, string | null | undefined, string | null | undefined]>).map(([label, make, product, batchNo, expiry], idx) => (
+                      <tr key={idx} className="hover:bg-muted/30">
+                        <td className="bg-purple-50 border border-zinc-300 px-3 py-1.5 font-medium text-zinc-700">{label}</td>
+                        <td className="border border-zinc-300 px-3 py-1.5">{make && make.trim() ? make : <span className="text-muted-foreground">—</span>}</td>
+                        <td className="border border-zinc-300 px-3 py-1.5">{product && product.trim() ? product : <span className="text-muted-foreground">—</span>}</td>
+                        <td className="border border-zinc-300 px-3 py-1.5">{batchNo && batchNo.trim() ? batchNo : <span className="text-muted-foreground">—</span>}</td>
+                        <td className="border border-zinc-300 px-3 py-1.5">{expiry && expiry.trim() ? expiry : <span className="text-muted-foreground">—</span>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -1360,6 +1476,42 @@ export function PipelineReportDetailView() {
             </div>
           );
         })()}
+
+        {/* Vessel DPT Testing Details — shown only for VESSEL_DPT reports.
+            Renders the saved observation rows with the vessel report
+            columns: Part Details | Type of Weld | Size of Indication
+            Approx. (mm) | Observation & Result. */}
+        {report.reportType === "VESSEL_DPT" && report.dptObservations && report.dptObservations.length > 0 && (
+          <div className="mt-6">
+            <h3 className="mb-2 text-xs font-bold uppercase text-purple-700 border-b border-purple-300 pb-1">
+              Dye Penetrant Testing Details ({report.dptObservations.length})
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="bg-purple-800 text-white">
+                    <th className="border border-purple-900 px-2 py-2 text-center">Sl. No</th>
+                    <th className="border border-purple-900 px-2 py-2 text-center">Part Details</th>
+                    <th className="border border-purple-900 px-2 py-2 text-center">Type of Weld</th>
+                    <th className="border border-purple-900 px-2 py-2 text-center">Size of Indication Approx. (mm)</th>
+                    <th className="border border-purple-900 px-2 py-2 text-center">Observation &amp; Result</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.dptObservations.map((obs) => (
+                    <tr key={obs.id} className="hover:bg-muted/30">
+                      <td className="border border-zinc-300 px-2 py-1 text-center font-mono">{obs.serialNo}</td>
+                      <td className="border border-zinc-300 px-2 py-1">{obs.description ?? "—"}</td>
+                      <td className="border border-zinc-300 px-2 py-1 text-center">{obs.weldType ?? "—"}</td>
+                      <td className="border border-zinc-300 px-2 py-1 text-center">{obs.indicationSize ?? "—"}</td>
+                      <td className="border border-zinc-300 px-2 py-1">{obs.remarks ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* MPT Inspection Results — shown only for PIPELINE_MPT reports.
             MPT rows are stored in the shared DptObservation table (the

@@ -45,7 +45,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useAppStore, type PipelineReportType } from "@/lib/store";
+import { useAppStore, type PipelineReportType, type EquipmentType, type VesselOrientation } from "@/lib/store";
 import { apiFetch } from "@/lib/api-client";
 import { AuthImage } from "@/components/auth-image";
 import { resolveClientLogo } from "@/lib/client-logo-mapping";
@@ -122,6 +122,14 @@ const REPORT_TYPE_INFO: Record<PipelineReportType, {
     step2Label: "Weld Scan Observations",
     accent: "border-cyan-500 text-cyan-700",
   },
+  VESSEL_DPT: {
+    title: "VESSEL DYE PENETRANT TESTING REPORT",
+    shortLabel: "Vessel DPT",
+    formHeading: "New Vessel DPT Report",
+    formDescription: "Vessel dye penetrant testing with DPT parameters, consumable details, testing details table, and photographs.",
+    step2Label: "DPT Details",
+    accent: "border-purple-500 text-purple-700",
+  },
 };
 
 // ---------- TYPES ----------
@@ -185,6 +193,11 @@ interface ReportHeader {
   // loaded from the API. It's included in the header object so saveHeader
   // sends it on POST (the API uses it on create; ignored on PUT).
   reportType: PipelineReportType;
+  // Equipment type ("PIPING" | "VESSEL") + vessel orientation
+  // ("HORIZONTAL" | "VERTICAL", VESSEL_DPT only) selected in the
+  // report-creation flow. Persisted on the report.
+  equipmentType: string;
+  vesselOrientation: string;
   clientId: string;
   plantId: string;
   inspectionArea: string;
@@ -292,6 +305,22 @@ interface ReportHeader {
   wsInstrumentRows: string;
   wsProbeRows: string;
   wsTestResultRows: string;
+  // ─── VESSEL DPT CONSUMABLE DETAILS ───
+  // Separate Make / Product / Batch Number / Expiry Date entry for each
+  // consumable (Solvent, Penetrant, Developer). Populated when
+  // reportType = VESSEL_DPT.
+  vdptSolventMake: string;
+  vdptSolventProduct: string;
+  vdptSolventBatchNo: string;
+  vdptSolventExpiry: string;
+  vdptPenetrantMake: string;
+  vdptPenetrantProduct: string;
+  vdptPenetrantBatchNo: string;
+  vdptPenetrantExpiry: string;
+  vdptDeveloperMake: string;
+  vdptDeveloperProduct: string;
+  vdptDeveloperBatchNo: string;
+  vdptDeveloperExpiry: string;
   // Condition fields default empty
   pipelineAgeYears: string;
   serviceFluid: string;
@@ -309,6 +338,8 @@ interface ReportHeader {
 const EMPTY_HEADER: ReportHeader = {
   reportNumber: "",
   reportType: "PIPELINE_THICKNESS", // overwritten from store on first render
+  equipmentType: "",
+  vesselOrientation: "",
   clientId: "",
   plantId: "",
   inspectionArea: "",
@@ -419,6 +450,19 @@ const EMPTY_HEADER: ReportHeader = {
     { probeType: "Longitudinal Wave", probeAngle: "0°", frequency: "", size: "", probeNo: "", range: "", referenceDb: "", scanningDb: "" },
   ]),
   wsTestResultRows: "[]",
+  // Vessel DPT consumable details default empty
+  vdptSolventMake: "",
+  vdptSolventProduct: "",
+  vdptSolventBatchNo: "",
+  vdptSolventExpiry: "",
+  vdptPenetrantMake: "",
+  vdptPenetrantProduct: "",
+  vdptPenetrantBatchNo: "",
+  vdptPenetrantExpiry: "",
+  vdptDeveloperMake: "",
+  vdptDeveloperProduct: "",
+  vdptDeveloperBatchNo: "",
+  vdptDeveloperExpiry: "",
   // Condition fields default empty
   pipelineAgeYears: "",
   serviceFluid: "",
@@ -528,6 +572,9 @@ interface DptObservationRow {
   _isNew?: boolean;
 }
 const WELD_TYPE_OPTIONS = ["Butt Weld", "Fillet Weld"];
+// Weld-type options for the VESSEL DPT "Dye Penetrant Testing Details"
+// table (includes "Other" per the vessel report layout).
+const VESSEL_WELD_TYPE_OPTIONS = ["Fillet Weld", "Butt Weld", "Other"];
 const CORROSION_LEVELS = ["None", "Light", "Moderate", "Severe", "N/A"];
 const CONDITION_RATINGS = ["Good", "Fair", "Poor", "Critical", "N/A"];
 const RISK_LEVELS = ["Low", "Medium", "High", "Critical"];
@@ -569,14 +616,19 @@ export function PipelineReportFormView() {
     openPipelineReport,
     refresh,
     pendingPipelineReportType,
+    pendingEquipmentType,
+    pendingVesselOrientation,
   } = useAppStore();
   const isEdit = !!editingPipelineReportId;
 
   const [header, setHeader] = useState<ReportHeader>(() => ({
     ...EMPTY_HEADER,
-    // For new reports: use the type the user picked in the selector screen.
-    // For existing reports: overwritten by the API response in the edit-load effect.
+    // For new reports: use the type (and equipment type / vessel
+    // orientation) the user picked in the selector screen. For existing
+    // reports: overwritten by the API response in the edit-load effect.
     reportType: pendingPipelineReportType ?? "PIPELINE_THICKNESS",
+    equipmentType: pendingEquipmentType ?? "",
+    vesselOrientation: pendingVesselOrientation ?? "",
   }));
   const [rows, setRows] = useState<MeasurementRow[]>([]);
   // ─── Multi-table Thickness support ───
@@ -589,7 +641,7 @@ export function PipelineReportFormView() {
   ]);
   const [visualObservations, setVisualObservations] = useState<VisualObservationRow[]>([]);
 
-  // DPT observations for Step 3 (PIPELINE_DPT reports)
+  // DPT observations for Step 2 (PIPELINE_DPT and VESSEL_DPT reports)
   const [dptObservations, setDptObservations] = useState<DptObservationRow[]>([]);
   const [clients, setClients] = useState<ClientItem[]>([]);
   const [componentTypes, setComponentTypes] = useState<ComponentTypeItem[]>([]);
@@ -664,6 +716,10 @@ export function PipelineReportFormView() {
           // reportType is fixed at creation time. Read it from the API
           // response (defaults to PIPELINE_THICKNESS for legacy rows).
           reportType: (r.reportType as PipelineReportType) ?? "PIPELINE_THICKNESS",
+          // Equipment type + vessel orientation (from the selector flow;
+          // null for legacy rows created before these fields existed).
+          equipmentType: r.equipmentType ?? "",
+          vesselOrientation: r.vesselOrientation ?? "",
           clientId: r.clientId,
           plantId: r.plantId,
           inspectionArea: r.inspectionArea ?? "",
@@ -715,6 +771,19 @@ export function PipelineReportFormView() {
           dptInterpretationTime: r.dptInterpretationTime ?? "",
           dptLightingEquipment: r.dptLightingEquipment ?? "",
           dptPostCleaning: r.dptPostCleaning ?? "",
+          // Vessel DPT consumable details (Make / Product / Batch / Expiry)
+          vdptSolventMake: r.vdptSolventMake ?? "",
+          vdptSolventProduct: r.vdptSolventProduct ?? "",
+          vdptSolventBatchNo: r.vdptSolventBatchNo ?? "",
+          vdptSolventExpiry: r.vdptSolventExpiry ?? "",
+          vdptPenetrantMake: r.vdptPenetrantMake ?? "",
+          vdptPenetrantProduct: r.vdptPenetrantProduct ?? "",
+          vdptPenetrantBatchNo: r.vdptPenetrantBatchNo ?? "",
+          vdptPenetrantExpiry: r.vdptPenetrantExpiry ?? "",
+          vdptDeveloperMake: r.vdptDeveloperMake ?? "",
+          vdptDeveloperProduct: r.vdptDeveloperProduct ?? "",
+          vdptDeveloperBatchNo: r.vdptDeveloperBatchNo ?? "",
+          vdptDeveloperExpiry: r.vdptDeveloperExpiry ?? "",
           // MPT fields
           mptDateOfExamination: r.mptDateOfExamination ? r.mptDateOfExamination.slice(0, 10) : new Date().toISOString().slice(0, 10),
           mptTestingStandard: r.mptTestingStandard ?? "",
@@ -1139,8 +1208,14 @@ export function PipelineReportFormView() {
       if (header.reportType === "PIPELINE_CONDITION") {
         const ageNum = parseFloat(header.pipelineAgeYears);
         payload.pipelineAgeYears = !Number.isNaN(ageNum) && ageNum >= 0 ? ageNum : null;
-      } else if (header.reportType === "PIPELINE_DPT") {
-        // DPT custom columns are saved as JSON string
+      } else if (
+        header.reportType === "PIPELINE_DPT" ||
+        header.reportType === "VESSEL_DPT"
+      ) {
+        // DPT custom columns are saved as JSON string. VESSEL_DPT shares
+        // the same dye-penetrant procedure fields + observation storage
+        // as the piping DPT report, plus its own consumable detail fields
+        // (vdpt*) which pass through verbatim from the header spread.
         payload.dptCustomColumns = header.dptCustomColumns;
         // Dye Penetrant Procedure fields are passed through verbatim —
         // they're all editable/typeable text fields.
@@ -1470,7 +1545,10 @@ export function PipelineReportFormView() {
       if (visualObservations.length === 0) {
         toast.warning("No visual observations yet. You can proceed, but you'll need to add at least one before submitting.");
       }
-    } else if (header.reportType === "PIPELINE_DPT") {
+    } else if (
+      header.reportType === "PIPELINE_DPT" ||
+      header.reportType === "VESSEL_DPT"
+    ) {
       if (dptObservations.length === 0) {
         toast.warning("No DPT observations yet. You can proceed, but you'll need to add at least one before submitting.");
       }
@@ -1506,7 +1584,10 @@ export function PipelineReportFormView() {
       // custom columns. For PIPELINE_MPT, persist the MPT custom columns.
       if (header.reportType === "PIPELINE_THICKNESS") {
         setHeader((h) => ({ ...h, customColumns: JSON.stringify(customColumns) }));
-      } else if (header.reportType === "PIPELINE_DPT") {
+      } else if (
+        header.reportType === "PIPELINE_DPT" ||
+        header.reportType === "VESSEL_DPT"
+      ) {
         setHeader((h) => ({ ...h, dptCustomColumns: JSON.stringify(dptCustomColumns) }));
       } else if (header.reportType === "PIPELINE_MPT") {
         setHeader((h) => ({ ...h, mptCustomColumns: JSON.stringify(mptCustomColumns) }));
@@ -1525,7 +1606,10 @@ export function PipelineReportFormView() {
       // Save current state before going back
       if (header.reportType === "PIPELINE_THICKNESS") {
         setHeader((h) => ({ ...h, customColumns: JSON.stringify(customColumns) }));
-      } else if (header.reportType === "PIPELINE_DPT") {
+      } else if (
+        header.reportType === "PIPELINE_DPT" ||
+        header.reportType === "VESSEL_DPT"
+      ) {
         setHeader((h) => ({ ...h, dptCustomColumns: JSON.stringify(dptCustomColumns) }));
       } else if (header.reportType === "PIPELINE_MPT") {
         setHeader((h) => ({ ...h, mptCustomColumns: JSON.stringify(mptCustomColumns) }));
@@ -2017,7 +2101,7 @@ export function PipelineReportFormView() {
     }
   }
 
-  // ─── DPT OBSERVATION ROW OPERATIONS (PIPELINE_DPT only) ───
+  // ─── DPT OBSERVATION ROW OPERATIONS (PIPELINE_DPT + VESSEL_DPT) ───
   function addDptObservation() {
     setDptObservations((arr) => {
       const nextSerial = arr.length > 0 ? Math.max(...arr.map(o => o.serialNo)) + 1 : 1;
@@ -2102,7 +2186,10 @@ export function PipelineReportFormView() {
   async function saveDraft() {
     if (header.reportType === "PIPELINE_THICKNESS") {
       setHeader((h) => ({ ...h, customColumns: JSON.stringify(customColumns) }));
-    } else if (header.reportType === "PIPELINE_DPT") {
+    } else if (
+      header.reportType === "PIPELINE_DPT" ||
+      header.reportType === "VESSEL_DPT"
+    ) {
       setHeader((h) => ({ ...h, dptCustomColumns: JSON.stringify(dptCustomColumns) }));
     } else if (header.reportType === "PIPELINE_MPT") {
       setHeader((h) => ({ ...h, mptCustomColumns: JSON.stringify(mptCustomColumns) }));
@@ -2296,8 +2383,9 @@ export function PipelineReportFormView() {
         <CardHeader>
           <CardTitle className="text-base">Report Header</CardTitle>
           <CardDescription>
-            Client, plant, and pipeline identification. All fields editable
-            by authorized users.
+            {header.reportType === "VESSEL_DPT"
+              ? "Client, plant, and equipment / vessel identification. All fields editable by authorized users."
+              : "Client, plant, and pipeline identification. All fields editable by authorized users."}
           </CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -2347,19 +2435,23 @@ export function PipelineReportFormView() {
             />
           </div>
           <div className="space-y-2 sm:col-span-2">
-            <Label>Pipeline Description</Label>
+            <Label>{header.reportType === "VESSEL_DPT" ? "Equipment / Vessel Description" : "Pipeline Description"}</Label>
             <Input
               value={header.pipelineDescription}
               onChange={(e) => updateHeader("pipelineDescription", e.target.value)}
-              placeholder="e.g. 2-inch water pipeline, top pipe rack, west side"
+              placeholder={
+                header.reportType === "VESSEL_DPT"
+                  ? "e.g. V-311 Final Separator, nozzle welds"
+                  : "e.g. 2-inch water pipeline, top pipe rack, west side"
+              }
             />
           </div>
           <div className="space-y-2">
-            <Label>Pipeline Identification No.</Label>
+            <Label>{header.reportType === "VESSEL_DPT" ? "Equipment Identification No." : "Pipeline Identification No."}</Label>
             <Input
               value={header.pipelineIdentificationNumber}
               onChange={(e) => updateHeader("pipelineIdentificationNumber", e.target.value)}
-              placeholder="PID line number"
+              placeholder={header.reportType === "VESSEL_DPT" ? "Equipment / tag number" : "PID line number"}
               className="font-mono"
             />
           </div>
@@ -3882,6 +3974,314 @@ export function PipelineReportFormView() {
       </div>
       </>
       )} {/* end step 2 — DPT */}
+
+      {/* ═══ STEP 2 (VESSEL DPT): DYE PENETRANT TESTING PARAMETERS,
+              CONSUMABLE DETAILS, AND TESTING DETAILS TABLE ═══
+          Structure mirrors the sample vessel DPT report:
+            A. Dye Penetrant Testing Parameters (17 editable fields)
+            B. Consumable Details (Solvent / Penetrant / Developer, each
+               with Make / Product / Batch Number / Expiry Date)
+            C. Dye Penetrant Testing Details (editable table:
+               Part Details | Type of Weld | Size of Indication Approx. (mm) |
+               Observation & Result)
+          The Vessel Orientation (Horizontal / Vertical) selected in the
+          selector is stored on the report and displayed on this step.
+          Photographs are captured in Step 3 (shared with all report types)
+          and rendered in the PDF under "Inspection Photographs". */}
+      {step === 2 && header.reportType === "VESSEL_DPT" && (
+      <>
+      {/* ═══ A. DYE PENETRANT TESTING PARAMETERS ═══ */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Droplet className="h-4 w-4 text-purple-700" />
+            Dye Penetrant Testing Parameters
+            {header.vesselOrientation && (
+              <Badge variant="outline" className="border-purple-400 text-purple-700 text-[10px]">
+                {header.vesselOrientation === "HORIZONTAL" ? "Horizontal Vessel" : "Vertical Vessel"}
+              </Badge>
+            )}
+          </CardTitle>
+          <CardDescription>
+            Record the dye penetrant testing parameters for this vessel
+            inspection. All fields are editable — type the value as it
+            applies to this examination. Leave a field blank if it is not
+            applicable.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <tbody>
+                {/* Date of Examination — editable date field */}
+                <tr className="border-b border-zinc-200">
+                  <td className="bg-purple-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/3">
+                    Date of Examination
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <Input
+                      type="date"
+                      className="h-8 text-sm"
+                      value={header.dptDateOfExamination}
+                      onChange={(e) => updateHeader("dptDateOfExamination", e.target.value)}
+                    />
+                  </td>
+                </tr>
+                {/* Typeable text fields */}
+                {([
+                  ["Testing Standard", "dptTestingStandard", "e.g. ASME Section V 2023, Article 6"],
+                  ["Acceptance Criteria", "dptAcceptanceCriteria", "e.g. ASME Section VIII Div. 1, Appx. 8, Clause 8.4"],
+                  ["Surface Preparation", "dptSurfacePreparation", "e.g. Grinding and wire brush"],
+                  ["Surface Temperature", "dptSurfaceTemperature", "e.g. 32 °C"],
+                  ["Penetrant Type", "dptPenetrantType", "e.g. Colour contrast (visible), solvent removable"],
+                  ["Penetrant Process", "dptPenetrantProcess", "e.g. Solvent removable / Water washable"],
+                  ["Method of Pre-cleaning", "dptMethodOfPreCleaning", "e.g. Solvent cleaning"],
+                  ["Drying Time After Pre-cleaning", "dptDryingTimeAfterPreCleaning", "e.g. 5 minutes"],
+                  ["Method of Applying Penetrant", "dptMethodOfApplyingPenetrant", "e.g. Spray"],
+                  ["Penetrating Time", "dptPenetratingTime", "e.g. 10 minutes"],
+                  ["Method of Removing Excess Penetrant", "dptMethodOfRemovingExcessPenetrant", "e.g. Solvent wipe"],
+                  ["Method of Applying Developer", "dptMethodOfApplyingDeveloper", "e.g. Spray"],
+                  ["Development Time", "dptDevelopmentTime", "e.g. 10 minutes"],
+                  ["Interpretation Time", "dptInterpretationTime", "e.g. 10 minutes"],
+                  ["Lighting Equipment", "dptLightingEquipment", "e.g. LED torch ≥ 1000 lux"],
+                  ["Post Cleaning", "dptPostCleaning", "e.g. Solvent wipe / Water wash"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-purple-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ═══ B. CONSUMABLE DETAILS ═══
+          Separate Make / Product / Batch Number / Expiry Date entry for
+          each of the three consumables. All values are typeable — nothing
+          is hardcoded from the sample report. */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Droplet className="h-4 w-4 text-purple-700" />
+            Consumable Details
+          </CardTitle>
+          <CardDescription>
+            Enter the make, product / description, batch number, and expiry
+            date for each consumable used during the examination.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="bg-purple-800 text-white">
+                  <th className="border border-purple-900 px-2 py-2 text-center w-1/5">Consumable</th>
+                  <th className="border border-purple-900 px-2 py-2 text-center">Make</th>
+                  <th className="border border-purple-900 px-2 py-2 text-center">Product / Description</th>
+                  <th className="border border-purple-900 px-2 py-2 text-center">Batch Number</th>
+                  <th className="border border-purple-900 px-2 py-2 text-center">Expiry Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {([
+                  ["Solvent", "vdptSolvent"],
+                  ["Penetrant", "vdptPenetrant"],
+                  ["Developer", "vdptDeveloper"],
+                ] as const).map(([label, prefix]) => (
+                  <tr key={prefix} className="border-b border-zinc-200">
+                    <td className="bg-purple-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[`${prefix}Make` as keyof ReportHeader] as string}
+                        onChange={(e) => updateHeader(`${prefix}Make` as keyof ReportHeader, e.target.value as never)}
+                        placeholder="e.g. Magnaflux"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[`${prefix}Product` as keyof ReportHeader] as string}
+                        onChange={(e) => updateHeader(`${prefix}Product` as keyof ReportHeader, e.target.value as never)}
+                        placeholder="e.g. SKC-01 cleaner"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[`${prefix}BatchNo` as keyof ReportHeader] as string}
+                        onChange={(e) => updateHeader(`${prefix}BatchNo` as keyof ReportHeader, e.target.value as never)}
+                        placeholder="Batch number"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[`${prefix}Expiry` as keyof ReportHeader] as string}
+                        onChange={(e) => updateHeader(`${prefix}Expiry` as keyof ReportHeader, e.target.value as never)}
+                        placeholder="e.g. Nov-2027"
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ═══ C. DYE PENETRANT TESTING DETAILS ═══
+          Editable table: Part Details | Type of Weld | Size of Indication
+          Approx. (mm) | Observation & Result. Rows can be added / removed
+          and every cell is editable. Serial numbers are auto-generated. */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base">Dye Penetrant Testing Details</CardTitle>
+              <CardDescription>
+                Add one row per part / weld examined (e.g. nozzle welds).
+                Serial numbers are auto-generated and renumbered whenever
+                rows are added or deleted. Observation &amp; Result is
+                free text (e.g. &quot;No relevant indication&quot;).
+              </CardDescription>
+            </div>
+            <Button onClick={addDptObservation} size="sm">
+              <Plus className="mr-1 h-4 w-4" /> Add Row
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-purple-800 text-white">
+                <tr>
+                  <th className="border border-purple-900 px-2 py-2 text-center" style={{ minWidth: 40 }}>Sl. No</th>
+                  <th className="border border-purple-900 px-2 py-2 text-center" style={{ minWidth: 180 }}>Part Details</th>
+                  <th className="border border-purple-900 px-2 py-2 text-center" style={{ minWidth: 110 }}>Type of Weld</th>
+                  <th className="border border-purple-900 px-2 py-2 text-center" style={{ minWidth: 110 }}>Size of Indication Approx. (mm)</th>
+                  <th className="border border-purple-900 px-2 py-2 text-center" style={{ minWidth: 220 }}>Observation &amp; Result</th>
+                  <th className="border border-purple-900 px-2 py-2 text-center" style={{ minWidth: 70 }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dptObservations.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="text-center py-6 text-muted-foreground border border-zinc-300">
+                      No rows yet. Click <strong>Add Row</strong> to begin.
+                    </td>
+                  </tr>
+                )}
+                {dptObservations.map((obs, idx) => (
+                  <tr key={idx} className="hover:bg-muted/30">
+                    <td className="border border-zinc-300 p-1 text-center font-mono tabular-nums">{obs.serialNo}</td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input
+                        className="h-8 text-xs"
+                        value={obs.description}
+                        onChange={(e) => updateDptObservation(idx, { description: e.target.value })}
+                        placeholder="e.g. Nozzle N6 weld"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Select
+                        value={obs.weldType || ""}
+                        onValueChange={(v) => updateDptObservation(idx, { weldType: v })}
+                      >
+                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
+                        <SelectContent>
+                          {VESSEL_WELD_TYPE_OPTIONS.map((w) => (
+                            <SelectItem key={w} value={w}>{w}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input
+                        type="text"
+                        className="h-8 text-xs text-center"
+                        value={obs.indicationSize}
+                        onChange={(e) => updateDptObservation(idx, { indicationSize: e.target.value })}
+                        placeholder="e.g. Nil"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Textarea
+                        rows={1}
+                        className="text-xs min-h-[32px] py-1"
+                        value={obs.remarks}
+                        onChange={(e) => updateDptObservation(idx, { remarks: e.target.value })}
+                        placeholder="e.g. No relevant indication"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <div className="flex flex-col gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 px-2 text-[10px]"
+                          onClick={() => saveDptObservation(idx)}
+                          disabled={saving}
+                          title="Save row"
+                        >
+                          <Save className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+                          onClick={() => deleteDptObservationApi(idx)}
+                          title="Delete row"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="bg-zinc-50">
+        <CardContent className="p-4 text-xs text-muted-foreground space-y-1">
+          <div><strong>Vessel DPT:</strong> record the procedure parameters, consumable details, and one row per part / weld examined.</div>
+          <div><strong>Serial numbers:</strong> auto-generated (1, 2, 3…) and renumbered when rows are added or deleted.</div>
+          <div><strong>Photographs:</strong> upload DPT photographs in the next step (Findings &amp; Photos) — they appear in the review page and the generated PDF.</div>
+          <div><strong>Vessel orientation:</strong> {header.vesselOrientation === "HORIZONTAL" ? "Horizontal Vessel" : header.vesselOrientation === "VERTICAL" ? "Vertical Vessel" : "not set"} — selected when creating the report and shown on the review page and PDF.</div>
+        </CardContent>
+      </Card>
+
+      {/* Step 2 navigation */}
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" onClick={goPrevious}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> Previous
+        </Button>
+        <Button variant="ghost" onClick={saveDraft} disabled={saving}>
+          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+          Save Draft
+        </Button>
+        <Button onClick={proceedToNext} disabled={saving}>
+          Proceed to Next <ArrowRight className="ml-2 h-4 w-4" />
+        </Button>
+      </div>
+      </>
+      )} {/* end step 2 — VESSEL DPT */}
 
       {/* ═══ STEP 2 (MPT): MAGNETIC PARTICLE TESTING PROCEDURE ═══ */}
       {step === 2 && header.reportType === "PIPELINE_MPT" && (

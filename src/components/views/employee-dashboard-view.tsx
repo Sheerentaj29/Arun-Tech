@@ -306,7 +306,7 @@ export function EmployeeDashboardView() {
         <CardContent className="flex items-start gap-3 p-4">
           <Badge variant="outline" className="border-amber-500 text-amber-800 bg-white">DEMO</Badge>
           <p className="text-xs text-amber-900">
-            Use the sidebar to access Equipment Master and Pipeline Reports. As an
+            Use the sidebar to access Equipment Master and Inspection Reports. As an
             employee, you can create new reports, edit your own drafts and returned
             reports, and revise approved reports (creating a new revision that needs
             admin approval). You can't approve your own reports or see other

@@ -285,6 +285,31 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       wsInstrumentRows: body.wsInstrumentRows !== undefined ? body.wsInstrumentRows : existing.wsInstrumentRows,
       wsProbeRows: body.wsProbeRows !== undefined ? body.wsProbeRows : existing.wsProbeRows,
       wsTestResultRows: body.wsTestResultRows !== undefined ? body.wsTestResultRows : existing.wsTestResultRows,
+      // ─── EQUIPMENT TYPE + VESSEL ORIENTATION ───
+      // Only updated when the form explicitly sends them; existing values
+      // are preserved otherwise. vesselOrientation stays constrained to
+      // HORIZONTAL | VERTICAL.
+      equipmentType:
+        body.equipmentType !== undefined
+          ? (body.equipmentType === "PIPING" || body.equipmentType === "VESSEL" ? body.equipmentType : null)
+          : existing.equipmentType,
+      vesselOrientation:
+        body.vesselOrientation !== undefined
+          ? (body.vesselOrientation === "HORIZONTAL" || body.vesselOrientation === "VERTICAL" ? body.vesselOrientation : null)
+          : existing.vesselOrientation,
+      // ─── VESSEL DPT CONSUMABLE DETAILS (Make / Product / Batch / Expiry) ───
+      vdptSolventMake: body.vdptSolventMake !== undefined ? (body.vdptSolventMake?.trim() || null) : existing.vdptSolventMake,
+      vdptSolventProduct: body.vdptSolventProduct !== undefined ? (body.vdptSolventProduct?.trim() || null) : existing.vdptSolventProduct,
+      vdptSolventBatchNo: body.vdptSolventBatchNo !== undefined ? (body.vdptSolventBatchNo?.trim() || null) : existing.vdptSolventBatchNo,
+      vdptSolventExpiry: body.vdptSolventExpiry !== undefined ? (body.vdptSolventExpiry?.trim() || null) : existing.vdptSolventExpiry,
+      vdptPenetrantMake: body.vdptPenetrantMake !== undefined ? (body.vdptPenetrantMake?.trim() || null) : existing.vdptPenetrantMake,
+      vdptPenetrantProduct: body.vdptPenetrantProduct !== undefined ? (body.vdptPenetrantProduct?.trim() || null) : existing.vdptPenetrantProduct,
+      vdptPenetrantBatchNo: body.vdptPenetrantBatchNo !== undefined ? (body.vdptPenetrantBatchNo?.trim() || null) : existing.vdptPenetrantBatchNo,
+      vdptPenetrantExpiry: body.vdptPenetrantExpiry !== undefined ? (body.vdptPenetrantExpiry?.trim() || null) : existing.vdptPenetrantExpiry,
+      vdptDeveloperMake: body.vdptDeveloperMake !== undefined ? (body.vdptDeveloperMake?.trim() || null) : existing.vdptDeveloperMake,
+      vdptDeveloperProduct: body.vdptDeveloperProduct !== undefined ? (body.vdptDeveloperProduct?.trim() || null) : existing.vdptDeveloperProduct,
+      vdptDeveloperBatchNo: body.vdptDeveloperBatchNo !== undefined ? (body.vdptDeveloperBatchNo?.trim() || null) : existing.vdptDeveloperBatchNo,
+      vdptDeveloperExpiry: body.vdptDeveloperExpiry !== undefined ? (body.vdptDeveloperExpiry?.trim() || null) : existing.vdptDeveloperExpiry,
     },
   });
 

@@ -133,20 +133,34 @@ export async function POST(req: NextRequest) {
       reportNumber: body.reportNumber.trim(),
       // Accept reportType from the form. Default to PIPELINE_THICKNESS for
       // backward compat (so existing API callers that don't send it still
-      // create thickness reports as before). Accept the four active types
-      // (PIPELINE_THICKNESS, PIPELINE_DPT, PIPELINE_MPT, PIPELINE_WELD_SCAN)
-      // plus the two legacy types (PIPELINE_VISUAL, PIPELINE_CONDITION)
-      // so existing reports of those types can still be created if needed.
+      // create thickness reports as before). Accept the four active piping
+      // types (PIPELINE_THICKNESS, PIPELINE_DPT, PIPELINE_MPT,
+      // PIPELINE_WELD_SCAN), the vessel type (VESSEL_DPT), and the two
+      // legacy types (PIPELINE_VISUAL, PIPELINE_CONDITION) so existing
+      // reports of those types can still be created if needed.
       reportType: [
         "PIPELINE_THICKNESS",
         "PIPELINE_DPT",
         "PIPELINE_MPT",
         "PIPELINE_WELD_SCAN",
+        "VESSEL_DPT",
         "PIPELINE_VISUAL",
         "PIPELINE_CONDITION",
       ].includes(body.reportType)
         ? body.reportType
         : "PIPELINE_THICKNESS",
+      // ─── EQUIPMENT TYPE + VESSEL ORIENTATION ───
+      // equipmentType: PIPING | VESSEL (from the selector flow).
+      // vesselOrientation: HORIZONTAL | VERTICAL — required for VESSEL_DPT,
+      // ignored for everything else.
+      equipmentType: body.equipmentType === "PIPING" || body.equipmentType === "VESSEL"
+        ? body.equipmentType
+        : null,
+      vesselOrientation:
+        body.reportType === "VESSEL_DPT" &&
+        (body.vesselOrientation === "HORIZONTAL" || body.vesselOrientation === "VERTICAL")
+          ? body.vesselOrientation
+          : null,
       clientId: body.clientId,
       plantId: body.plantId,
       inspectionArea: body.inspectionArea?.trim() || null,
@@ -280,6 +294,19 @@ export async function POST(req: NextRequest) {
       wsInstrumentRows: body.wsInstrumentRows ?? "[]",
       wsProbeRows: body.wsProbeRows ?? "[]",
       wsTestResultRows: body.wsTestResultRows ?? "[]",
+      // ─── VESSEL DPT CONSUMABLE DETAILS (Make / Product / Batch / Expiry) ───
+      vdptSolventMake: body.vdptSolventMake?.trim() || null,
+      vdptSolventProduct: body.vdptSolventProduct?.trim() || null,
+      vdptSolventBatchNo: body.vdptSolventBatchNo?.trim() || null,
+      vdptSolventExpiry: body.vdptSolventExpiry?.trim() || null,
+      vdptPenetrantMake: body.vdptPenetrantMake?.trim() || null,
+      vdptPenetrantProduct: body.vdptPenetrantProduct?.trim() || null,
+      vdptPenetrantBatchNo: body.vdptPenetrantBatchNo?.trim() || null,
+      vdptPenetrantExpiry: body.vdptPenetrantExpiry?.trim() || null,
+      vdptDeveloperMake: body.vdptDeveloperMake?.trim() || null,
+      vdptDeveloperProduct: body.vdptDeveloperProduct?.trim() || null,
+      vdptDeveloperBatchNo: body.vdptDeveloperBatchNo?.trim() || null,
+      vdptDeveloperExpiry: body.vdptDeveloperExpiry?.trim() || null,
       isDemo: false,
     },
     include: {

@@ -40,7 +40,7 @@ import { toast } from "sonner";
 interface PipelineReportListItem {
   id: string;
   reportNumber: string;
-  reportType: "PIPELINE_THICKNESS" | "PIPELINE_VISUAL" | "PIPELINE_CONDITION";
+  reportType: "PIPELINE_THICKNESS" | "PIPELINE_VISUAL" | "PIPELINE_CONDITION" | "PIPELINE_DPT" | "PIPELINE_MPT" | "PIPELINE_WELD_SCAN" | "VESSEL_DPT";
   inspectionDate: string;
   status: "Draft" | "Submitted" | "Approved" | "Rejected" | "Superseded";
   revisionNumber: number;
@@ -78,6 +78,10 @@ const REPORT_TYPE_LABEL: Record<string, { label: string; color: string }> = {
   PIPELINE_THICKNESS: { label: "Thickness", color: "border-emerald-500 text-emerald-700" },
   PIPELINE_VISUAL:    { label: "Visual",    color: "border-blue-500 text-blue-700" },
   PIPELINE_CONDITION: { label: "Condition", color: "border-amber-500 text-amber-700" },
+  PIPELINE_DPT:       { label: "DPT/DPPT", color: "border-purple-500 text-purple-700" },
+  PIPELINE_MPT:       { label: "MPT",      color: "border-orange-500 text-orange-700" },
+  PIPELINE_WELD_SCAN: { label: "Weld Scan", color: "border-cyan-500 text-cyan-700" },
+  VESSEL_DPT:         { label: "Vessel DPT", color: "border-purple-500 text-purple-700" },
 };
 
 export function PipelineReportsListView() {
@@ -124,17 +128,18 @@ export function PipelineReportsListView() {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <Gauge className="h-6 w-6 text-amber-600" /> Pipeline Inspection Reports
+            <Gauge className="h-6 w-6 text-amber-600" /> Inspection Reports
           </h1>
           <p className="text-sm text-muted-foreground">
-            Pipeline inspection reports — thickness measurement, visual inspection,
-            and condition assessment. Click <strong>New Pipeline Report</strong> to
-            pick a report type and start a new inspection.
+            Piping and vessel inspection reports — thickness measurement, DPT,
+            MPT, weld scan, visual inspection, and condition assessment.
+            Click <strong>New Inspection Report</strong> to
+            pick the equipment type and report type, then start a new inspection.
           </p>
         </div>
         {canCreate && (
           <Button onClick={() => openNewPipelineReport()}>
-            <Plus className="mr-2 h-4 w-4" /> New Pipeline Report
+            <Plus className="mr-2 h-4 w-4" /> New Inspection Report
           </Button>
         )}
       </div>
@@ -193,7 +198,7 @@ export function PipelineReportsListView() {
           )}
           {!loading && items.length === 0 && (
             <div className="p-8 text-center text-muted-foreground text-sm">
-              No pipeline reports found. Click <strong>New Pipeline Report</strong> to create one.
+              No inspection reports found. Click <strong>New Inspection Report</strong> to create one.
             </div>
           )}
           {!loading && items.length > 0 && (

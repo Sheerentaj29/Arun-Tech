@@ -61,7 +61,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         { status: 400 },
       );
     }
-  } else if (reportType === "PIPELINE_DPT") {
+  } else if (reportType === "PIPELINE_DPT" || reportType === "VESSEL_DPT") {
     if (existing.dptObservations.length === 0) {
       return NextResponse.json(
         { error: "Cannot submit a DPT report with no observation rows. Add at least one observation first." },

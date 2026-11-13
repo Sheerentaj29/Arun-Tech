@@ -451,6 +451,32 @@ model PipelineInspection {
   wsProbeRows                       String?  // JSON: [{probeType, probeAngle, frequency, size, probeNo, range, referenceDb, scanningDb}]
   wsTestResultRows                  String?  // JSON: [{description, identificationNo, weldType, probe, bp, sd, depth, echoHeight, length, observation, result}]
 
+  // ─── EQUIPMENT TYPE + VESSEL FIELDS ───
+  // equipmentType records the selection made in the report-creation flow
+  // ("PIPING" or "VESSEL"). Null for legacy rows created before this
+  // field existed. vesselOrientation is required for VESSEL_DPT reports
+  // ("HORIZONTAL" or "VERTICAL") and is displayed on the review page and
+  // in the generated PDF.
+  equipmentType             String?  // PIPING | VESSEL
+  vesselOrientation         String?  // HORIZONTAL | VERTICAL (VESSEL_DPT only)
+
+  // ─── VESSEL DPT CONSUMABLE DETAILS ───
+  // Populated when reportType = VESSEL_DPT. Separate Make / Product /
+  // Batch Number / Expiry Date entry for each of the three consumables.
+  // All typeable text (expiry dates are free text, e.g. "Nov-2027").
+  vdptSolventMake           String?  // Solvent — Make
+  vdptSolventProduct        String?  // Solvent — Product / Description
+  vdptSolventBatchNo        String?  // Solvent — Batch Number
+  vdptSolventExpiry         String?  // Solvent — Expiry Date
+  vdptPenetrantMake         String?  // Penetrant — Make
+  vdptPenetrantProduct      String?  // Penetrant — Product / Description
+  vdptPenetrantBatchNo      String?  // Penetrant — Batch Number
+  vdptPenetrantExpiry       String?  // Penetrant — Expiry Date
+  vdptDeveloperMake         String?  // Developer — Make
+  vdptDeveloperProduct      String?  // Developer — Product / Description
+  vdptDeveloperBatchNo      String?  // Developer — Batch Number
+  vdptDeveloperExpiry       String?  // Developer — Expiry Date
+
   isDemo                   Boolean  @default(false)
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
