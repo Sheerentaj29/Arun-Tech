@@ -80,10 +80,9 @@ const VESSEL_OPTIONS: TypeOption[] = [
   {
     type: "PIPELINE_WELD_SCAN",
     title: "Weld Scan",
-    subtitle: "Coming soon for vessels",
+    subtitle: "Weld scan inspection for vessel welds and nozzles",
     icon: Zap,
-    accent: "border-zinc-300 bg-zinc-50",
-    comingSoon: true,
+    accent: "border-cyan-500 bg-cyan-50 hover:bg-cyan-100",
   },
   {
     type: "PIPELINE_THICKNESS",

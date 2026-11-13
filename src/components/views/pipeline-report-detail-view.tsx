@@ -127,15 +127,30 @@ interface FullReport {
   mptWhiteContrast?: string | null;
   mptWetParticleIronInk?: string | null;
   mptCustomColumns?: string | null;
-  // ─── WELD SCAN FIELDS (JSON row tables + scanning details) ───
-  wsScanningCalibrationBlock?: string | null;
-  wsScanningReferenceLevel?: string | null;
-  wsScanningExtentOfExamination?: string | null;
-  wsScanningSurfaceCondition?: string | null;
-  wsScanningFlawSizingTechnique?: string | null;
-  wsInstrumentRows?: string | null;
-  wsProbeRows?: string | null;
-  wsTestResultRows?: string | null;
+  // ─── WELD SCAN FIELDS (redesigned module — Piping + Vessel) ───
+  wsDateOfExamination?: string | null;
+  wsTestingStandard?: string | null;
+  wsAcceptanceCriteria?: string | null;
+  wsUtProcedure?: string | null;
+  wsEquipmentMake?: string | null;
+  wsEquipmentModel?: string | null;
+  wsEquipmentSerialNo?: string | null;
+  wsCalibrationDueDate?: string | null;
+  wsCableLength?: string | null;
+  wsCableType?: string | null;
+  wsProbeDetails?: string | null;
+  wsCalibrationBlock?: string | null;
+  wsCalibrationBlockMoc?: string | null;
+  wsReferenceReflector?: string | null;
+  wsReferenceLevel?: string | null;
+  wsFlawSizingTechnique?: string | null;
+  wsSurfaceTemperature?: string | null;
+  wsTestingMethod?: string | null;
+  wsCouplant?: string | null;
+  wsSurfacePreparation?: string | null;
+  wsSurfaceFinish?: string | null;
+  wsExtentOfScanning?: string | null;
+  wsDetailRows?: string | null;
   // ─── DYE PENETRANT PROCEDURE FIELDS (16 typeable fields) ───
   dptTestingStandard?: string | null;
   dptAcceptanceCriteria?: string | null;
@@ -1203,122 +1218,151 @@ export function PipelineReportDetailView() {
             the report record (wsInstrumentRows / wsProbeRows) and in the
             wsScanning* fields. The Test Results table is rendered in the
             Inspection Tables section below. */}
+        {/* ─── WELD SCAN: TESTING PARAMETERS + PROBE DETAILS ───
+            Shown only for Weld Scan reports (redesigned module). The
+            parameters table is grouped (Basic Information / Equipment
+            Details / Cable Details / Calibration Details / Scanning
+            Details); the probe grid is a fixed 4-row table (Longitudinal
+            0° + Shear 45° / 60° / 70°). The Weld Scan Testing Details
+            table is rendered in the inspection-tables section below. */}
         {report.reportType === "PIPELINE_WELD_SCAN" && (() => {
-          let wsInstrumentRows: Array<Record<string, string>> = [];
           let wsProbeRows: Array<Record<string, string>> = [];
           try {
-            const parsed = JSON.parse(report.wsInstrumentRows ?? "[]");
-            if (Array.isArray(parsed)) wsInstrumentRows = parsed;
+            const parsed = JSON.parse(report.wsProbeDetails ?? "[]");
+            if (Array.isArray(parsed) && parsed.length > 0) wsProbeRows = parsed;
           } catch {}
-          try {
-            const parsed = JSON.parse(report.wsProbeRows ?? "[]");
-            if (Array.isArray(parsed)) wsProbeRows = parsed;
-          } catch {}
-          const wsScanPairs: Array<[string, string | null | undefined]> = [
-            ["Calibration Block", report.wsScanningCalibrationBlock],
-            ["Reference Level", report.wsScanningReferenceLevel],
-            ["Extent of Examination", report.wsScanningExtentOfExamination],
-            ["Surface Condition", report.wsScanningSurfaceCondition],
-            ["Flaw Sizing Technique", report.wsScanningFlawSizingTechnique],
+          const wsGroups: Array<{ title: string; rows: Array<[string, string | null | undefined]> }> = [
+            {
+              title: "Basic Information",
+              rows: [
+                ["Date of Examination", report.wsDateOfExamination ? new Date(report.wsDateOfExamination).toISOString().slice(0, 10) : null],
+                ["Testing Standard", report.wsTestingStandard],
+                ["Acceptance Criteria", report.wsAcceptanceCriteria],
+                ["UT Procedure", report.wsUtProcedure],
+              ],
+            },
+            {
+              title: "Equipment Details",
+              rows: [
+                ["Equipment Make", report.wsEquipmentMake],
+                ["Equipment Model", report.wsEquipmentModel],
+                ["Equipment Serial Number", report.wsEquipmentSerialNo],
+                ["Calibration Due Date", report.wsCalibrationDueDate ? new Date(report.wsCalibrationDueDate).toISOString().slice(0, 10) : null],
+              ],
+            },
+            {
+              title: "Cable Details",
+              rows: [
+                ["Cable Length", report.wsCableLength],
+                ["Cable Type", report.wsCableType],
+              ],
+            },
+            {
+              title: "Calibration Details",
+              rows: [
+                ["Calibration Block", report.wsCalibrationBlock],
+                ["Material / MOC of Calibration Block", report.wsCalibrationBlockMoc],
+                ["Reference Reflector", report.wsReferenceReflector],
+                ["Reference Level", report.wsReferenceLevel],
+              ],
+            },
+            {
+              title: "Scanning Details",
+              rows: [
+                ["Flaw Sizing Technique", report.wsFlawSizingTechnique],
+                ["Surface Temperature", report.wsSurfaceTemperature],
+                ["Testing Method", report.wsTestingMethod],
+                ["Couplant", report.wsCouplant],
+                ["Surface Preparation", report.wsSurfacePreparation],
+                ["Surface Finish", report.wsSurfaceFinish],
+                ["Extent of Scanning", report.wsExtentOfScanning],
+              ],
+            },
           ];
+          const probeSkeleton: Array<Record<string, string>> = wsProbeRows.length > 0
+            ? wsProbeRows
+            : [
+                { probeType: "Longitudinal Wave", probeAngle: "0°" },
+                { probeType: "Shear Wave", probeAngle: "45°" },
+                { probeType: "Shear Wave", probeAngle: "60°" },
+                { probeType: "Shear Wave", probeAngle: "70°" },
+              ];
           return (
             <div className="mt-6 space-y-6">
-              {/* Instrument Details */}
-              {wsInstrumentRows.length > 0 && (
-                <div>
-                  <h3 className="mb-2 text-xs font-bold uppercase text-cyan-700 border-b border-cyan-300 pb-1">
-                    Instrument Details
-                  </h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse text-xs">
-                      <thead>
-                        <tr className="bg-cyan-700 text-white">
-                          <th className="border border-cyan-800 px-2 py-2 text-center">Equipment Type</th>
-                          <th className="border border-cyan-800 px-2 py-2 text-center">Machine Make</th>
-                          <th className="border border-cyan-800 px-2 py-2 text-center">Model</th>
-                          <th className="border border-cyan-800 px-2 py-2 text-center">M/c Sr. No.</th>
-                          <th className="border border-cyan-800 px-2 py-2 text-center">Calibration Due Date</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {wsInstrumentRows.map((row, idx) => (
-                          <tr key={idx} className="hover:bg-muted/30">
-                            <td className="border border-zinc-300 px-2 py-1">{row.equipmentType || "—"}</td>
-                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.machineMake || "—"}</td>
-                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.model || "—"}</td>
-                            <td className="border border-zinc-300 px-2 py-1 text-center font-mono">{row.mcSrNo || "—"}</td>
-                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.calibrationDueDate || "—"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
+              {/* Asset type badge — piping / vessel wording on the review page */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="outline" className="border-cyan-400 text-cyan-700">
+                  {report.equipmentType === "VESSEL"
+                    ? "Equipment: Vessel"
+                    : report.equipmentType === "PIPING"
+                      ? "Equipment: Piping"
+                      : "Equipment: not set"}
+                </Badge>
+              </div>
 
-              {/* Test Probe Details */}
-              {wsProbeRows.length > 0 && (
-                <div>
-                  <h3 className="mb-2 text-xs font-bold uppercase text-cyan-700 border-b border-cyan-300 pb-1">
-                    Test Probe Details
-                  </h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse text-xs">
-                      <thead>
-                        <tr className="bg-cyan-700 text-white">
-                          <th className="border border-cyan-800 px-2 py-2 text-center">Probe Type</th>
-                          <th className="border border-cyan-800 px-2 py-2 text-center">Probe Angle</th>
-                          <th className="border border-cyan-800 px-2 py-2 text-center">Frequency</th>
-                          <th className="border border-cyan-800 px-2 py-2 text-center">Size</th>
-                          <th className="border border-cyan-800 px-2 py-2 text-center">Probe No.</th>
-                          <th className="border border-cyan-800 px-2 py-2 text-center">Range</th>
-                          <th className="border border-cyan-800 px-2 py-2 text-center">Reference dB</th>
-                          <th className="border border-cyan-800 px-2 py-2 text-center">Scanning dB</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {wsProbeRows.map((row, idx) => (
-                          <tr key={idx} className="hover:bg-muted/30">
-                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.probeType || "—"}</td>
-                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.probeAngle || "—"}</td>
-                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.frequency || "—"}</td>
-                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.size || "—"}</td>
-                            <td className="border border-zinc-300 px-2 py-1 text-center font-mono">{row.probeNo || "—"}</td>
-                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.range || "—"}</td>
-                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.referenceDb || "—"}</td>
-                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.scanningDb || "—"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* Scanning Details */}
+              {/* 1. Weld Scan Testing Parameters (grouped) */}
               <div>
                 <h3 className="mb-2 text-xs font-bold uppercase text-cyan-700 border-b border-cyan-300 pb-1">
-                  Scanning Details
+                  Weld Scan Testing Parameters
                 </h3>
-                <table className="w-full border-collapse text-xs">
-                  <tbody>
-                    {wsScanPairs.map(([label, value], idx) => (
-                      <tr key={idx} className="border-b border-zinc-200">
-                        <td className="bg-cyan-50 border-r border-zinc-200 px-3 py-1.5 font-medium text-zinc-700 w-1/3">
-                          {label}
-                        </td>
-                        <td className="px-3 py-1.5">
-                          {value && String(value).trim() ? value : <span className="text-muted-foreground">—</span>}
-                        </td>
+                <div className="space-y-4">
+                  {wsGroups.map((group) => (
+                    <div key={group.title}>
+                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-cyan-800 bg-cyan-100 border border-cyan-200 rounded px-2 py-1">
+                        {group.title}
+                      </div>
+                      <table className="w-full border-collapse text-xs">
+                        <tbody>
+                          {group.rows.map(([label, value], idx) => (
+                            <tr key={idx} className="border-b border-zinc-200">
+                              <td className="bg-cyan-50 border-r border-zinc-200 px-3 py-1.5 font-medium text-zinc-700 w-1/3">
+                                {label}
+                              </td>
+                              <td className="px-3 py-1.5">
+                                {value && String(value).trim() ? value : <span className="text-muted-foreground">—</span>}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Probe Details — fixed 4-row grid */}
+              <div>
+                <h3 className="mb-2 text-xs font-bold uppercase text-cyan-700 border-b border-cyan-300 pb-1">
+                  Probe Details
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-cyan-700 text-white">
+                        <th className="border border-cyan-800 px-2 py-2 text-center">Probe Type</th>
+                        <th className="border border-cyan-800 px-2 py-2 text-center">Probe Angle</th>
+                        <th className="border border-cyan-800 px-2 py-2 text-center">Frequency</th>
+                        <th className="border border-cyan-800 px-2 py-2 text-center">Probe Size</th>
+                        <th className="border border-cyan-800 px-2 py-2 text-center">Serial Number</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {probeSkeleton.map((row, idx) => (
+                        <tr key={idx} className="hover:bg-muted/30">
+                          <td className="border border-zinc-300 px-2 py-1 font-medium">{row.probeType || "—"}</td>
+                          <td className="border border-zinc-300 px-2 py-1 text-center font-mono">{row.probeAngle || "—"}</td>
+                          <td className="border border-zinc-300 px-2 py-1 text-center">{row.frequency || "—"}</td>
+                          <td className="border border-zinc-300 px-2 py-1 text-center">{row.probeSize || "—"}</td>
+                          <td className="border border-zinc-300 px-2 py-1 text-center font-mono">{row.serialNo || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           );
         })()}
-
         {/* ─── 4. ENGINEERING DRAWINGS ───
             Shows the actual uploaded drawing files. Images (PNG/JPG/JPEG/
             WEBP) are served by /api/drawings/[id]/preview directly; PDF
@@ -1738,50 +1782,61 @@ export function PipelineReportDetailView() {
           );
         })()}
 
-        {/* Weld Scan Test Results — shown only for PIPELINE_WELD_SCAN
-            reports. Rows live in the wsTestResultRows JSON column on the
-            report record; every dynamically added row appears here. */}
+        {/* Weld Scan Testing Details — shown only for PIPELINE_WELD_SCAN
+            reports (redesigned module). Rows live in the wsDetailRows JSON
+            column; the column set adapts to the asset type recorded on the
+            report:
+              Vessel: Sl. No | Component | Plate / Weld ID | Weld Dimension |
+                      Probe Angle | Probe Frequency | Observation & Result
+              Piping: Sl. No | Pipeline / Weld Location | Weld ID | Weld Type |
+                      Weld Dimension | Probe Angle | Probe Frequency |
+                      Observation & Result */}
         {report.reportType === "PIPELINE_WELD_SCAN" && (() => {
-          let wsTestRows: Array<Record<string, string>> = [];
+          let wsDetailRows: Array<Record<string, string>> = [];
           try {
-            const parsed = JSON.parse(report.wsTestResultRows ?? "[]");
-            if (Array.isArray(parsed)) wsTestRows = parsed;
+            const parsed = JSON.parse(report.wsDetailRows ?? "[]");
+            if (Array.isArray(parsed)) wsDetailRows = parsed;
           } catch {}
-          if (wsTestRows.length === 0) return null;
+          if (wsDetailRows.length === 0) return null;
+          const isVessel = report.equipmentType === "VESSEL";
           return (
             <div className="mt-6">
               <h3 className="mb-2 text-xs font-bold uppercase text-cyan-700 border-b border-cyan-300 pb-1">
-                Weld Scan Test Results ({wsTestRows.length})
+                Weld Scan Testing Details ({wsDetailRows.length})
               </h3>
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse text-[11px]">
                   <thead>
                     <tr className="bg-cyan-700 text-white">
-                      {[
-                        "Sl. No", "Description", "Identification No.", "Weld Type", "Probe",
-                        "BP", "SD", "Depth", "Echo Height", "Length", "Observation", "Result",
-                      ].map((h) => (
-                        <th key={h} className="border border-cyan-800 px-2 py-2 text-center">{h}</th>
-                      ))}
+                      <th className="border border-cyan-800 px-2 py-2 text-center">Sl. No</th>
+                      <th className="border border-cyan-800 px-2 py-2 text-center">
+                        {isVessel ? "Component" : "Pipeline / Weld Location"}
+                      </th>
+                      <th className="border border-cyan-800 px-2 py-2 text-center">
+                        {isVessel ? "Plate / Weld ID" : "Weld ID"}
+                      </th>
+                      {!isVessel && (
+                        <th className="border border-cyan-800 px-2 py-2 text-center">Weld Type</th>
+                      )}
+                      <th className="border border-cyan-800 px-2 py-2 text-center">Weld Dimension</th>
+                      <th className="border border-cyan-800 px-2 py-2 text-center">Probe Angle</th>
+                      <th className="border border-cyan-800 px-2 py-2 text-center">Probe Frequency</th>
+                      <th className="border border-cyan-800 px-2 py-2 text-center">Observation &amp; Result</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {wsTestRows.map((row, idx) => (
+                    {wsDetailRows.map((row, idx) => (
                       <tr key={idx} className="hover:bg-muted/30">
                         <td className="border border-zinc-300 px-2 py-1 text-center font-mono">{idx + 1}</td>
-                        <td className="border border-zinc-300 px-2 py-1">{row.description || "—"}</td>
-                        <td className="border border-zinc-300 px-2 py-1 text-center">{row.identificationNo || "—"}</td>
-                        <td className="border border-zinc-300 px-2 py-1 text-center">{row.weldType || "—"}</td>
-                        <td className="border border-zinc-300 px-2 py-1 text-center">{row.probe || "—"}</td>
-                        <td className="border border-zinc-300 px-2 py-1 text-center">{row.bp || "—"}</td>
-                        <td className="border border-zinc-300 px-2 py-1 text-center">{row.sd || "—"}</td>
-                        <td className="border border-zinc-300 px-2 py-1 text-center">{row.depth || "—"}</td>
-                        <td className="border border-zinc-300 px-2 py-1 text-center">{row.echoHeight || "—"}</td>
-                        <td className="border border-zinc-300 px-2 py-1 text-center">{row.length || "—"}</td>
-                        <td className="border border-zinc-300 px-2 py-1">{row.observation || "—"}</td>
-                        <td className={`border border-zinc-300 px-2 py-1 text-center font-bold ${row.result === "Reject" ? "text-red-700 bg-red-50" : row.result === "Accept" ? "text-emerald-700 bg-emerald-50" : ""}`}>
-                          {row.result || "—"}
-                        </td>
+                        <td className="border border-zinc-300 px-2 py-1">{row.location || "—"}</td>
+                        <td className="border border-zinc-300 px-2 py-1">{row.weldId || "—"}</td>
+                        {!isVessel && (
+                          <td className="border border-zinc-300 px-2 py-1 text-center">{row.weldType || "—"}</td>
+                        )}
+                        <td className="border border-zinc-300 px-2 py-1">{row.weldDimension || "—"}</td>
+                        <td className="border border-zinc-300 px-2 py-1 text-center font-mono">{row.probeAngle || "—"}</td>
+                        <td className="border border-zinc-300 px-2 py-1 text-center">{row.probeFrequency || "—"}</td>
+                        <td className="border border-zinc-300 px-2 py-1">{row.observationResult || "—"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1790,7 +1845,6 @@ export function PipelineReportDetailView() {
             </div>
           );
         })()}
-
         {/* ─── 6. INSPECTION PHOTOS ───
             Shows ONLY the regular inspection photos uploaded for this
             report. The primary inspection photo is tagged category=PRIMARY
@@ -1801,7 +1855,9 @@ export function PipelineReportDetailView() {
           return (
             <div className="mt-6">
               <h3 className="mb-2 text-xs font-bold uppercase text-zinc-700 border-b border-zinc-300 pb-1">
-                Inspection Photos ({galleryPhotos.length})
+                {report.reportType === "PIPELINE_WELD_SCAN"
+                  ? `Photographs – During Weld Scan (${galleryPhotos.length})`
+                  : `Inspection Photos (${galleryPhotos.length})`}
               </h3>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                 {galleryPhotos.map((photo) => {

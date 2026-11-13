@@ -287,7 +287,8 @@ export async function POST(req: NextRequest) {
       utProbeRows: body.utProbeRows ?? "[]",
       utTestResultRows: body.utTestResultRows ?? "[]",
       utCustomColumns: body.utCustomColumns ?? "[]",
-      // ─── WELD SCAN FIELDS ───
+      // ─── WELD SCAN FIELDS (legacy columns — superseded, kept for old
+      // draft rows; the redesigned Weld Scan form no longer sends them) ───
       wsScanningCalibrationBlock: body.wsScanningCalibrationBlock?.trim() || null,
       wsScanningReferenceLevel: body.wsScanningReferenceLevel?.trim() || null,
       wsScanningExtentOfExamination: body.wsScanningExtentOfExamination?.trim() || null,
@@ -296,6 +297,34 @@ export async function POST(req: NextRequest) {
       wsInstrumentRows: body.wsInstrumentRows ?? "[]",
       wsProbeRows: body.wsProbeRows ?? "[]",
       wsTestResultRows: body.wsTestResultRows ?? "[]",
+      // ─── WELD SCAN REPORT FIELDS (redesigned module) ───
+      // Parameters: Basic Information / Equipment / Cable / Probe /
+      // Calibration / Scanning. Probe details are a fixed 4-row JSON grid
+      // (Longitudinal 0°, Shear 45° / 60° / 70°); testing-details rows
+      // are a JSON array whose column set depends on the asset type.
+      wsDateOfExamination: body.wsDateOfExamination ? new Date(body.wsDateOfExamination) : null,
+      wsTestingStandard: body.wsTestingStandard?.trim() || null,
+      wsAcceptanceCriteria: body.wsAcceptanceCriteria?.trim() || null,
+      wsUtProcedure: body.wsUtProcedure?.trim() || null,
+      wsEquipmentMake: body.wsEquipmentMake?.trim() || null,
+      wsEquipmentModel: body.wsEquipmentModel?.trim() || null,
+      wsEquipmentSerialNo: body.wsEquipmentSerialNo?.trim() || null,
+      wsCalibrationDueDate: body.wsCalibrationDueDate ? new Date(body.wsCalibrationDueDate) : null,
+      wsCableLength: body.wsCableLength?.trim() || null,
+      wsCableType: body.wsCableType?.trim() || null,
+      wsProbeDetails: typeof body.wsProbeDetails === "string" ? body.wsProbeDetails : null,
+      wsCalibrationBlock: body.wsCalibrationBlock?.trim() || null,
+      wsCalibrationBlockMoc: body.wsCalibrationBlockMoc?.trim() || null,
+      wsReferenceReflector: body.wsReferenceReflector?.trim() || null,
+      wsReferenceLevel: body.wsReferenceLevel?.trim() || null,
+      wsFlawSizingTechnique: body.wsFlawSizingTechnique?.trim() || null,
+      wsSurfaceTemperature: body.wsSurfaceTemperature?.trim() || null,
+      wsTestingMethod: body.wsTestingMethod?.trim() || null,
+      wsCouplant: body.wsCouplant?.trim() || null,
+      wsSurfacePreparation: body.wsSurfacePreparation?.trim() || null,
+      wsSurfaceFinish: body.wsSurfaceFinish?.trim() || null,
+      wsExtentOfScanning: body.wsExtentOfScanning?.trim() || null,
+      wsDetailRows: typeof body.wsDetailRows === "string" ? body.wsDetailRows : null,
       // ─── VESSEL DPT CONSUMABLE DETAILS (Make / Product / Batch / Expiry) ───
       vdptSolventMake: body.vdptSolventMake?.trim() || null,
       vdptSolventProduct: body.vdptSolventProduct?.trim() || null,

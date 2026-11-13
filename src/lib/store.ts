@@ -47,7 +47,9 @@ interface AppUser {
 //   • PIPELINE_THICKNESS  → Pipeline Thickness Measurement Report (Piping)
 //   • PIPELINE_DPT        → DPT / DPPT Dye Penetrant Testing Report (Piping)
 //   • PIPELINE_MPT        → Magnetic Particle Testing Report (Piping)
-//   • PIPELINE_WELD_SCAN  → Weld Scan Report (Piping)
+//   • PIPELINE_WELD_SCAN  → Weld Scan Report (Piping + Vessel; the
+//                           testing-details table adapts to the asset
+//                           type; no vessel orientation step)
 //   • VESSEL_DPT          → Vessel Dye Penetrant Testing Report (Vessel,
 //                           requires a Horizontal / Vertical orientation)
 //   • VESSEL_MPT          → Vessel Magnetic Particle Testing Report (Vessel,

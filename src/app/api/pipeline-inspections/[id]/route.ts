@@ -276,7 +276,8 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       utProbeRows: body.utProbeRows !== undefined ? body.utProbeRows : existing.utProbeRows,
       utTestResultRows: body.utTestResultRows !== undefined ? body.utTestResultRows : existing.utTestResultRows,
       utCustomColumns: body.utCustomColumns !== undefined ? body.utCustomColumns : existing.utCustomColumns,
-      // ─── WELD SCAN FIELDS ───
+      // ─── WELD SCAN FIELDS (legacy columns — superseded; preserved when
+      // the redesigned Weld Scan form doesn't send them) ───
       wsScanningCalibrationBlock: body.wsScanningCalibrationBlock !== undefined ? (body.wsScanningCalibrationBlock?.trim() || null) : existing.wsScanningCalibrationBlock,
       wsScanningReferenceLevel: body.wsScanningReferenceLevel !== undefined ? (body.wsScanningReferenceLevel?.trim() || null) : existing.wsScanningReferenceLevel,
       wsScanningExtentOfExamination: body.wsScanningExtentOfExamination !== undefined ? (body.wsScanningExtentOfExamination?.trim() || null) : existing.wsScanningExtentOfExamination,
@@ -285,6 +286,30 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       wsInstrumentRows: body.wsInstrumentRows !== undefined ? body.wsInstrumentRows : existing.wsInstrumentRows,
       wsProbeRows: body.wsProbeRows !== undefined ? body.wsProbeRows : existing.wsProbeRows,
       wsTestResultRows: body.wsTestResultRows !== undefined ? body.wsTestResultRows : existing.wsTestResultRows,
+      // ─── WELD SCAN REPORT FIELDS (redesigned module) ───
+      wsDateOfExamination: body.wsDateOfExamination !== undefined ? (body.wsDateOfExamination ? new Date(body.wsDateOfExamination) : null) : existing.wsDateOfExamination,
+      wsTestingStandard: body.wsTestingStandard !== undefined ? (body.wsTestingStandard?.trim() || null) : existing.wsTestingStandard,
+      wsAcceptanceCriteria: body.wsAcceptanceCriteria !== undefined ? (body.wsAcceptanceCriteria?.trim() || null) : existing.wsAcceptanceCriteria,
+      wsUtProcedure: body.wsUtProcedure !== undefined ? (body.wsUtProcedure?.trim() || null) : existing.wsUtProcedure,
+      wsEquipmentMake: body.wsEquipmentMake !== undefined ? (body.wsEquipmentMake?.trim() || null) : existing.wsEquipmentMake,
+      wsEquipmentModel: body.wsEquipmentModel !== undefined ? (body.wsEquipmentModel?.trim() || null) : existing.wsEquipmentModel,
+      wsEquipmentSerialNo: body.wsEquipmentSerialNo !== undefined ? (body.wsEquipmentSerialNo?.trim() || null) : existing.wsEquipmentSerialNo,
+      wsCalibrationDueDate: body.wsCalibrationDueDate !== undefined ? (body.wsCalibrationDueDate ? new Date(body.wsCalibrationDueDate) : null) : existing.wsCalibrationDueDate,
+      wsCableLength: body.wsCableLength !== undefined ? (body.wsCableLength?.trim() || null) : existing.wsCableLength,
+      wsCableType: body.wsCableType !== undefined ? (body.wsCableType?.trim() || null) : existing.wsCableType,
+      wsProbeDetails: body.wsProbeDetails !== undefined ? (typeof body.wsProbeDetails === "string" ? body.wsProbeDetails : null) : existing.wsProbeDetails,
+      wsCalibrationBlock: body.wsCalibrationBlock !== undefined ? (body.wsCalibrationBlock?.trim() || null) : existing.wsCalibrationBlock,
+      wsCalibrationBlockMoc: body.wsCalibrationBlockMoc !== undefined ? (body.wsCalibrationBlockMoc?.trim() || null) : existing.wsCalibrationBlockMoc,
+      wsReferenceReflector: body.wsReferenceReflector !== undefined ? (body.wsReferenceReflector?.trim() || null) : existing.wsReferenceReflector,
+      wsReferenceLevel: body.wsReferenceLevel !== undefined ? (body.wsReferenceLevel?.trim() || null) : existing.wsReferenceLevel,
+      wsFlawSizingTechnique: body.wsFlawSizingTechnique !== undefined ? (body.wsFlawSizingTechnique?.trim() || null) : existing.wsFlawSizingTechnique,
+      wsSurfaceTemperature: body.wsSurfaceTemperature !== undefined ? (body.wsSurfaceTemperature?.trim() || null) : existing.wsSurfaceTemperature,
+      wsTestingMethod: body.wsTestingMethod !== undefined ? (body.wsTestingMethod?.trim() || null) : existing.wsTestingMethod,
+      wsCouplant: body.wsCouplant !== undefined ? (body.wsCouplant?.trim() || null) : existing.wsCouplant,
+      wsSurfacePreparation: body.wsSurfacePreparation !== undefined ? (body.wsSurfacePreparation?.trim() || null) : existing.wsSurfacePreparation,
+      wsSurfaceFinish: body.wsSurfaceFinish !== undefined ? (body.wsSurfaceFinish?.trim() || null) : existing.wsSurfaceFinish,
+      wsExtentOfScanning: body.wsExtentOfScanning !== undefined ? (body.wsExtentOfScanning?.trim() || null) : existing.wsExtentOfScanning,
+      wsDetailRows: body.wsDetailRows !== undefined ? (typeof body.wsDetailRows === "string" ? body.wsDetailRows : null) : existing.wsDetailRows,
       // ─── EQUIPMENT TYPE + VESSEL ORIENTATION ───
       // Only updated when the form explicitly sends them; existing values
       // are preserved otherwise. vesselOrientation stays constrained to
