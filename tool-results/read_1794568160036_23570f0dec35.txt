@@ -1,0 +1,482 @@
+  4980→      {/* ═══ STEP 2 (WELD SCAN): FULL WELD SCAN REPORT ═══ */}
+  4981→      {step === 2 && header.reportType === "PIPELINE_WELD_SCAN" && (
+  4982→      <>
+  4983→      {/* 1. INSTRUMENT DETAILS */}
+  4984→      <Card>
+  4985→        <CardHeader>
+  4986→          <div className="flex items-center justify-between">
+  4987→            <CardTitle className="text-base">Instrument Details</CardTitle>
+  4988→            <Button onClick={() => {
+  4989→              const rows = JSON.parse(header.wsInstrumentRows || "[]");
+  4990→              rows.push({ equipmentType: "", machineMake: "", model: "", mcSrNo: "", calibrationDueDate: "" });
+  4991→              setHeader((h) => ({ ...h, wsInstrumentRows: JSON.stringify(rows) }));
+  4992→            }} size="sm"><Plus className="mr-1 h-4 w-4" /> Add Row</Button>
+  4993→          </div>
+  4994→        </CardHeader>
+  4995→        <CardContent className="p-0">
+  4996→          <div className="overflow-x-auto">
+  4997→            <table className="w-full text-xs">
+  4998→              <thead className="bg-cyan-700 text-white">
+  4999→                <tr>
+  5000→                  <th className="border border-cyan-800 px-2 py-2 text-center">Equipment Type</th>
+  5001→                  <th className="border border-cyan-800 px-2 py-2 text-center">Machine Make</th>
+  5002→                  <th className="border border-cyan-800 px-2 py-2 text-center">Model</th>
+  5003→                  <th className="border border-cyan-800 px-2 py-2 text-center">M/c Sr. No.</th>
+  5004→                  <th className="border border-cyan-800 px-2 py-2 text-center">Calibration Due Date</th>
+  5005→                  <th className="border border-cyan-800 px-2 py-2 text-center">Actions</th>
+  5006→                </tr>
+  5007→              </thead>
+  5008→              <tbody>
+  5009→                {(() => {
+  5010→                  try {
+  5011→                    const rows = JSON.parse(header.wsInstrumentRows || "[]");
+  5012→                    if (rows.length === 0) return <tr><td colSpan={6} className="text-center py-4 text-muted-foreground border border-zinc-300">No instrument rows. Click Add Row.</td></tr>;
+  5013→                    return rows.map((row: any, idx: number) => (
+  5014→                      <tr key={idx} className="hover:bg-muted/30">
+  5015→                        <td className="border border-zinc-300 p-1">
+  5016→                          <Input className="h-8 text-xs" value={row.equipmentType ?? ""}
+  5017→                            onChange={(e) => { const n = [...rows]; n[idx] = { ...row, equipmentType: e.target.value }; setHeader((h) => ({ ...h, wsInstrumentRows: JSON.stringify(n) })); }}
+  5018→                            placeholder="e.g. A Scan Pulse Echo" />
+  5019→                        </td>
+  5020→                        <td className="border border-zinc-300 p-1">
+  5021→                          <Select value={row.machineMake ?? ""} onValueChange={(v) => { const n = [...rows]; n[idx] = { ...row, machineMake: v }; setHeader((h) => ({ ...h, wsInstrumentRows: JSON.stringify(n) })); }}>
+  5022→                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
+  5023→                            <SelectContent>
+  5024→                              {["Olympus", "Krautkramer", "GE", "Sonatest", "Other / Custom"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+  5025→                            </SelectContent>
+  5026→                          </Select>
+  5027→                        </td>
+  5028→                        <td className="border border-zinc-300 p-1">
+  5029→                          <Select value={row.model ?? ""} onValueChange={(v) => { const n = [...rows]; n[idx] = { ...row, model: v }; setHeader((h) => ({ ...h, wsInstrumentRows: JSON.stringify(n) })); }}>
+  5030→                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
+  5031→                            <SelectContent>
+  5032→                              {["Epoch 600", "Epoch 650", "USM Go", "MasterScan", "Other / Custom"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+  5033→                            </SelectContent>
+  5034→                          </Select>
+  5035→                        </td>
+  5036→                        <td className="border border-zinc-300 p-1">
+  5037→                          <Input className="h-8 text-xs" value={row.mcSrNo ?? ""}
+  5038→                            onChange={(e) => { const n = [...rows]; n[idx] = { ...row, mcSrNo: e.target.value }; setHeader((h) => ({ ...h, wsInstrumentRows: JSON.stringify(n) })); }}
+  5039→                            placeholder="Serial No." />
+  5040→                        </td>
+  5041→                        <td className="border border-zinc-300 p-1">
+  5042→                          <Input type="date" className="h-8 text-xs" value={row.calibrationDueDate ?? ""}
+  5043→                            onChange={(e) => { const n = [...rows]; n[idx] = { ...row, calibrationDueDate: e.target.value }; setHeader((h) => ({ ...h, wsInstrumentRows: JSON.stringify(n) })); }} />
+  5044→                        </td>
+  5045→                        <td className="border border-zinc-300 p-1 text-center">
+  5046→                          <div className="flex flex-col gap-1">
+  5047→                            <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => saveHeader()} disabled={saving} title="Save row">
+  5048→                              <Save className="h-3 w-3" />
+  5049→                            </Button>
+  5050→                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-600"
+  5051→                            onClick={() => { const n = rows.filter((_: any, i: number) => i !== idx); setHeader((h) => ({ ...h, wsInstrumentRows: JSON.stringify(n) })); }}>
+  5052→                            <Trash2 className="h-3 w-3" /></Button>
+  5053→                          </div>
+  5054→                        </td>
+  5055→                      </tr>
+  5056→                    ));
+  5057→                  } catch { return null; }
+  5058→                })()}
+  5059→              </tbody>
+  5060→            </table>
+  5061→          </div>
+  5062→        </CardContent>
+  5063→      </Card>
+  5064→
+  5065→      {/* 2. TEST PROBE DETAILS */}
+  5066→      <Card>
+  5067→        <CardHeader>
+  5068→          <div className="flex items-center justify-between">
+  5069→            <CardTitle className="text-base">Test Probe Details</CardTitle>
+  5070→            <Button onClick={() => {
+  5071→              const rows = JSON.parse(header.wsProbeRows || "[]");
+  5072→              rows.push({ probeType: "Shear Wave", probeAngle: "", frequency: "", size: "", probeNo: "", range: "", referenceDb: "", scanningDb: "" });
+  5073→              setHeader((h) => ({ ...h, wsProbeRows: JSON.stringify(rows) }));
+  5074→            }} size="sm"><Plus className="mr-1 h-4 w-4" /> Add Row</Button>
+  5075→          </div>
+  5076→        </CardHeader>
+  5077→        <CardContent className="p-0">
+  5078→          <div className="overflow-x-auto">
+  5079→            <table className="w-full text-xs">
+  5080→              <thead className="bg-cyan-700 text-white">
+  5081→                <tr>
+  5082→                  <th className="border border-cyan-800 px-2 py-2 text-center">Probe Type</th>
+  5083→                  <th className="border border-cyan-800 px-2 py-2 text-center">Probe Angle</th>
+  5084→                  <th className="border border-cyan-800 px-2 py-2 text-center">Frequency</th>
+  5085→                  <th className="border border-cyan-800 px-2 py-2 text-center">Size</th>
+  5086→                  <th className="border border-cyan-800 px-2 py-2 text-center">Probe No.</th>
+  5087→                  <th className="border border-cyan-800 px-2 py-2 text-center">Range</th>
+  5088→                  <th className="border border-cyan-800 px-2 py-2 text-center">Reference dB</th>
+  5089→                  <th className="border border-cyan-800 px-2 py-2 text-center">Scanning dB</th>
+  5090→                  <th className="border border-cyan-800 px-2 py-2 text-center">Actions</th>
+  5091→                </tr>
+  5092→              </thead>
+  5093→              <tbody>
+  5094→                {(() => {
+  5095→                  try {
+  5096→                    const rows = JSON.parse(header.wsProbeRows || "[]");
+  5097→                    if (rows.length === 0) return <tr><td colSpan={9} className="text-center py-4 text-muted-foreground border border-zinc-300">No probe rows. Click Add Row.</td></tr>;
+  5098→                    // Dynamic size options based on probe type
+  5099→                    const shearWaveSizes = ["8 × 9 mm", "10 × 10 mm", "14 × 14 mm", "15 × 15 mm", "20 × 20 mm", "20 × 22 mm", "20 × 25 mm", "Custom / Other"];
+  5100→                    const longWaveSizes = ["5 mm", "6 mm", "7.5 mm", "10 mm", "12 mm", "13 mm", "15 mm", "20 mm", "22 mm", "24 mm", "25 mm", "Custom / Other"];
+  5101→                    return rows.map((row: any, idx: number) => {
+  5102→                      const sizeOptions = row.probeType === "Shear Wave" ? shearWaveSizes : row.probeType === "Longitudinal Wave" ? longWaveSizes : [];
+  5103→                      return (
+  5104→                        <tr key={idx} className="hover:bg-muted/30">
+  5105→                          <td className="border border-zinc-300 p-1">
+  5106→                            <Select value={row.probeType ?? ""} onValueChange={(v) => {
+  5107→                              const n = [...rows]; n[idx] = { ...row, probeType: v, size: "" }; setHeader((h) => ({ ...h, wsProbeRows: JSON.stringify(n) }));
+  5108→                            }}>
+  5109→                              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
+  5110→                              <SelectContent>
+  5111→                                {["Shear Wave", "Longitudinal Wave"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+  5112→                              </SelectContent>
+  5113→                            </Select>
+  5114→                          </td>
+  5115→                          <td className="border border-zinc-300 p-1">
+  5116→                            <Select value={row.probeAngle ?? ""} onValueChange={(v) => { const n = [...rows]; n[idx] = { ...row, probeAngle: v }; setHeader((h) => ({ ...h, wsProbeRows: JSON.stringify(n) })); }}>
+  5117→                              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
+  5118→                              <SelectContent>
+  5119→                                {["45°", "60°", "70°", "0°"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+  5120→                              </SelectContent>
+  5121→                            </Select>
+  5122→                          </td>
+  5123→                          <td className="border border-zinc-300 p-1">
+  5124→                            <Select value={row.frequency ?? ""} onValueChange={(v) => { const n = [...rows]; n[idx] = { ...row, frequency: v }; setHeader((h) => ({ ...h, wsProbeRows: JSON.stringify(n) })); }}>
+  5125→                              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
+  5126→                              <SelectContent>
+  5127→                                {["1 MHz", "2 MHz", "2.5 MHz", "4 MHz", "5 MHz", "7.5 MHz", "10 MHz"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+  5128→                              </SelectContent>
+  5129→                            </Select>
+  5130→                          </td>
+  5131→                          <td className="border border-zinc-300 p-1">
+  5132→                            {sizeOptions.length > 0 ? (
+  5133→                              <div className="flex flex-col gap-1">
+  5134→                                <Select value={row.size ?? ""} onValueChange={(v) => {
+  5135→                                  const n = [...rows];
+  5136→                                  n[idx] = { ...row, size: v === "Custom / Other" ? "" : v, _sizeCustom: v === "Custom / Other" ? true : false };
+  5137→                                  setHeader((h) => ({ ...h, wsProbeRows: JSON.stringify(n) }));
+  5138→                                }}>
+  5139→                                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
+  5140→                                  <SelectContent>
+  5141→                                    {sizeOptions.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+  5142→                                  </SelectContent>
+  5143→                                </Select>
+  5144→                                {row._sizeCustom && (
+  5145→                                  <Input className="h-7 text-xs" value={row.size ?? ""}
+  5146→                                    onChange={(e) => { const n = [...rows]; n[idx] = { ...row, size: e.target.value }; setHeader((h) => ({ ...h, wsProbeRows: JSON.stringify(n) })); }}
+  5147→                                    placeholder="Enter custom size" />
+  5148→                                )}
+  5149→                              </div>
+  5150→                            ) : (
+  5151→                              <p className="text-[10px] text-muted-foreground text-center py-2">Select Probe Type first</p>
+  5152→                            )}
+  5153→                          </td>
+  5154→                          {(["probeNo", "range", "referenceDb", "scanningDb"] as const).map((field) => (
+  5155→                            <td key={field} className="border border-zinc-300 p-1">
+  5156→                              <Input className="h-8 text-xs" value={row[field] ?? ""}
+  5157→                                onChange={(e) => { const n = [...rows]; n[idx] = { ...row, [field]: e.target.value }; setHeader((h) => ({ ...h, wsProbeRows: JSON.stringify(n) })); }} />
+  5158→                            </td>
+  5159→                          ))}
+  5160→                          <td className="border border-zinc-300 p-1 text-center">
+  5161→                            <div className="flex flex-col gap-1">
+  5162→                              <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => saveHeader()} disabled={saving} title="Save row">
+  5163→                                <Save className="h-3 w-3" />
+  5164→                              </Button>
+  5165→                              <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-600"
+  5166→                                onClick={() => { const n = rows.filter((_: any, i: number) => i !== idx); setHeader((h) => ({ ...h, wsProbeRows: JSON.stringify(n) })); }}>
+  5167→                                <Trash2 className="h-3 w-3" /></Button>
+  5168→                            </div>
+  5169→                          </td>
+  5170→                        </tr>
+  5171→                      );
+  5172→                    });
+  5173→                  } catch { return null; }
+  5174→                })()}
+  5175→              </tbody>
+  5176→            </table>
+  5177→          </div>
+  5178→        </CardContent>
+  5179→      </Card>
+  5180→
+  5181→      {/* 3. SCANNING DETAILS */}
+  5182→      <Card>
+  5183→        <CardHeader><CardTitle className="text-base">Scanning Details</CardTitle></CardHeader>
+  5184→        <CardContent className="p-0">
+  5185→          <div className="overflow-x-auto">
+  5186→            <table className="w-full text-sm border-collapse">
+  5187→              <tbody>
+  5188→                {([
+  5189→                  ["Calibration Block", "wsScanningCalibrationBlock", "text" as const, "Reference Level", "wsScanningReferenceLevel", "text" as const],
+  5190→                  ["Extent of Examination", "wsScanningExtentOfExamination", "text" as const, "Surface Condition", "wsScanningSurfaceCondition", "select" as const],
+  5191→                  ["", "", "text" as const, "Flaw Sizing Technique", "wsScanningFlawSizingTechnique", "select" as const],
+  5192→                ]).map(([label1, field1, type1, label2, field2, type2], rowIdx) => (
+  5193→                  <tr key={rowIdx} className="border-b border-zinc-200">
+  5194→                    <td className="bg-cyan-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/5">{label1}</td>
+  5195→                    <td className="px-2 py-1.5 border-r border-zinc-200 w-1/4">
+  5196→                      {type1 === "select" ? (
+  5197→                        <Select value={header[field1 as keyof ReportHeader] as string} onValueChange={(v) => updateHeader(field1 as keyof ReportHeader, v)}>
+  5198→                          <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select" /></SelectTrigger>
+  5199→                          <SelectContent>
+  5200→                            {["Clean & Smooth", "Rough Surface", "Painted Surface"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+  5201→                          </SelectContent>
+  5202→                        </Select>
+  5203→                      ) : label1 ? (
+  5204→                        <Input className="h-8 text-sm" value={header[field1 as keyof ReportHeader] as string}
+  5205→                          onChange={(e) => updateHeader(field1 as keyof ReportHeader, e.target.value)} />
+  5206→                      ) : <span className="text-muted-foreground">—</span>}
+  5207→                    </td>
+  5208→                    <td className="bg-cyan-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/5">{label2}</td>
+  5209→                    <td className="px-2 py-1.5 w-1/4">
+  5210→                      {type2 === "select" ? (
+  5211→                        (() => {
+  5212→                          const val2 = header[field2 as keyof ReportHeader] as string;
+  5213→                          const isPreset = val2 === "6 dB Drop" || val2 === "12 dB Drop" || val2 === "18 dB Drop";
+  5214→                          return (
+  5215→                            <div className="flex flex-col gap-1">
+  5216→                              <Select value={isPreset ? val2 : "Other / Custom"} onValueChange={(v) => {
+  5217→                                if (v === "Other / Custom") {
+  5218→                                  updateHeader(field2 as keyof ReportHeader, "");
+  5219→                                } else {
+  5220→                                  updateHeader(field2 as keyof ReportHeader, v);
+  5221→                                }
+  5222→                              }}>
+  5223→                                <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select" /></SelectTrigger>
+  5224→                                <SelectContent>
+  5225→                                  {["6 dB Drop", "12 dB Drop", "18 dB Drop", "Other / Custom"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+  5226→                                </SelectContent>
+  5227→                              </Select>
+  5228→                              {!isPreset && (
+  5229→                                <Input className="h-7 text-sm" value={val2}
+  5230→                                  onChange={(e) => updateHeader(field2 as keyof ReportHeader, e.target.value)}
+  5231→                                  placeholder="Enter custom technique" />
+  5232→                              )}
+  5233→                            </div>
+  5234→                          );
+  5235→                        })()
+  5236→                      ) : label2 ? (
+  5237→                        <Input className="h-8 text-sm" value={header[field2 as keyof ReportHeader] as string}
+  5238→                          onChange={(e) => updateHeader(field2 as keyof ReportHeader, e.target.value)} />
+  5239→                      ) : <span className="text-muted-foreground">—</span>}
+  5240→                    </td>
+  5241→                  </tr>
+  5242→                ))}
+  5243→              </tbody>
+  5244→            </table>
+  5245→          </div>
+  5246→        </CardContent>
+  5247→      </Card>
+  5248→
+  5249→      {/* 4. TEST RESULTS */}
+  5250→      <Card>
+  5251→        <CardHeader>
+  5252→          <div className="flex items-center justify-between">
+  5253→            <CardTitle className="text-base">Test Results</CardTitle>
+  5254→            <Button onClick={() => {
+  5255→              const rows = JSON.parse(header.wsTestResultRows || "[]");
+  5256→              rows.push({ description: "", identificationNo: "", weldType: "", probe: "", bp: "", sd: "", depth: "", echoHeight: "", length: "", observation: "", result: "" });
+  5257→              setHeader((h) => ({ ...h, wsTestResultRows: JSON.stringify(rows) }));
+  5258→            }} size="sm"><Plus className="mr-1 h-4 w-4" /> Add Row</Button>
+  5259→          </div>
+  5260→        </CardHeader>
+  5261→        <CardContent className="p-0">
+  5262→          <div className="overflow-x-auto">
+  5263→            <table className="w-full text-xs">
+  5264→              <thead className="bg-cyan-700 text-white">
+  5265→                <tr>
+  5266→                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 30 }}>Sl. No</th>
+  5267→                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 120 }}>Description</th>
+  5268→                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 80 }}>Identification No.</th>
+  5269→                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 70 }}>Weld Type</th>
+  5270→                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 60 }}>Probe</th>
+  5271→                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 40 }}>BP</th>
+  5272→                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 40 }}>SD</th>
+  5273→                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 50 }}>Depth</th>
+  5274→                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 60 }}>Echo Height</th>
+  5275→                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 50 }}>Length</th>
+  5276→                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 80 }}>Observation</th>
+  5277→                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 60 }}>Result</th>
+  5278→                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 50 }}>Actions</th>
+  5279→                </tr>
+  5280→              </thead>
+  5281→              <tbody>
+  5282→                {(() => {
+  5283→                  try {
+  5284→                    const rows = JSON.parse(header.wsTestResultRows || "[]");
+  5285→                    if (rows.length === 0) return <tr><td colSpan={13} className="text-center py-4 text-muted-foreground border border-zinc-300">No test result rows. Click Add Row.</td></tr>;
+  5286→                    return rows.map((row: any, idx: number) => (
+  5287→                      <tr key={idx} className="hover:bg-muted/30">
+  5288→                        <td className="border border-zinc-300 p-1 text-center font-mono">{idx + 1}</td>
+  5289→                        <td className="border border-zinc-300 p-1">
+  5290→                          <Textarea rows={1} className="text-xs min-h-[32px] py-1" value={row.description ?? ""}
+  5291→                            onChange={(e) => { const n = [...rows]; n[idx] = { ...row, description: e.target.value }; setHeader((h) => ({ ...h, wsTestResultRows: JSON.stringify(n) })); }} />
+  5292→                        </td>
+  5293→                        <td className="border border-zinc-300 p-1">
+  5294→                          <Input className="h-8 text-xs" value={row.identificationNo ?? ""}
+  5295→                            onChange={(e) => { const n = [...rows]; n[idx] = { ...row, identificationNo: e.target.value }; setHeader((h) => ({ ...h, wsTestResultRows: JSON.stringify(n) })); }} />
+  5296→                        </td>
+  5297→                        <td className="border border-zinc-300 p-1">
+  5298→                          <Select value={row.weldType ?? ""} onValueChange={(v) => { const n = [...rows]; n[idx] = { ...row, weldType: v }; setHeader((h) => ({ ...h, wsTestResultRows: JSON.stringify(n) })); }}>
+  5299→                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
+  5300→                            <SelectContent>
+  5301→                              {["Butt Weld", "Fillet Weld"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+  5302→                            </SelectContent>
+  5303→                          </Select>
+  5304→                        </td>
+  5305→                        {(["probe", "bp", "sd", "depth", "echoHeight", "length", "observation", "result"] as const).map((field) => (
+  5306→                          <td key={field} className="border border-zinc-300 p-1">
+  5307→                            <Input className="h-8 text-xs" value={row[field] ?? ""}
+  5308→                              onChange={(e) => { const n = [...rows]; n[idx] = { ...row, [field]: e.target.value }; setHeader((h) => ({ ...h, wsTestResultRows: JSON.stringify(n) })); }} />
+  5309→                          </td>
+  5310→                        ))}
+  5311→                        <td className="border border-zinc-300 p-1 text-center">
+  5312→                          <div className="flex flex-col gap-1">
+  5313→                            <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => saveHeader()} disabled={saving} title="Save row">
+  5314→                              <Save className="h-3 w-3" />
+  5315→                            </Button>
+  5316→                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-600"
+  5317→                            onClick={() => { const n = rows.filter((_: any, i: number) => i !== idx); setHeader((h) => ({ ...h, wsTestResultRows: JSON.stringify(n) })); }}>
+  5318→                            <Trash2 className="h-3 w-3" /></Button>
+  5319→                          </div>
+  5320→                        </td>
+  5321→                      </tr>
+  5322→                    ));
+  5323→                  } catch { return null; }
+  5324→                })()}
+  5325→              </tbody>
+  5326→            </table>
+  5327→          </div>
+  5328→        </CardContent>
+  5329→      </Card>
+  5330→
+  5331→      {/* Step 2 navigation */}
+  5332→      <div className="flex items-center gap-2">
+  5333→        <Button variant="ghost" onClick={goPrevious}><ArrowLeft className="mr-2 h-4 w-4" /> Previous</Button>
+  5334→        <Button variant="ghost" onClick={saveDraft} disabled={saving}>
+  5335→          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />} Save Draft</Button>
+  5336→        <Button onClick={proceedToNext} disabled={saving}>Proceed to Next <ArrowRight className="ml-2 h-4 w-4" /></Button>
+  5337→      </div>
+  5338→      </>
+  5339→      )}
+  5340→
+  5341→      {/* ═══ STEP 3: FINDINGS & PHOTOS ═══ */}
+  5342→      {step === 3 && (
+  5343→      <>
+  5344→        <Card>
+  5345→          <CardHeader>
+  5346→            <CardTitle className="text-base">Inspection Findings and Evidence</CardTitle>
+  5347→            <CardDescription>
+  5348→              Describe the inspection performed, visible conditions, observations,
+  5349→              and upload supporting photographs.
+  5350→            </CardDescription>
+  5351→          </CardHeader>
+  5352→          <CardContent className="space-y-6">
+  5353→            {/* A. Inspection Description */}
+  5354→            <div className="space-y-2">
+  5355→              <Label className="text-sm font-semibold">Inspection Description</Label>
+  5356→              <Textarea
+  5357→                rows={6}
+  5358→                value={header.inspectionDescription}
+  5359→                onChange={(e) => updateHeader("inspectionDescription", e.target.value)}
+  5360→                placeholder="Describe the inspection performed, visible condition of the component, observations and abnormalities, inspection limitations, and additional technical notes..."
+  5361→                className="text-sm"
+  5362→              />
+  5363→              <p className="text-xs text-muted-foreground">
+  5364→                This description will be included in the generated PDF report.
+  5365→              </p>
+  5366→            </div>
+  5367→
+  5368→            {/* B. Summary of Site Observations */}
+  5369→            <div className="space-y-2">
+  5370→              <Label className="text-sm font-semibold">Summary Of Site Observations</Label>
+  5371→              <Textarea
+  5372→                rows={4}
+  5373→                value={header.siteObservationSummary}
+  5374→                onChange={(e) => updateHeader("siteObservationSummary", e.target.value)}
+  5375→                placeholder="Concise summary of all observations made during the site inspection..."
+  5376→                className="text-sm"
+  5377→              />
+  5378→            </div>
+  5379→
+  5380→            {/* C. Results */}
+  5381→            <div className="space-y-2">
+  5382→              <Label className="text-sm font-semibold">Results</Label>
+  5383→              <Textarea
+  5384→                rows={3}
+  5385→                value={header.results}
+  5386→                onChange={(e) => updateHeader("results", e.target.value)}
+  5387→                placeholder="Summary of the inspection or measurement results..."
+  5388→                className="text-sm"
+  5389→              />
+  5390→            </div>
+  5391→
+  5392→            {/* D. Conclusion */}
+  5393→            <div className="space-y-2">
+  5394→              <Label className="text-sm font-semibold">Conclusion</Label>
+  5395→              <Textarea
+  5396→                rows={2}
+  5397→                value={header.conclusion}
+  5398→                onChange={(e) => updateHeader("conclusion", e.target.value)}
+  5399→                placeholder="Final overall conclusion of the inspection..."
+  5400→                className="text-sm"
+  5401→              />
+  5402→            </div>
+  5403→
+  5404→            {/* H. Sign-off fields — ALL fields are editable text inputs */}
+  5405→            <div className="rounded-md border border-zinc-200 p-3 space-y-3 bg-muted/20">
+  5406→              <Label className="text-sm font-semibold block">Sign-Off Details</Label>
+  5407→              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+  5408→                <div className="space-y-2">
+  5409→                  <Label className="text-xs">Inspected By — Name</Label>
+  5410→                  <Input
+  5411→                    value={header.inspectorName}
+  5412→                    onChange={(e) => updateHeader("inspectorName", e.target.value)}
+  5413→                    placeholder="e.g. Rahul Sharma"
+  5414→                    className="text-sm"
+  5415→                  />
+  5416→                  <Label className="text-xs">Inspected By — Designation</Label>
+  5417→                  <Input
+  5418→                    value={header.inspectorDesignation}
+  5419→                    onChange={(e) => updateHeader("inspectorDesignation", e.target.value)}
+  5420→                    placeholder="e.g. NDT Technician"
+  5421→                    className="text-sm"
+  5422→                  />
+  5423→                </div>
+  5424→                <div className="space-y-2">
+  5425→                  <Label className="text-xs">Second Reviewed By — Name</Label>
+  5426→                  <Input
+  5427→                    value={header.secondReviewedByName}
+  5428→                    onChange={(e) => updateHeader("secondReviewedByName", e.target.value)}
+  5429→                    placeholder="e.g. Rahul Sharma"
+  5430→                    className="text-sm"
+  5431→                  />
+  5432→                  <Label className="text-xs">Second Reviewed By — Designation</Label>
+  5433→                  <Input
+  5434→                    value={header.secondReviewedByDesignation}
+  5435→                    onChange={(e) => updateHeader("secondReviewedByDesignation", e.target.value)}
+  5436→                    placeholder="e.g. Senior Inspector"
+  5437→                    className="text-sm"
+  5438→                  />
+  5439→                </div>
+  5440→                <div className="space-y-2">
+  5441→                  <Label className="text-xs">Approved By — Name</Label>
+  5442→                  <Input
+  5443→                    value={header.approvedByName}
+  5444→                    onChange={(e) => updateHeader("approvedByName", e.target.value)}
+  5445→                    placeholder="e.g. Priya Admin"
+  5446→                    className="text-sm"
+  5447→                  />
+  5448→                  <Label className="text-xs">Approved By — Designation</Label>
+  5449→                  <Input
+  5450→                    value={header.approvedByDesignation}
+  5451→                    onChange={(e) => updateHeader("approvedByDesignation", e.target.value)}
+  5452→                    placeholder="e.g. QA Manager"
+  5453→                    className="text-sm"
+  5454→                  />
+  5455→                </div>
+  5456→              </div>
+  5457→            </div>
+  5458→
+  5459→            {/* I. Photo Upload */}
+
+[showing lines 4980-5459 of 6326; use offset=5460 with limit to continue reading]
