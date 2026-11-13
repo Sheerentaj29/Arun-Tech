@@ -72,6 +72,7 @@ const REPORT_TYPE_BADGE: Record<string, { label: string; color: string }> = {
   PIPELINE_WELD_SCAN: { label: "Weld Scan", color: "border-cyan-500 text-cyan-700" },
   VESSEL_DPT:         { label: "Vessel DPT", color: "border-purple-500 text-purple-700" },
   VESSEL_MPT:         { label: "Vessel MPT", color: "border-orange-500 text-orange-700" },
+  VESSEL_WELD_SCAN:   { label: "Vessel Weld Scan", color: "border-cyan-500 text-cyan-700" },
 };
 
 const ACTION_COLOR: Record<string, string> = {

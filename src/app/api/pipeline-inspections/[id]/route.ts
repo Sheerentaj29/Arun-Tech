@@ -276,8 +276,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       utProbeRows: body.utProbeRows !== undefined ? body.utProbeRows : existing.utProbeRows,
       utTestResultRows: body.utTestResultRows !== undefined ? body.utTestResultRows : existing.utTestResultRows,
       utCustomColumns: body.utCustomColumns !== undefined ? body.utCustomColumns : existing.utCustomColumns,
-      // ─── WELD SCAN FIELDS (legacy columns — superseded; preserved when
-      // the redesigned Weld Scan form doesn't send them) ───
+      // ─── WELD SCAN FIELDS ───
       wsScanningCalibrationBlock: body.wsScanningCalibrationBlock !== undefined ? (body.wsScanningCalibrationBlock?.trim() || null) : existing.wsScanningCalibrationBlock,
       wsScanningReferenceLevel: body.wsScanningReferenceLevel !== undefined ? (body.wsScanningReferenceLevel?.trim() || null) : existing.wsScanningReferenceLevel,
       wsScanningExtentOfExamination: body.wsScanningExtentOfExamination !== undefined ? (body.wsScanningExtentOfExamination?.trim() || null) : existing.wsScanningExtentOfExamination,
@@ -286,30 +285,6 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       wsInstrumentRows: body.wsInstrumentRows !== undefined ? body.wsInstrumentRows : existing.wsInstrumentRows,
       wsProbeRows: body.wsProbeRows !== undefined ? body.wsProbeRows : existing.wsProbeRows,
       wsTestResultRows: body.wsTestResultRows !== undefined ? body.wsTestResultRows : existing.wsTestResultRows,
-      // ─── WELD SCAN REPORT FIELDS (redesigned module) ───
-      wsDateOfExamination: body.wsDateOfExamination !== undefined ? (body.wsDateOfExamination ? new Date(body.wsDateOfExamination) : null) : existing.wsDateOfExamination,
-      wsTestingStandard: body.wsTestingStandard !== undefined ? (body.wsTestingStandard?.trim() || null) : existing.wsTestingStandard,
-      wsAcceptanceCriteria: body.wsAcceptanceCriteria !== undefined ? (body.wsAcceptanceCriteria?.trim() || null) : existing.wsAcceptanceCriteria,
-      wsUtProcedure: body.wsUtProcedure !== undefined ? (body.wsUtProcedure?.trim() || null) : existing.wsUtProcedure,
-      wsEquipmentMake: body.wsEquipmentMake !== undefined ? (body.wsEquipmentMake?.trim() || null) : existing.wsEquipmentMake,
-      wsEquipmentModel: body.wsEquipmentModel !== undefined ? (body.wsEquipmentModel?.trim() || null) : existing.wsEquipmentModel,
-      wsEquipmentSerialNo: body.wsEquipmentSerialNo !== undefined ? (body.wsEquipmentSerialNo?.trim() || null) : existing.wsEquipmentSerialNo,
-      wsCalibrationDueDate: body.wsCalibrationDueDate !== undefined ? (body.wsCalibrationDueDate ? new Date(body.wsCalibrationDueDate) : null) : existing.wsCalibrationDueDate,
-      wsCableLength: body.wsCableLength !== undefined ? (body.wsCableLength?.trim() || null) : existing.wsCableLength,
-      wsCableType: body.wsCableType !== undefined ? (body.wsCableType?.trim() || null) : existing.wsCableType,
-      wsProbeDetails: body.wsProbeDetails !== undefined ? (typeof body.wsProbeDetails === "string" ? body.wsProbeDetails : null) : existing.wsProbeDetails,
-      wsCalibrationBlock: body.wsCalibrationBlock !== undefined ? (body.wsCalibrationBlock?.trim() || null) : existing.wsCalibrationBlock,
-      wsCalibrationBlockMoc: body.wsCalibrationBlockMoc !== undefined ? (body.wsCalibrationBlockMoc?.trim() || null) : existing.wsCalibrationBlockMoc,
-      wsReferenceReflector: body.wsReferenceReflector !== undefined ? (body.wsReferenceReflector?.trim() || null) : existing.wsReferenceReflector,
-      wsReferenceLevel: body.wsReferenceLevel !== undefined ? (body.wsReferenceLevel?.trim() || null) : existing.wsReferenceLevel,
-      wsFlawSizingTechnique: body.wsFlawSizingTechnique !== undefined ? (body.wsFlawSizingTechnique?.trim() || null) : existing.wsFlawSizingTechnique,
-      wsSurfaceTemperature: body.wsSurfaceTemperature !== undefined ? (body.wsSurfaceTemperature?.trim() || null) : existing.wsSurfaceTemperature,
-      wsTestingMethod: body.wsTestingMethod !== undefined ? (body.wsTestingMethod?.trim() || null) : existing.wsTestingMethod,
-      wsCouplant: body.wsCouplant !== undefined ? (body.wsCouplant?.trim() || null) : existing.wsCouplant,
-      wsSurfacePreparation: body.wsSurfacePreparation !== undefined ? (body.wsSurfacePreparation?.trim() || null) : existing.wsSurfacePreparation,
-      wsSurfaceFinish: body.wsSurfaceFinish !== undefined ? (body.wsSurfaceFinish?.trim() || null) : existing.wsSurfaceFinish,
-      wsExtentOfScanning: body.wsExtentOfScanning !== undefined ? (body.wsExtentOfScanning?.trim() || null) : existing.wsExtentOfScanning,
-      wsDetailRows: body.wsDetailRows !== undefined ? (typeof body.wsDetailRows === "string" ? body.wsDetailRows : null) : existing.wsDetailRows,
       // ─── EQUIPMENT TYPE + VESSEL ORIENTATION ───
       // Only updated when the form explicitly sends them; existing values
       // are preserved otherwise. vesselOrientation stays constrained to
@@ -345,6 +320,32 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       vmptInkLotNo: body.vmptInkLotNo !== undefined ? (body.vmptInkLotNo?.trim() || null) : existing.vmptInkLotNo,
       vmptInkExpiry: body.vmptInkExpiry !== undefined ? (body.vmptInkExpiry?.trim() || null) : existing.vmptInkExpiry,
       vmptRows: body.vmptRows !== undefined ? (typeof body.vmptRows === "string" ? body.vmptRows : null) : existing.vmptRows,
+      // ─── VESSEL WELD SCAN FIELDS (reportType = VESSEL_WELD_SCAN) ───
+      // Completely separate from the Piping Weld Scan ws* fields above —
+      // the piping Weld Scan keeps its original storage and layout.
+      vwsDateOfExamination: body.vwsDateOfExamination !== undefined ? (body.vwsDateOfExamination ? new Date(body.vwsDateOfExamination) : null) : existing.vwsDateOfExamination,
+      vwsTestingStandard: body.vwsTestingStandard !== undefined ? (body.vwsTestingStandard?.trim() || null) : existing.vwsTestingStandard,
+      vwsAcceptanceCriteria: body.vwsAcceptanceCriteria !== undefined ? (body.vwsAcceptanceCriteria?.trim() || null) : existing.vwsAcceptanceCriteria,
+      vwsUtProcedure: body.vwsUtProcedure !== undefined ? (body.vwsUtProcedure?.trim() || null) : existing.vwsUtProcedure,
+      vwsEquipmentMake: body.vwsEquipmentMake !== undefined ? (body.vwsEquipmentMake?.trim() || null) : existing.vwsEquipmentMake,
+      vwsEquipmentModel: body.vwsEquipmentModel !== undefined ? (body.vwsEquipmentModel?.trim() || null) : existing.vwsEquipmentModel,
+      vwsEquipmentSerialNo: body.vwsEquipmentSerialNo !== undefined ? (body.vwsEquipmentSerialNo?.trim() || null) : existing.vwsEquipmentSerialNo,
+      vwsCalibrationDueDate: body.vwsCalibrationDueDate !== undefined ? (body.vwsCalibrationDueDate ? new Date(body.vwsCalibrationDueDate) : null) : existing.vwsCalibrationDueDate,
+      vwsCableLength: body.vwsCableLength !== undefined ? (body.vwsCableLength?.trim() || null) : existing.vwsCableLength,
+      vwsCableType: body.vwsCableType !== undefined ? (body.vwsCableType?.trim() || null) : existing.vwsCableType,
+      vwsProbeDetails: body.vwsProbeDetails !== undefined ? (typeof body.vwsProbeDetails === "string" ? body.vwsProbeDetails : null) : existing.vwsProbeDetails,
+      vwsCalibrationBlock: body.vwsCalibrationBlock !== undefined ? (body.vwsCalibrationBlock?.trim() || null) : existing.vwsCalibrationBlock,
+      vwsCalibrationBlockMoc: body.vwsCalibrationBlockMoc !== undefined ? (body.vwsCalibrationBlockMoc?.trim() || null) : existing.vwsCalibrationBlockMoc,
+      vwsReferenceReflector: body.vwsReferenceReflector !== undefined ? (body.vwsReferenceReflector?.trim() || null) : existing.vwsReferenceReflector,
+      vwsReferenceLevel: body.vwsReferenceLevel !== undefined ? (body.vwsReferenceLevel?.trim() || null) : existing.vwsReferenceLevel,
+      vwsFlawSizingTechnique: body.vwsFlawSizingTechnique !== undefined ? (body.vwsFlawSizingTechnique?.trim() || null) : existing.vwsFlawSizingTechnique,
+      vwsSurfaceTemperature: body.vwsSurfaceTemperature !== undefined ? (body.vwsSurfaceTemperature?.trim() || null) : existing.vwsSurfaceTemperature,
+      vwsTestingMethod: body.vwsTestingMethod !== undefined ? (body.vwsTestingMethod?.trim() || null) : existing.vwsTestingMethod,
+      vwsCouplant: body.vwsCouplant !== undefined ? (body.vwsCouplant?.trim() || null) : existing.vwsCouplant,
+      vwsSurfacePreparation: body.vwsSurfacePreparation !== undefined ? (body.vwsSurfacePreparation?.trim() || null) : existing.vwsSurfacePreparation,
+      vwsSurfaceFinish: body.vwsSurfaceFinish !== undefined ? (body.vwsSurfaceFinish?.trim() || null) : existing.vwsSurfaceFinish,
+      vwsExtentOfScanning: body.vwsExtentOfScanning !== undefined ? (body.vwsExtentOfScanning?.trim() || null) : existing.vwsExtentOfScanning,
+      vwsDetailRows: body.vwsDetailRows !== undefined ? (typeof body.vwsDetailRows === "string" ? body.vwsDetailRows : null) : existing.vwsDetailRows,
     },
   });
 

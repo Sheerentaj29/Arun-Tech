@@ -78,7 +78,7 @@ const VESSEL_OPTIONS: TypeOption[] = [
     accent: "border-orange-500 bg-orange-50 hover:bg-orange-100",
   },
   {
-    type: "PIPELINE_WELD_SCAN",
+    type: "VESSEL_WELD_SCAN",
     title: "Weld Scan",
     subtitle: "Weld scan inspection for vessel welds and nozzles",
     icon: Zap,

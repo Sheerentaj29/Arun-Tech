@@ -439,68 +439,17 @@ model PipelineInspection {
   utTestResultRows                  String?  // JSON: [{description, beamId, noOfJoints, thickness, weldType, moc, totalMeter, results}]
   utCustomColumns                   String?  // JSON: [{id, name, unit}] (reserved for future)
 
-  // ─── WELD SCAN LEGACY FIELDS (superseded) ───
-  // The Weld Scan report was redesigned. These columns are kept ONLY so
-  // existing Draft rows are not lost on db push; the redesigned Weld Scan
-  // form / review page / PDF (reportType = PIPELINE_WELD_SCAN) no longer
-  // reads or writes them. Do not use them for new features.
-  wsScanningCalibrationBlock        String?  // (legacy) Calibration Block
-  wsScanningReferenceLevel          String?  // (legacy) Reference Level
-  wsScanningExtentOfExamination     String?  // (legacy) Extent of Examination
-  wsScanningSurfaceCondition        String?  // (legacy) Surface Condition
-  wsScanningFlawSizingTechnique     String?  // (legacy) Flaw Sizing Technique
-  wsInstrumentRows                  String?  // (legacy) JSON instrument rows
-  wsProbeRows                       String?  // (legacy) JSON probe rows
-  wsTestResultRows                  String?  // (legacy) JSON test-result rows
-
-  // ─── WELD SCAN REPORT FIELDS (redesigned module) ───
-  // Populated when reportType = PIPELINE_WELD_SCAN (Piping and Vessel).
-  // Parameters are grouped: Basic Information / Equipment Details /
-  // Cable Details / Probe Details / Calibration Details / Scanning
-  // Details. Nothing is hardcoded — every value is typed by the user.
-  // Basic Information
-  wsDateOfExamination               DateTime? // Date of Examination (calendar picker)
-  wsTestingStandard                 String?  // Testing Standard
-  wsAcceptanceCriteria              String?  // Acceptance Criteria
-  wsUtProcedure                     String?  // UT Procedure
-  // Equipment Details
-  wsEquipmentMake                   String?  // Equipment Make
-  wsEquipmentModel                  String?  // Equipment Model
-  wsEquipmentSerialNo               String?  // Equipment Serial Number
-  wsCalibrationDueDate              DateTime? // Calibration Due Date (calendar picker)
-  // Cable Details
-  wsCableLength                     String?  // Cable Length (e.g. 2.0 meters)
-  wsCableType                       String?  // Cable Type (e.g. Coaxial)
-  // Probe Details — fixed 4-row grid (Longitudinal 0°, Shear 45°,
-  // Shear 60°, Shear 70°). JSON array:
-  //   [{ "probeType": "Longitudinal Wave", "probeAngle": "0°",
-  //      "frequency": "...", "probeSize": "...", "serialNo": "..." }]
-  wsProbeDetails                    String?
-  // Calibration Details
-  wsCalibrationBlock                String?  // Calibration Block
-  wsCalibrationBlockMoc             String?  // Material / MOC of Calibration Block
-  wsReferenceReflector              String?  // Reference Reflector
-  wsReferenceLevel                  String?  // Reference Level
-  // Scanning Details
-  wsFlawSizingTechnique             String?  // Flaw Sizing Technique
-  wsSurfaceTemperature              String?  // Surface Temperature
-  wsTestingMethod                   String?  // Testing Method
-  wsCouplant                        String?  // Couplant
-  wsSurfacePreparation              String?  // Surface Preparation
-  wsSurfaceFinish                   String?  // Surface Finish
-  wsExtentOfScanning                String?  // Extent of Scanning
-  // Testing Details rows — column set depends on the asset type chosen
-  // at creation (equipmentType = PIPING | VESSEL):
-  //   Vessel: Sl. No | Component | Plate / Weld ID | Weld Dimension |
-  //           Probe Angle | Probe Frequency | Observation & Result
-  //   Piping: Sl. No | Pipeline / Weld Location | Weld ID | Weld Type |
-  //           Weld Dimension | Probe Angle | Probe Frequency |
-  //           Observation & Result
-  // JSON array (shared shape — unused fields stay empty):
-  //   [{ "location": "...", "weldId": "...", "weldType": "...",
-  //      "weldDimension": "...", "probeAngle": "...",
-  //      "probeFrequency": "...", "observationResult": "..." }]
-  wsDetailRows                      String?
+  // ─── WELD SCAN SPECIFIC FIELDS ───
+  // Populated when reportType = PIPELINE_WELD_SCAN. Stored as JSON strings.
+  // Multi-row tables for instrument details, probe details, and test results.
+  wsScanningCalibrationBlock        String?  // Calibration Block (typeable)
+  wsScanningReferenceLevel          String?  // Reference Level (typeable)
+  wsScanningExtentOfExamination     String?  // Extent of Examination (typeable)
+  wsScanningSurfaceCondition        String?  // Surface Condition (dropdown)
+  wsScanningFlawSizingTechnique     String?  // Flaw Sizing Technique (dropdown)
+  wsInstrumentRows                  String?  // JSON: [{equipmentType, machineMake, model, mcSrNo, calibrationDueDate}]
+  wsProbeRows                       String?  // JSON: [{probeType, probeAngle, frequency, size, probeNo, range, referenceDb, scanningDb}]
+  wsTestResultRows                  String?  // JSON: [{description, identificationNo, weldType, probe, bp, sd, depth, echoHeight, length, observation, result}]
 
   // ─── EQUIPMENT TYPE + VESSEL FIELDS ───
   // equipmentType records the selection made in the report-creation flow
@@ -551,6 +500,53 @@ model PipelineInspection {
   vmptInkLotNo              String?  // Wet Particle Iron Ink — Lot Number
   vmptInkExpiry             String?  // Wet Particle Iron Ink — Expiry Date
   vmptRows                  String?  // JSON testing-details rows (see above)
+
+  // ─── VESSEL WELD SCAN FIELDS ───
+  // Populated when reportType = VESSEL_WELD_SCAN. Completely separate
+  // from the Piping Weld Scan (reportType = PIPELINE_WELD_SCAN, which
+  // uses the ws* fields above — those stay untouched). Parameters follow
+  // the Vessel Weld Scan reference layout: General Information /
+  // Equipment Details / Cable Details / Probe Details / Calibration
+  // Details / Other Testing Parameters. Nothing is hardcoded — every
+  // value is typed by the user.
+  // General Information
+  vwsDateOfExamination      DateTime? // Date of Examination (calendar picker)
+  vwsTestingStandard        String?  // Testing Standard
+  vwsAcceptanceCriteria     String?  // Acceptance Criteria
+  vwsUtProcedure            String?  // UT Procedure
+  // Equipment Details
+  vwsEquipmentMake          String?  // Equipment Make
+  vwsEquipmentModel         String?  // Equipment Model
+  vwsEquipmentSerialNo      String?  // Equipment Serial Number
+  vwsCalibrationDueDate     DateTime? // Calibration Due Date (calendar picker)
+  // Cable Details
+  vwsCableLength            String?  // Cable Length
+  vwsCableType              String?  // Cable Type
+  // Probe Details — fixed 4-probe grid (Longitudinal Wave 0°, Shear Wave
+  // 45°, Shear Wave 60°, Shear Wave 70°). JSON array:
+  //   [{ "probeType": "Longitudinal Wave", "probeAngle": "0°",
+  //      "frequency": "...", "probeSize": "...", "serialNo": "..." }]
+  vwsProbeDetails           String?
+  // Calibration Details
+  vwsCalibrationBlock       String?  // Calibration Block
+  vwsCalibrationBlockMoc    String?  // Material / MOC of Calibration Block
+  vwsReferenceReflector     String?  // Reference Reflector
+  vwsReferenceLevel         String?  // Reference Level
+  // Other Testing Parameters
+  vwsFlawSizingTechnique    String?  // Flaw Sizing Technique
+  vwsSurfaceTemperature     String?  // Surface Temperature
+  vwsTestingMethod          String?  // Method
+  vwsCouplant               String?  // Couplant
+  vwsSurfacePreparation     String?  // Surface Preparation
+  vwsSurfaceFinish          String?  // Surface Finish
+  vwsExtentOfScanning       String?  // Extent of Scanning
+  // Testing Details rows — Vessel-specific column set:
+  //   Sl. No | Component | Plate / Weld ID | Weld Dimension | Probe Angle |
+  //   Probe Frequency | Observation & Result
+  // JSON array:
+  //   [{ "component": "...", "plateWeldId": "...", "weldDimension": "...",
+  //      "probeAngle": "...", "probeFrequency": "...", "observationResult": "..." }]
+  vwsDetailRows             String?
 
   isDemo                   Boolean  @default(false)
   createdAt                DateTime @default(now())

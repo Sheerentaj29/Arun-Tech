@@ -40,7 +40,7 @@ import { toast } from "sonner";
 interface PipelineReportListItem {
   id: string;
   reportNumber: string;
-  reportType: "PIPELINE_THICKNESS" | "PIPELINE_VISUAL" | "PIPELINE_CONDITION" | "PIPELINE_DPT" | "PIPELINE_MPT" | "PIPELINE_WELD_SCAN" | "VESSEL_DPT" | "VESSEL_MPT";
+  reportType: "PIPELINE_THICKNESS" | "PIPELINE_VISUAL" | "PIPELINE_CONDITION" | "PIPELINE_DPT" | "PIPELINE_MPT" | "PIPELINE_WELD_SCAN" | "VESSEL_DPT" | "VESSEL_MPT" | "VESSEL_WELD_SCAN";
   inspectionDate: string;
   status: "Draft" | "Submitted" | "Approved" | "Rejected" | "Superseded";
   revisionNumber: number;
@@ -83,6 +83,7 @@ const REPORT_TYPE_LABEL: Record<string, { label: string; color: string }> = {
   PIPELINE_WELD_SCAN: { label: "Weld Scan", color: "border-cyan-500 text-cyan-700" },
   VESSEL_DPT:         { label: "Vessel DPT", color: "border-purple-500 text-purple-700" },
   VESSEL_MPT:         { label: "Vessel MPT", color: "border-orange-500 text-orange-700" },
+  VESSEL_WELD_SCAN:   { label: "Vessel Weld Scan", color: "border-cyan-500 text-cyan-700" },
 };
 
 export function PipelineReportsListView() {

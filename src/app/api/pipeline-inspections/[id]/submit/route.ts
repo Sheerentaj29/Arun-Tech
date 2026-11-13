@@ -81,6 +81,20 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         { status: 400 },
       );
     }
+  } else if (reportType === "VESSEL_WELD_SCAN") {
+    // Vessel Weld Scan testing-details rows live in the vwsDetailRows JSON
+    // column — same rule as Vessel MPT.
+    let vwsRowCount = 0;
+    try {
+      const parsed = JSON.parse(existing.vwsDetailRows ?? "[]");
+      if (Array.isArray(parsed)) vwsRowCount = parsed.length;
+    } catch {}
+    if (vwsRowCount === 0) {
+      return NextResponse.json(
+        { error: "Cannot submit a vessel weld scan report with no testing-details rows. Add at least one row first." },
+        { status: 400 },
+      );
+    }
   } else if (reportType === "PIPELINE_CONDITION") {
     // Condition reports don't have child rows — require at least one of the
     // main free-text fields to be filled in.

@@ -147,6 +147,7 @@ export async function POST(req: NextRequest) {
         "PIPELINE_WELD_SCAN",
         "VESSEL_DPT",
         "VESSEL_MPT",
+        "VESSEL_WELD_SCAN",
         "PIPELINE_VISUAL",
         "PIPELINE_CONDITION",
       ].includes(body.reportType)
@@ -287,8 +288,7 @@ export async function POST(req: NextRequest) {
       utProbeRows: body.utProbeRows ?? "[]",
       utTestResultRows: body.utTestResultRows ?? "[]",
       utCustomColumns: body.utCustomColumns ?? "[]",
-      // ─── WELD SCAN FIELDS (legacy columns — superseded, kept for old
-      // draft rows; the redesigned Weld Scan form no longer sends them) ───
+      // ─── WELD SCAN FIELDS ───
       wsScanningCalibrationBlock: body.wsScanningCalibrationBlock?.trim() || null,
       wsScanningReferenceLevel: body.wsScanningReferenceLevel?.trim() || null,
       wsScanningExtentOfExamination: body.wsScanningExtentOfExamination?.trim() || null,
@@ -297,34 +297,6 @@ export async function POST(req: NextRequest) {
       wsInstrumentRows: body.wsInstrumentRows ?? "[]",
       wsProbeRows: body.wsProbeRows ?? "[]",
       wsTestResultRows: body.wsTestResultRows ?? "[]",
-      // ─── WELD SCAN REPORT FIELDS (redesigned module) ───
-      // Parameters: Basic Information / Equipment / Cable / Probe /
-      // Calibration / Scanning. Probe details are a fixed 4-row JSON grid
-      // (Longitudinal 0°, Shear 45° / 60° / 70°); testing-details rows
-      // are a JSON array whose column set depends on the asset type.
-      wsDateOfExamination: body.wsDateOfExamination ? new Date(body.wsDateOfExamination) : null,
-      wsTestingStandard: body.wsTestingStandard?.trim() || null,
-      wsAcceptanceCriteria: body.wsAcceptanceCriteria?.trim() || null,
-      wsUtProcedure: body.wsUtProcedure?.trim() || null,
-      wsEquipmentMake: body.wsEquipmentMake?.trim() || null,
-      wsEquipmentModel: body.wsEquipmentModel?.trim() || null,
-      wsEquipmentSerialNo: body.wsEquipmentSerialNo?.trim() || null,
-      wsCalibrationDueDate: body.wsCalibrationDueDate ? new Date(body.wsCalibrationDueDate) : null,
-      wsCableLength: body.wsCableLength?.trim() || null,
-      wsCableType: body.wsCableType?.trim() || null,
-      wsProbeDetails: typeof body.wsProbeDetails === "string" ? body.wsProbeDetails : null,
-      wsCalibrationBlock: body.wsCalibrationBlock?.trim() || null,
-      wsCalibrationBlockMoc: body.wsCalibrationBlockMoc?.trim() || null,
-      wsReferenceReflector: body.wsReferenceReflector?.trim() || null,
-      wsReferenceLevel: body.wsReferenceLevel?.trim() || null,
-      wsFlawSizingTechnique: body.wsFlawSizingTechnique?.trim() || null,
-      wsSurfaceTemperature: body.wsSurfaceTemperature?.trim() || null,
-      wsTestingMethod: body.wsTestingMethod?.trim() || null,
-      wsCouplant: body.wsCouplant?.trim() || null,
-      wsSurfacePreparation: body.wsSurfacePreparation?.trim() || null,
-      wsSurfaceFinish: body.wsSurfaceFinish?.trim() || null,
-      wsExtentOfScanning: body.wsExtentOfScanning?.trim() || null,
-      wsDetailRows: typeof body.wsDetailRows === "string" ? body.wsDetailRows : null,
       // ─── VESSEL DPT CONSUMABLE DETAILS (Make / Product / Batch / Expiry) ───
       vdptSolventMake: body.vdptSolventMake?.trim() || null,
       vdptSolventProduct: body.vdptSolventProduct?.trim() || null,
@@ -348,6 +320,32 @@ export async function POST(req: NextRequest) {
       vmptInkLotNo: body.vmptInkLotNo?.trim() || null,
       vmptInkExpiry: body.vmptInkExpiry?.trim() || null,
       vmptRows: typeof body.vmptRows === "string" ? body.vmptRows : null,
+      // ─── VESSEL WELD SCAN FIELDS (reportType = VESSEL_WELD_SCAN) ───
+      // Completely separate from the Piping Weld Scan ws* fields above —
+      // the piping Weld Scan keeps its original storage and layout.
+      vwsDateOfExamination: body.vwsDateOfExamination ? new Date(body.vwsDateOfExamination) : null,
+      vwsTestingStandard: body.vwsTestingStandard?.trim() || null,
+      vwsAcceptanceCriteria: body.vwsAcceptanceCriteria?.trim() || null,
+      vwsUtProcedure: body.vwsUtProcedure?.trim() || null,
+      vwsEquipmentMake: body.vwsEquipmentMake?.trim() || null,
+      vwsEquipmentModel: body.vwsEquipmentModel?.trim() || null,
+      vwsEquipmentSerialNo: body.vwsEquipmentSerialNo?.trim() || null,
+      vwsCalibrationDueDate: body.vwsCalibrationDueDate ? new Date(body.vwsCalibrationDueDate) : null,
+      vwsCableLength: body.vwsCableLength?.trim() || null,
+      vwsCableType: body.vwsCableType?.trim() || null,
+      vwsProbeDetails: typeof body.vwsProbeDetails === "string" ? body.vwsProbeDetails : null,
+      vwsCalibrationBlock: body.vwsCalibrationBlock?.trim() || null,
+      vwsCalibrationBlockMoc: body.vwsCalibrationBlockMoc?.trim() || null,
+      vwsReferenceReflector: body.vwsReferenceReflector?.trim() || null,
+      vwsReferenceLevel: body.vwsReferenceLevel?.trim() || null,
+      vwsFlawSizingTechnique: body.vwsFlawSizingTechnique?.trim() || null,
+      vwsSurfaceTemperature: body.vwsSurfaceTemperature?.trim() || null,
+      vwsTestingMethod: body.vwsTestingMethod?.trim() || null,
+      vwsCouplant: body.vwsCouplant?.trim() || null,
+      vwsSurfacePreparation: body.vwsSurfacePreparation?.trim() || null,
+      vwsSurfaceFinish: body.vwsSurfaceFinish?.trim() || null,
+      vwsExtentOfScanning: body.vwsExtentOfScanning?.trim() || null,
+      vwsDetailRows: typeof body.vwsDetailRows === "string" ? body.vwsDetailRows : null,
       isDemo: false,
     },
     include: {
