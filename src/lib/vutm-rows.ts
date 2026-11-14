@@ -60,6 +60,11 @@ export interface VutmClockRow {
   componentType: string;
   componentId: string;
   nominalThickness: string;
+  /** NPS / Pipe Size (HORIZONTAL) or Nominal Bore inch (VERTICAL) —
+   *  from the orientation's size/schedule/WT reference configuration. */
+  size: string;
+  /** Schedule label, e.g. "SCH 40" (H) or "SCH 40S" (V). */
+  schedule: string;
   c12: string[];
   c3: string[];
   c6: string[];
@@ -72,6 +77,11 @@ export interface VutmDirectionRow {
   componentType: string;
   componentId: string;
   nominalThickness: string;
+  /** NPS / Pipe Size (HORIZONTAL) or Nominal Bore inch (VERTICAL) —
+   *  from the orientation's size/schedule/WT reference configuration. */
+  size: string;
+  /** Schedule label, e.g. "SCH 40" (H) or "SCH 40S" (V). */
+  schedule: string;
   direction: string;
   readings: string[];
   min: string;
@@ -203,6 +213,8 @@ function normalizeClockRow(r: Record<string, unknown>): VutmClockRow {
     componentType: toStr(r.componentType),
     componentId: toStr(r.componentId),
     nominalThickness: toStr(r.nominalThickness),
+    size: toStr(r.size),
+    schedule: toStr(r.schedule),
     c12: normalizeReadingArray(r.c12),
     c3: normalizeReadingArray(r.c3),
     c6: normalizeReadingArray(r.c6),
@@ -241,6 +253,8 @@ function normalizeDirectionRow(r: Record<string, unknown>): VutmDirectionRow {
     componentType: toStr(r.componentType) || toStr(r.component),
     componentId: toStr(r.componentId) || toStr(r.nozzleId),
     nominalThickness: toStr(r.nominalThickness),
+    size: toStr(r.size),
+    schedule: toStr(r.schedule),
     direction: normalizeDirection(r.direction),
     readings,
     min: vutmMinOfSpots(readings),
@@ -257,6 +271,8 @@ function directionRowsFromClockRow(r: Record<string, unknown>): VutmDirectionRow
     componentType: toStr(r.componentType),
     componentId: toStr(r.componentId),
     nominalThickness: toStr(r.nominalThickness),
+    size: toStr(r.size),
+    schedule: toStr(r.schedule),
   };
   const clockKeyToDirection: Array<[VutmClockKey, string]> = [
     ["c12", "North"],
@@ -289,6 +305,8 @@ function clockRowFromDirectionRow(r: Record<string, unknown>): VutmClockRow {
     componentType: toStr(r.componentType) || toStr(r.component),
     componentId: toStr(r.componentId),
     nominalThickness: toStr(r.nominalThickness),
+    size: toStr(r.size),
+    schedule: toStr(r.schedule),
     c12: [""],
     c3: [""],
     c6: [""],
@@ -518,6 +536,8 @@ export function emptyVutmRow(orientation?: VesselOrientation | null): VutmRow {
       componentType: "",
       componentId: "",
       nominalThickness: "",
+      size: "",
+      schedule: "",
       direction: "",
       readings: [""],
       min: "",
@@ -528,6 +548,8 @@ export function emptyVutmRow(orientation?: VesselOrientation | null): VutmRow {
     componentType: "",
     componentId: "",
     nominalThickness: "",
+    size: "",
+    schedule: "",
     c12: [""],
     c3: [""],
     c6: [""],

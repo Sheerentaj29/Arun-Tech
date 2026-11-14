@@ -77,6 +77,21 @@ import {
   type VutmClockKey,
   type VesselOrientation as VutmOrientation,
 } from "@/lib/vutm-rows";
+// Size / Schedule / WT reference configuration — VESSEL_UTM ONLY (the two
+// orientations carry separate chart data; the Piping UT configuration in
+// src/lib/domain/pipe-standards.ts is NOT used or modified here).
+import {
+  vutmHNpsOptions,
+  vutmHSize,
+  vutmHSchedulesFor,
+  vutmHWtFor,
+  vutmVSizeOptions,
+  vutmVSize,
+  vutmVSchedulesFor,
+  vutmVWtFor,
+  vutmSchedulesFor,
+  vutmWtFor,
+} from "@/lib/vessel-ut-reference";
 import { toast } from "sonner";
 
 // ---------- REPORT TYPE METADATA ----------
@@ -2781,6 +2796,46 @@ export function PipelineReportFormView() {
     setVutmShellRows((arr) => {
       const next = [...arr];
       next[idx] = { ...next[idx], ...patch } as VutmRow;
+      return next;
+    });
+  }
+
+  /**
+   * Set the size (NPS / Pipe Size for HORIZONTAL, Nominal Bore / Inch for
+   * VERTICAL) on a component row. If the previously selected schedule is
+   * not valid for the new size it is cleared — invalid size + schedule
+   * combinations are never selectable.
+   */
+  function updateVutmShellSize(idx: number, size: string) {
+    setVutmShellRows((arr) => {
+      const cur = arr[idx];
+      if (!cur) return arr;
+      const valid = vutmSchedulesFor(header.vesselOrientation, size);
+      const schedule = valid.includes(cur.schedule) ? cur.schedule : "";
+      const next = [...arr];
+      next[idx] = { ...cur, size, schedule };
+      return next;
+    });
+  }
+
+  /**
+   * Set the schedule on a component row and AUTO-POPULATE the WT: the
+   * chart value for size + schedule fills the Nominal Thickness field
+   * (still editable afterwards). Only chart-valid schedules reach this
+   * handler — the Schedule dropdown is filtered by the selected size, so
+   * invalid combinations cannot be selected. No weight data is involved.
+   */
+  function updateVutmShellSchedule(idx: number, schedule: string) {
+    setVutmShellRows((arr) => {
+      const cur = arr[idx];
+      if (!cur) return arr;
+      const wt = vutmWtFor(header.vesselOrientation, cur.size, schedule);
+      const next = [...arr];
+      next[idx] = {
+        ...cur,
+        schedule,
+        nominalThickness: wt !== null ? wt : cur.nominalThickness,
+      };
       return next;
     });
   }
@@ -6096,6 +6151,9 @@ export function PipelineReportFormView() {
                   : ""}
                 Component suggestions: {VUTM_COMPONENT_TYPES.join(", ")} — any custom component can be typed. Nozzle ID suggestions: {VUTM_NOZZLE_ID_SUGGESTIONS.join(", ")}.
               </p>
+              <p className="text-xs text-muted-foreground mb-2">
+                <strong>Size / Schedule / WT:</strong> pick the {header.vesselOrientation === "VERTICAL" ? "Nominal Bore / Inch (pink chart: 3 mm / 1/8 … 600 mm / 24)" : "NPS / Pipe Size (1/4 … 48 — 1/8 and 3/8 are not offered)"} first; the Schedule dropdown then shows only the schedules that have a wall-thickness value for that size, and the WT (mm) auto-populates the Nominal Thickness. Invalid size + schedule combinations cannot be selected. WT only — no weight data is used.
+              </p>
               <div className="overflow-x-auto">
                 {/* ─── VERTICAL: direction-based table ─── */}
                 {header.vesselOrientation === "VERTICAL" ? (
@@ -6105,6 +6163,8 @@ export function PipelineReportFormView() {
                       <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 110 }}>MOC</th>
                       <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 130 }}>Component Type</th>
                       <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 110 }}>Component ID</th>
+                      <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 130 }}>Nominal Bore / Inch</th>
+                      <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 100 }}>Schedule</th>
                       <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 90 }}>Nominal Thickness (mm)</th>
                       <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 100 }}>Direction</th>
                       <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 170 }}>Readings (mm)</th>
@@ -6115,7 +6175,7 @@ export function PipelineReportFormView() {
                   <tbody>
                     {vutmShellRows.length === 0 && (
                       <tr>
-                        <td colSpan={8} className="text-center py-6 text-muted-foreground border border-zinc-300">
+                        <td colSpan={10} className="text-center py-6 text-muted-foreground border border-zinc-300">
                           No rows yet. Click <strong>Add Component Row</strong> to begin — e.g. one row per direction for Shell-1 (East, West, North, South).
                         </td>
                       </tr>
@@ -6159,6 +6219,52 @@ export function PipelineReportFormView() {
                           <datalist id={`vutm-comp-id-v-${idx}`}>
                             {VUTM_NOZZLE_ID_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
                           </datalist>
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          {/* Nominal Bore / Inch — vertical (pink) chart sizes.
+                              Selecting a size filters the Schedule dropdown to
+                              only the schedules that have a WT value. */}
+                          <Select
+                            value={dirRow.size || undefined}
+                            onValueChange={(v) => updateVutmShellSize(idx, v)}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="Select size" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {vutmVSizeOptions().map((o) => {
+                                const sz = vutmVSize(o.value);
+                                return (
+                                  <SelectItem key={o.value} value={o.value}>
+                                    {o.label}
+                                    {sz ? ` (OD ${sz.odMm})` : ""}
+                                  </SelectItem>
+                                );
+                              })}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          {/* Schedule — only chart-valid schedules for the
+                              selected size; WT auto-populates Nominal
+                              Thickness. Weight is intentionally not part of
+                              the configuration. */}
+                          <Select
+                            disabled={!dirRow.size}
+                            value={dirRow.schedule || undefined}
+                            onValueChange={(v) => updateVutmShellSchedule(idx, v)}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder={dirRow.size ? "Schedule" : "Pick size first"} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {vutmVSchedulesFor(dirRow.size).map((s) => (
+                                <SelectItem key={s} value={s}>
+                                  {s} · WT {vutmVWtFor(dirRow.size, s)} mm
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </td>
                         <td className="border border-zinc-300 p-1">
                           <Input
@@ -6252,6 +6358,8 @@ export function PipelineReportFormView() {
                       <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 110 }}>MOC</th>
                       <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 130 }}>Component Type</th>
                       <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 110 }}>Component ID</th>
+                      <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 120 }}>NPS / Pipe Size</th>
+                      <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 110 }}>Schedule</th>
                       <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 90 }}>Nominal Thickness (mm)</th>
                       <th colSpan={4} className="border border-emerald-900 px-2 py-2 text-center">Clock-Position Readings (mm)</th>
                       <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 80 }}>Minimum Measured Thickness (mm)</th>
@@ -6267,7 +6375,7 @@ export function PipelineReportFormView() {
                   <tbody>
                     {vutmShellRows.length === 0 && (
                       <tr>
-                        <td colSpan={9} className="text-center py-6 text-muted-foreground border border-zinc-300">
+                        <td colSpan={11} className="text-center py-6 text-muted-foreground border border-zinc-300">
                           No rows yet. Click <strong>Add Component Row</strong> to begin.
                         </td>
                       </tr>
@@ -6309,6 +6417,51 @@ export function PipelineReportFormView() {
                           <datalist id={`vutm-comp-id-${idx}`}>
                             {VUTM_NOZZLE_ID_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
                           </datalist>
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          {/* NPS / Pipe Size — horizontal (carbon-steel) chart
+                              sizes (1/4 … 48 — 1/8 and 3/8 are NOT offered).
+                              DN and OD are associated with each NPS. */}
+                          <Select
+                            value={row.size || undefined}
+                            onValueChange={(v) => updateVutmShellSize(idx, v)}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="Select NPS" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {vutmHNpsOptions().map((nps) => {
+                                const sz = vutmHSize(nps);
+                                return (
+                                  <SelectItem key={nps} value={nps}>
+                                    {nps}
+                                    {sz ? ` (${sz.dn} · OD ${sz.odMm})` : ""}
+                                  </SelectItem>
+                                );
+                              })}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          {/* Schedule — only the chart schedules that have a
+                              WT value for the selected NPS; WT auto-populates
+                              Nominal Thickness. */}
+                          <Select
+                            disabled={!row.size}
+                            value={row.schedule || undefined}
+                            onValueChange={(v) => updateVutmShellSchedule(idx, v)}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder={row.size ? "Schedule" : "Pick NPS first"} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {vutmHSchedulesFor(row.size).map((s) => (
+                                <SelectItem key={s} value={s}>
+                                  {s} · WT {vutmHWtFor(row.size, s)} mm
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </td>
                         <td className="border border-zinc-300 p-1">
                           <Input

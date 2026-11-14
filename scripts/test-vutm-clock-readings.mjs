@@ -249,7 +249,56 @@ check("V PDF: Direction column + North/East rows", vtxt.includes("Direction") &&
 check("V PDF: added reading 8.8 + min 8.8", vtxt.includes("8.8"));
 check("V PDF: no clock table", !vtxt.includes("Component Measurements (Clock Positions)"));
 
-// ─── 7. Regression — orientation accepted ONLY for VESSEL_UTM ───
+// ─── 7. Size / Schedule / WT configuration (VESSEL_UTM ONLY) ───
+console.log("── 7. Size/Schedule/WT reference configuration ──");
+const refH = await api("/api/pipeline-inspections", {
+  method: "POST",
+  body: JSON.stringify({
+    ...base,
+    reportNumber: `VUTM-REF-H-${ts}`,
+    reportType: "VESSEL_UTM",
+    equipmentType: "VESSEL",
+    vesselOrientation: "HORIZONTAL",
+    pipelineDescription: "Size/schedule WT check",
+    vutmShellRows: JSON.stringify([
+      // NPS 2 + SCH 40 → WT 3.91 (chart); size/schedule must persist.
+      { moc: "CS", componentType: "Shell-1", componentId: "S-01", nominalThickness: "3.91",
+        size: "2", schedule: "SCH 40", c12: ["7.9"], c3: [""], c6: [""], c9: [""] },
+      // Rows without size/schedule (older UI) stay valid → "".
+      { moc: "CS", componentType: "Shell-2", componentId: "S-02", nominalThickness: "8",
+        c12: ["7.9"], c3: [""], c6: [""], c9: [""] },
+    ]),
+  }),
+});
+check("H report with size+schedule rows (201)", refH.httpStatus === 201, JSON.stringify(refH).slice(0, 160));
+const rhRows = JSON.parse(refH.vutmShellRows ?? "[]");
+check("H size/schedule persisted (2 / SCH 40)", rhRows[0]?.size === "2" && rhRows[0]?.schedule === "SCH 40", JSON.stringify(rhRows[0]));
+check("H nominal WT = 3.91 kept", rhRows[0]?.nominalThickness === "3.91");
+check("rows without size/schedule → empty strings", rhRows[1]?.size === "" && rhRows[1]?.schedule === "");
+
+const refV = await api("/api/pipeline-inspections", {
+  method: "POST",
+  body: JSON.stringify({
+    ...base,
+    reportNumber: `VUTM-REF-V-${ts}`,
+    reportType: "VESSEL_UTM",
+    equipmentType: "VESSEL",
+    vesselOrientation: "VERTICAL",
+    pipelineDescription: "Size/schedule WT check vertical",
+    vutmShellRows: JSON.stringify([
+      // 15 mm / 1/2 + SCH 40S → WT 2.77 (pink chart, WT only).
+      { moc: "SS304", componentType: "Shell-1", componentId: "S-01", nominalThickness: "2.77",
+        size: "1/2", schedule: "SCH 40S", direction: "North", readings: ["7.9"] },
+    ]),
+  }),
+});
+check("V report with size+schedule row (201)", refV.httpStatus === 201, JSON.stringify(refV).slice(0, 160));
+const rvRows = JSON.parse(refV.vutmShellRows ?? "[]");
+check("V size/schedule persisted (1/2 / SCH 40S)", rvRows[0]?.size === "1/2" && rvRows[0]?.schedule === "SCH 40S", JSON.stringify(rvRows[0]));
+check("V nominal WT = 2.77 kept", rvRows[0]?.nominalThickness === "2.77");
+check("V direction row intact", rvRows[0]?.direction === "North" && rvRows[0]?.readings?.[0] === "7.9");
+
+// ─── 8. Regression — orientation accepted ONLY for VESSEL_UTM ───
 console.log("── 7. Regression: other modules never get an orientation ──");
 for (const [type, num, eq] of [
   ["PIPELINE_DPT", `RGS2-DPT-${ts}`, "PIPING"],
