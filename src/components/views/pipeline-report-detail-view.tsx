@@ -983,32 +983,49 @@ export function PipelineReportDetailView() {
               <table className="w-full border-collapse text-xs">
                 <tbody>
                   {([
-                    ["Date of Examination", report.dptDateOfExamination ? new Date(report.dptDateOfExamination).toISOString().slice(0, 10) : null],
-                    ["Testing Standard", report.dptTestingStandard],
-                    ["Acceptance Criteria", report.dptAcceptanceCriteria],
-                    ["Surface Preparation", report.dptSurfacePreparation],
-                    ["Surface Temperature", report.dptSurfaceTemperature],
-                    ["Penetrant Type", report.dptPenetrantType],
-                    ["Penetrant Process", report.dptPenetrantProcess],
-                    ["Method of Pre-cleaning", report.dptMethodOfPreCleaning],
-                    ["Drying Time After Pre-cleaning", report.dptDryingTimeAfterPreCleaning],
-                    ["Method of Applying Penetrant", report.dptMethodOfApplyingPenetrant],
-                    ["Penetrating Time", report.dptPenetratingTime],
-                    ["Method of Removing Excess Penetrant", report.dptMethodOfRemovingExcessPenetrant],
-                    ["Method of Applying Developer", report.dptMethodOfApplyingDeveloper],
-                    ["Development Time", report.dptDevelopmentTime],
-                    ["Interpretation Time", report.dptInterpretationTime],
-                    ["Lighting Equipment", report.dptLightingEquipment],
-                    ["Post Cleaning", report.dptPostCleaning],
-                  ] as Array<[string, string | null | undefined]>).map(([label, value], idx) => (
-                    <tr key={idx} className="border-b border-zinc-200">
-                      <td className="bg-purple-50 border-r border-zinc-200 px-3 py-1.5 font-medium text-zinc-700 w-1/3">
-                        {label}
-                      </td>
-                      <td className="px-3 py-1.5">
-                        {value && value.trim() ? value : <span className="text-muted-foreground">—</span>}
-                      </td>
-                    </tr>
+                    ["General Information", [
+                      ["Date of Examination", report.dptDateOfExamination ? new Date(report.dptDateOfExamination).toISOString().slice(0, 10) : null],
+                      ["Testing Standard", report.dptTestingStandard],
+                      ["Acceptance Criteria", report.dptAcceptanceCriteria],
+                    ]],
+                    ["Surface & Preparation", [
+                      ["Surface Preparation", report.dptSurfacePreparation],
+                      ["Surface Temperature", report.dptSurfaceTemperature],
+                      ["Method of Pre-cleaning", report.dptMethodOfPreCleaning],
+                      ["Drying Time After Pre-cleaning", report.dptDryingTimeAfterPreCleaning],
+                      ["Post Cleaning", report.dptPostCleaning],
+                    ]],
+                    ["Testing Materials / Consumables", [
+                      ["Penetrant Type", report.dptPenetrantType],
+                      ["Penetrant Process", report.dptPenetrantProcess],
+                      ["Method of Applying Penetrant", report.dptMethodOfApplyingPenetrant],
+                      ["Method of Removing Excess Penetrant", report.dptMethodOfRemovingExcessPenetrant],
+                      ["Method of Applying Developer", report.dptMethodOfApplyingDeveloper],
+                    ]],
+                    ["Testing Timing & Interpretation", [
+                      ["Penetrating Time", report.dptPenetratingTime],
+                      ["Development Time", report.dptDevelopmentTime],
+                      ["Interpretation Time", report.dptInterpretationTime],
+                      ["Lighting Equipment", report.dptLightingEquipment],
+                    ]],
+                  ] as Array<[string, Array<[string, string | null | undefined]>]>).map(([groupTitle, rows]) => (
+                    <Fragment key={groupTitle}>
+                      <tr className="bg-purple-100">
+                        <td colSpan={2} className="border border-zinc-300 px-3 py-1.5 font-semibold text-purple-800">
+                          {groupTitle}
+                        </td>
+                      </tr>
+                      {rows.map(([label, value], idx) => (
+                        <tr key={`${groupTitle}-${idx}`} className="border-b border-zinc-200">
+                          <td className="bg-purple-50 border-r border-zinc-200 px-3 py-1.5 font-medium text-zinc-700 w-1/3">
+                            {label}
+                          </td>
+                          <td className="px-3 py-1.5">
+                            {value && value.trim() ? value : <span className="text-muted-foreground">—</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
@@ -1078,34 +1095,53 @@ export function PipelineReportDetailView() {
               <table className="w-full border-collapse text-xs">
                 <tbody>
                   {([
-                    ["Date of Examination", report.mptDateOfExamination ? new Date(report.mptDateOfExamination).toISOString().slice(0, 10) : null],
-                    ["Testing Standard", report.mptTestingStandard],
-                    ["Acceptance Criteria", report.mptAcceptanceCriteria],
-                    ["Surface Preparation", report.mptSurfacePreparation],
-                    ["Surface Temperature", report.mptSurfaceTemperature],
-                    ["Type of Instrument / Sl. No.", report.mptInstrumentSerialNo],
-                    ["MPT Method", report.mptMethod],
-                    ["Type of Current", report.mptTypeOfCurrent],
-                    ["AC Yoke Lifting Capacity", report.mptAcYokeLiftingCapacity],
-                    ["Contrast Medium", report.mptContrastMedium],
-                    ["Method of Pre-cleaning", report.mptMethodOfPreCleaning],
-                    ["Method of Applying White Contrast", report.mptMethodOfApplyingWhiteContrast],
-                    ["AC Yoke Pole Spacing", report.mptAcYokePoleSpacing],
-                    ["Magnetic Medium", report.mptMagneticMedium],
-                    ["Method of Applying Magnetic Medium", report.mptMethodOfApplyingMagneticMedium],
-                    ["Development Time", report.mptDevelopmentTime],
-                    ["Interpretation Time", report.mptInterpretationTime],
-                    ["Lighting Equipment", report.mptLightingEquipment],
-                    ["Post Cleaning", report.mptPostCleaning],
-                  ] as Array<[string, string | null | undefined]>).map(([label, value], idx) => (
-                    <tr key={idx} className="border-b border-zinc-200">
-                      <td className="bg-orange-50 border-r border-zinc-200 px-3 py-1.5 font-medium text-zinc-700 w-1/3">
-                        {label}
-                      </td>
-                      <td className="px-3 py-1.5">
-                        {value && String(value).trim() ? value : <span className="text-muted-foreground">—</span>}
-                      </td>
-                    </tr>
+                    ["General Information", [
+                      ["Date of Examination", report.mptDateOfExamination ? new Date(report.mptDateOfExamination).toISOString().slice(0, 10) : null],
+                      ["Testing Standard", report.mptTestingStandard],
+                      ["Acceptance Criteria", report.mptAcceptanceCriteria],
+                    ]],
+                    ["Surface & Preparation", [
+                      ["Surface Preparation", report.mptSurfacePreparation],
+                      ["Surface Temperature", report.mptSurfaceTemperature],
+                      ["Method of Pre-cleaning", report.mptMethodOfPreCleaning],
+                      ["Post Cleaning", report.mptPostCleaning],
+                    ]],
+                    ["Equipment Details", [
+                      ["Type of Instrument / Sl. No.", report.mptInstrumentSerialNo],
+                      ["AC Yoke Lifting Capacity", report.mptAcYokeLiftingCapacity],
+                      ["AC Yoke Pole Spacing", report.mptAcYokePoleSpacing],
+                    ]],
+                    ["Testing Method", [
+                      ["MPT Method", report.mptMethod],
+                      ["Type of Current", report.mptTypeOfCurrent],
+                      ["Contrast Medium", report.mptContrastMedium],
+                      ["Method of Applying White Contrast", report.mptMethodOfApplyingWhiteContrast],
+                      ["Magnetic Medium", report.mptMagneticMedium],
+                      ["Method of Applying Magnetic Medium", report.mptMethodOfApplyingMagneticMedium],
+                    ]],
+                    ["Testing Timing & Interpretation", [
+                      ["Development Time", report.mptDevelopmentTime],
+                      ["Interpretation Time", report.mptInterpretationTime],
+                      ["Lighting Equipment", report.mptLightingEquipment],
+                    ]],
+                  ] as Array<[string, Array<[string, string | null | undefined]>]>).map(([groupTitle, rows]) => (
+                    <Fragment key={groupTitle}>
+                      <tr className="bg-orange-100">
+                        <td colSpan={2} className="border border-zinc-300 px-3 py-1.5 font-semibold text-orange-800">
+                          {groupTitle}
+                        </td>
+                      </tr>
+                      {rows.map(([label, value], idx) => (
+                        <tr key={`${groupTitle}-${idx}`} className="border-b border-zinc-200">
+                          <td className="bg-orange-50 border-r border-zinc-200 px-3 py-1.5 font-medium text-zinc-700 w-1/3">
+                            {label}
+                          </td>
+                          <td className="px-3 py-1.5">
+                            {value && String(value).trim() ? value : <span className="text-muted-foreground">—</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>

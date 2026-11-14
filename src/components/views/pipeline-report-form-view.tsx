@@ -4726,6 +4726,12 @@ export function PipelineReportFormView() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm border-collapse">
               <tbody>
+                {/* ─── General Information ─── */}
+                <tr className="bg-purple-800 text-white">
+                  <td colSpan={2} className="border border-purple-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    General Information
+                  </td>
+                </tr>
                 {/* Date of Examination — editable date field */}
                 <tr className="border-b border-zinc-200">
                   <td className="bg-purple-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/3">
@@ -4740,24 +4746,89 @@ export function PipelineReportFormView() {
                     />
                   </td>
                 </tr>
-                {/* Typeable text fields */}
                 {([
                   ["Testing Standard", "dptTestingStandard", "e.g. ASME Section V 2023, Article 6"],
                   ["Acceptance Criteria", "dptAcceptanceCriteria", "e.g. ASME Section VIII Div. 1, Appx. 8, Clause 8.4"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-purple-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+                {/* ─── Surface & Preparation ─── */}
+                <tr className="bg-purple-800 text-white">
+                  <td colSpan={2} className="border border-purple-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    Surface &amp; Preparation
+                  </td>
+                </tr>
+                {([
                   ["Surface Preparation", "dptSurfacePreparation", "e.g. Grinding and wire brush"],
                   ["Surface Temperature", "dptSurfaceTemperature", "e.g. 32 °C"],
-                  ["Penetrant Type", "dptPenetrantType", "e.g. Colour contrast (visible), solvent removable"],
-                  ["Penetrant Process", "dptPenetrantProcess", "e.g. Solvent removable / Water washable"],
                   ["Method of Pre-cleaning", "dptMethodOfPreCleaning", "e.g. Solvent cleaning"],
                   ["Drying Time After Pre-cleaning", "dptDryingTimeAfterPreCleaning", "e.g. 5 minutes"],
+                  ["Post Cleaning", "dptPostCleaning", "e.g. Solvent wipe / Water wash"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-purple-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+                {/* ─── Testing Materials / Consumables ─── */}
+                <tr className="bg-purple-800 text-white">
+                  <td colSpan={2} className="border border-purple-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    Testing Materials / Consumables
+                  </td>
+                </tr>
+                {([
+                  ["Penetrant Type", "dptPenetrantType", "e.g. Colour contrast (visible), solvent removable"],
+                  ["Penetrant Process", "dptPenetrantProcess", "e.g. Solvent removable / Water washable"],
                   ["Method of Applying Penetrant", "dptMethodOfApplyingPenetrant", "e.g. Spray"],
-                  ["Penetrating Time", "dptPenetratingTime", "e.g. 10 minutes"],
                   ["Method of Removing Excess Penetrant", "dptMethodOfRemovingExcessPenetrant", "e.g. Solvent wipe"],
                   ["Method of Applying Developer", "dptMethodOfApplyingDeveloper", "e.g. Spray"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-purple-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+                {/* ─── Testing Timing & Interpretation ─── */}
+                <tr className="bg-purple-800 text-white">
+                  <td colSpan={2} className="border border-purple-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    Testing Timing &amp; Interpretation
+                  </td>
+                </tr>
+                {([
+                  ["Penetrating Time", "dptPenetratingTime", "e.g. 10 minutes"],
                   ["Development Time", "dptDevelopmentTime", "e.g. 10 minutes"],
                   ["Interpretation Time", "dptInterpretationTime", "e.g. 10 minutes"],
                   ["Lighting Equipment", "dptLightingEquipment", "e.g. LED torch ≥ 1000 lux"],
-                  ["Post Cleaning", "dptPostCleaning", "e.g. Solvent wipe / Water wash"],
                 ] as const).map(([label, fieldKey, placeholder]) => (
                   <tr key={fieldKey} className="border-b border-zinc-200">
                     <td className="bg-purple-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
@@ -4993,6 +5064,12 @@ export function PipelineReportFormView() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm border-collapse">
               <tbody>
+                {/* ─── General Information ─── */}
+                <tr className="bg-orange-800 text-white">
+                  <td colSpan={2} className="border border-orange-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    General Information
+                  </td>
+                </tr>
                 {/* Date of Examination — editable date field */}
                 <tr className="border-b border-zinc-200">
                   <td className="bg-orange-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/3">
@@ -5007,26 +5084,113 @@ export function PipelineReportFormView() {
                     />
                   </td>
                 </tr>
-                {/* Typeable text fields */}
                 {([
                   ["Testing Standard", "mptTestingStandard", "e.g. ASME Section V 2023, Article 7"],
                   ["Acceptance Criteria", "mptAcceptanceCriteria", "e.g. ASME Section VIII Div. 1, Appx. 6"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-orange-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+                {/* ─── Surface & Preparation ─── */}
+                <tr className="bg-orange-800 text-white">
+                  <td colSpan={2} className="border border-orange-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    Surface &amp; Preparation
+                  </td>
+                </tr>
+                {([
                   ["Surface Preparation", "mptSurfacePreparation", "e.g. Grinding and wire brush"],
                   ["Surface Temperature", "mptSurfaceTemperature", "e.g. 32 °C"],
+                  ["Method of Pre-cleaning", "mptMethodOfPreCleaning", "e.g. Solvent cleaning"],
+                  ["Post Cleaning", "mptPostCleaning", "e.g. Solvent wipe"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-orange-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+                {/* ─── Equipment Details ─── */}
+                <tr className="bg-orange-800 text-white">
+                  <td colSpan={2} className="border border-orange-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    Equipment Details
+                  </td>
+                </tr>
+                {([
                   ["Type of Instrument / Sl. No.", "mptInstrumentSerialNo", "e.g. AC Yoke / 201501012123"],
+                  ["AC Yoke Lifting Capacity", "mptAcYokeLiftingCapacity", "e.g. 5 kg / 50 N"],
+                  ["AC Yoke Pole Spacing", "mptAcYokePoleSpacing", "e.g. 150 mm"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-orange-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+                {/* ─── Testing Method ─── */}
+                <tr className="bg-orange-800 text-white">
+                  <td colSpan={2} className="border border-orange-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    Testing Method
+                  </td>
+                </tr>
+                {([
                   ["MPT Method", "mptMethod", "e.g. Wet Continuous"],
                   ["Type of Current", "mptTypeOfCurrent", "e.g. AC"],
-                  ["AC Yoke Lifting Capacity", "mptAcYokeLiftingCapacity", "e.g. 5 kg / 50 N"],
                   ["Contrast Medium", "mptContrastMedium", "e.g. White contrast"],
-                  ["Method of Pre-cleaning", "mptMethodOfPreCleaning", "e.g. Solvent cleaning"],
                   ["Method of Applying White Contrast", "mptMethodOfApplyingWhiteContrast", "e.g. Spray"],
-                  ["AC Yoke Pole Spacing", "mptAcYokePoleSpacing", "e.g. 150 mm"],
                   ["Magnetic Medium", "mptMagneticMedium", "e.g. Wet particle iron ink"],
                   ["Method of Applying Magnetic Medium", "mptMethodOfApplyingMagneticMedium", "e.g. Spray"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-orange-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+                {/* ─── Testing Timing & Interpretation ─── */}
+                <tr className="bg-orange-800 text-white">
+                  <td colSpan={2} className="border border-orange-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    Testing Timing &amp; Interpretation
+                  </td>
+                </tr>
+                {([
                   ["Development Time", "mptDevelopmentTime", "e.g. 5 minutes"],
                   ["Interpretation Time", "mptInterpretationTime", "e.g. 10 minutes"],
                   ["Lighting Equipment", "mptLightingEquipment", "e.g. LED torch ≥ 1000 lux"],
-                  ["Post Cleaning", "mptPostCleaning", "e.g. Solvent wipe"],
                 ] as const).map(([label, fieldKey, placeholder]) => (
                   <tr key={fieldKey} className="border-b border-zinc-200">
                     <td className="bg-orange-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
