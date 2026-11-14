@@ -1,0 +1,8 @@
+  // Tank (Storage Tank) testing-details / readings rows — local state is
+  // the source of truth; persisted as the tdptObservationRows / tmptRows
+  // / twsDetailRows / tutmPlateRows JSON columns whenever the header is
+  // saved. Tank UT Minimum Measured Thickness is derived at render time.
+  const [tdptRows, setTdptRows] = useState<TankDetailRow[]>([]);
+  const [tmptRows, setTmptRows] = useState<TankDetailRow[]>([]);
+  const [twsRows, setTwsRows] = useState<TankWeldScanDetailRow[]>([]);
+  const [tutmRows, setTutmRows] = useState<TankUtmRow[]>([]);

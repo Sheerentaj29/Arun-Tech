@@ -293,7 +293,11 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       // report types keep their existing value untouched.
       equipmentType:
         body.equipmentType !== undefined
-          ? (body.equipmentType === "PIPING" || body.equipmentType === "VESSEL" ? body.equipmentType : null)
+          ? (body.equipmentType === "PIPING" ||
+             body.equipmentType === "VESSEL" ||
+             body.equipmentType === "TANK"
+              ? body.equipmentType
+              : null)
           : existing.equipmentType,
       vesselOrientation:
         existing.reportType === "VESSEL_UTM" &&
@@ -413,6 +417,115 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
                 : "HORIZONTAL",
             )
           : existing.vutmNozzleRows,
+      // ─── TANK (STORAGE TANK) FIELDS (reportType = TANK_*) ───
+      // Completely separate from the Vessel (vdpt*/vmpt*/vws*/vutm*) and
+      // Piping field groups above — storage-tank reports never read or
+      // write Vessel/Piping columns. Tank UT course/plate readings reuse
+      // the generic clock-row normalizer (HORIZONTAL shape).
+      tdptDateOfExamination: body.tdptDateOfExamination !== undefined ? (body.tdptDateOfExamination ? new Date(body.tdptDateOfExamination) : null) : existing.tdptDateOfExamination,
+      tdptTestingStandard: body.tdptTestingStandard !== undefined ? (body.tdptTestingStandard?.trim() || null) : existing.tdptTestingStandard,
+      tdptAcceptanceCriteria: body.tdptAcceptanceCriteria !== undefined ? (body.tdptAcceptanceCriteria?.trim() || null) : existing.tdptAcceptanceCriteria,
+      tdptSurfacePreparation: body.tdptSurfacePreparation !== undefined ? (body.tdptSurfacePreparation?.trim() || null) : existing.tdptSurfacePreparation,
+      tdptSurfaceTemperature: body.tdptSurfaceTemperature !== undefined ? (body.tdptSurfaceTemperature?.trim() || null) : existing.tdptSurfaceTemperature,
+      tdptPenetrantType: body.tdptPenetrantType !== undefined ? (body.tdptPenetrantType?.trim() || null) : existing.tdptPenetrantType,
+      tdptPenetrantProcess: body.tdptPenetrantProcess !== undefined ? (body.tdptPenetrantProcess?.trim() || null) : existing.tdptPenetrantProcess,
+      tdptMethodOfPreCleaning: body.tdptMethodOfPreCleaning !== undefined ? (body.tdptMethodOfPreCleaning?.trim() || null) : existing.tdptMethodOfPreCleaning,
+      tdptDryingTimeAfterPreCleaning: body.tdptDryingTimeAfterPreCleaning !== undefined ? (body.tdptDryingTimeAfterPreCleaning?.trim() || null) : existing.tdptDryingTimeAfterPreCleaning,
+      tdptMethodOfApplyingPenetrant: body.tdptMethodOfApplyingPenetrant !== undefined ? (body.tdptMethodOfApplyingPenetrant?.trim() || null) : existing.tdptMethodOfApplyingPenetrant,
+      tdptPenetratingTime: body.tdptPenetratingTime !== undefined ? (body.tdptPenetratingTime?.trim() || null) : existing.tdptPenetratingTime,
+      tdptMethodOfRemovingExcessPenetrant: body.tdptMethodOfRemovingExcessPenetrant !== undefined ? (body.tdptMethodOfRemovingExcessPenetrant?.trim() || null) : existing.tdptMethodOfRemovingExcessPenetrant,
+      tdptMethodOfApplyingDeveloper: body.tdptMethodOfApplyingDeveloper !== undefined ? (body.tdptMethodOfApplyingDeveloper?.trim() || null) : existing.tdptMethodOfApplyingDeveloper,
+      tdptDevelopmentTime: body.tdptDevelopmentTime !== undefined ? (body.tdptDevelopmentTime?.trim() || null) : existing.tdptDevelopmentTime,
+      tdptInterpretationTime: body.tdptInterpretationTime !== undefined ? (body.tdptInterpretationTime?.trim() || null) : existing.tdptInterpretationTime,
+      tdptLightingEquipment: body.tdptLightingEquipment !== undefined ? (body.tdptLightingEquipment?.trim() || null) : existing.tdptLightingEquipment,
+      tdptPostCleaning: body.tdptPostCleaning !== undefined ? (body.tdptPostCleaning?.trim() || null) : existing.tdptPostCleaning,
+      tdptSolventMake: body.tdptSolventMake !== undefined ? (body.tdptSolventMake?.trim() || null) : existing.tdptSolventMake,
+      tdptSolventProduct: body.tdptSolventProduct !== undefined ? (body.tdptSolventProduct?.trim() || null) : existing.tdptSolventProduct,
+      tdptSolventBatchNo: body.tdptSolventBatchNo !== undefined ? (body.tdptSolventBatchNo?.trim() || null) : existing.tdptSolventBatchNo,
+      tdptSolventExpiry: body.tdptSolventExpiry !== undefined ? (body.tdptSolventExpiry?.trim() || null) : existing.tdptSolventExpiry,
+      tdptPenetrantMake: body.tdptPenetrantMake !== undefined ? (body.tdptPenetrantMake?.trim() || null) : existing.tdptPenetrantMake,
+      tdptPenetrantProduct: body.tdptPenetrantProduct !== undefined ? (body.tdptPenetrantProduct?.trim() || null) : existing.tdptPenetrantProduct,
+      tdptPenetrantBatchNo: body.tdptPenetrantBatchNo !== undefined ? (body.tdptPenetrantBatchNo?.trim() || null) : existing.tdptPenetrantBatchNo,
+      tdptPenetrantExpiry: body.tdptPenetrantExpiry !== undefined ? (body.tdptPenetrantExpiry?.trim() || null) : existing.tdptPenetrantExpiry,
+      tdptDeveloperMake: body.tdptDeveloperMake !== undefined ? (body.tdptDeveloperMake?.trim() || null) : existing.tdptDeveloperMake,
+      tdptDeveloperProduct: body.tdptDeveloperProduct !== undefined ? (body.tdptDeveloperProduct?.trim() || null) : existing.tdptDeveloperProduct,
+      tdptDeveloperBatchNo: body.tdptDeveloperBatchNo !== undefined ? (body.tdptDeveloperBatchNo?.trim() || null) : existing.tdptDeveloperBatchNo,
+      tdptDeveloperExpiry: body.tdptDeveloperExpiry !== undefined ? (body.tdptDeveloperExpiry?.trim() || null) : existing.tdptDeveloperExpiry,
+      tdptObservationRows: body.tdptObservationRows !== undefined ? (typeof body.tdptObservationRows === "string" ? body.tdptObservationRows : null) : existing.tdptObservationRows,
+      tmptDateOfExamination: body.tmptDateOfExamination !== undefined ? (body.tmptDateOfExamination ? new Date(body.tmptDateOfExamination) : null) : existing.tmptDateOfExamination,
+      tmptTestingStandard: body.tmptTestingStandard !== undefined ? (body.tmptTestingStandard?.trim() || null) : existing.tmptTestingStandard,
+      tmptAcceptanceCriteria: body.tmptAcceptanceCriteria !== undefined ? (body.tmptAcceptanceCriteria?.trim() || null) : existing.tmptAcceptanceCriteria,
+      tmptSurfacePreparation: body.tmptSurfacePreparation !== undefined ? (body.tmptSurfacePreparation?.trim() || null) : existing.tmptSurfacePreparation,
+      tmptSurfaceTemperature: body.tmptSurfaceTemperature !== undefined ? (body.tmptSurfaceTemperature?.trim() || null) : existing.tmptSurfaceTemperature,
+      tmptInstrumentSerialNo: body.tmptInstrumentSerialNo !== undefined ? (body.tmptInstrumentSerialNo?.trim() || null) : existing.tmptInstrumentSerialNo,
+      tmptMethod: body.tmptMethod !== undefined ? (body.tmptMethod?.trim() || null) : existing.tmptMethod,
+      tmptTypeOfCurrent: body.tmptTypeOfCurrent !== undefined ? (body.tmptTypeOfCurrent?.trim() || null) : existing.tmptTypeOfCurrent,
+      tmptAcYokeLiftingCapacity: body.tmptAcYokeLiftingCapacity !== undefined ? (body.tmptAcYokeLiftingCapacity?.trim() || null) : existing.tmptAcYokeLiftingCapacity,
+      tmptContrastMedium: body.tmptContrastMedium !== undefined ? (body.tmptContrastMedium?.trim() || null) : existing.tmptContrastMedium,
+      tmptMethodOfPreCleaning: body.tmptMethodOfPreCleaning !== undefined ? (body.tmptMethodOfPreCleaning?.trim() || null) : existing.tmptMethodOfPreCleaning,
+      tmptMethodOfApplyingWhiteContrast: body.tmptMethodOfApplyingWhiteContrast !== undefined ? (body.tmptMethodOfApplyingWhiteContrast?.trim() || null) : existing.tmptMethodOfApplyingWhiteContrast,
+      tmptAcYokePoleSpacing: body.tmptAcYokePoleSpacing !== undefined ? (body.tmptAcYokePoleSpacing?.trim() || null) : existing.tmptAcYokePoleSpacing,
+      tmptMagneticMedium: body.tmptMagneticMedium !== undefined ? (body.tmptMagneticMedium?.trim() || null) : existing.tmptMagneticMedium,
+      tmptMethodOfApplyingMagneticMedium: body.tmptMethodOfApplyingMagneticMedium !== undefined ? (body.tmptMethodOfApplyingMagneticMedium?.trim() || null) : existing.tmptMethodOfApplyingMagneticMedium,
+      tmptDevelopmentTime: body.tmptDevelopmentTime !== undefined ? (body.tmptDevelopmentTime?.trim() || null) : existing.tmptDevelopmentTime,
+      tmptInterpretationTime: body.tmptInterpretationTime !== undefined ? (body.tmptInterpretationTime?.trim() || null) : existing.tmptInterpretationTime,
+      tmptLightingEquipment: body.tmptLightingEquipment !== undefined ? (body.tmptLightingEquipment?.trim() || null) : existing.tmptLightingEquipment,
+      tmptPostCleaning: body.tmptPostCleaning !== undefined ? (body.tmptPostCleaning?.trim() || null) : existing.tmptPostCleaning,
+      tmptWhiteContrastMake: body.tmptWhiteContrastMake !== undefined ? (body.tmptWhiteContrastMake?.trim() || null) : existing.tmptWhiteContrastMake,
+      tmptWhiteContrastProduct: body.tmptWhiteContrastProduct !== undefined ? (body.tmptWhiteContrastProduct?.trim() || null) : existing.tmptWhiteContrastProduct,
+      tmptWhiteContrastLotNo: body.tmptWhiteContrastLotNo !== undefined ? (body.tmptWhiteContrastLotNo?.trim() || null) : existing.tmptWhiteContrastLotNo,
+      tmptWhiteContrastExpiry: body.tmptWhiteContrastExpiry !== undefined ? (body.tmptWhiteContrastExpiry?.trim() || null) : existing.tmptWhiteContrastExpiry,
+      tmptInkMake: body.tmptInkMake !== undefined ? (body.tmptInkMake?.trim() || null) : existing.tmptInkMake,
+      tmptInkProduct: body.tmptInkProduct !== undefined ? (body.tmptInkProduct?.trim() || null) : existing.tmptInkProduct,
+      tmptInkLotNo: body.tmptInkLotNo !== undefined ? (body.tmptInkLotNo?.trim() || null) : existing.tmptInkLotNo,
+      tmptInkExpiry: body.tmptInkExpiry !== undefined ? (body.tmptInkExpiry?.trim() || null) : existing.tmptInkExpiry,
+      tmptRows: body.tmptRows !== undefined ? (typeof body.tmptRows === "string" ? body.tmptRows : null) : existing.tmptRows,
+      twsDateOfExamination: body.twsDateOfExamination !== undefined ? (body.twsDateOfExamination ? new Date(body.twsDateOfExamination) : null) : existing.twsDateOfExamination,
+      twsTestingStandard: body.twsTestingStandard !== undefined ? (body.twsTestingStandard?.trim() || null) : existing.twsTestingStandard,
+      twsAcceptanceCriteria: body.twsAcceptanceCriteria !== undefined ? (body.twsAcceptanceCriteria?.trim() || null) : existing.twsAcceptanceCriteria,
+      twsUtProcedure: body.twsUtProcedure !== undefined ? (body.twsUtProcedure?.trim() || null) : existing.twsUtProcedure,
+      twsEquipmentMake: body.twsEquipmentMake !== undefined ? (body.twsEquipmentMake?.trim() || null) : existing.twsEquipmentMake,
+      twsEquipmentModel: body.twsEquipmentModel !== undefined ? (body.twsEquipmentModel?.trim() || null) : existing.twsEquipmentModel,
+      twsEquipmentSerialNo: body.twsEquipmentSerialNo !== undefined ? (body.twsEquipmentSerialNo?.trim() || null) : existing.twsEquipmentSerialNo,
+      twsCableLength: body.twsCableLength !== undefined ? (body.twsCableLength?.trim() || null) : existing.twsCableLength,
+      twsCableType: body.twsCableType !== undefined ? (body.twsCableType?.trim() || null) : existing.twsCableType,
+      twsCalibrationBlock: body.twsCalibrationBlock !== undefined ? (body.twsCalibrationBlock?.trim() || null) : existing.twsCalibrationBlock,
+      twsCalibrationBlockMoc: body.twsCalibrationBlockMoc !== undefined ? (body.twsCalibrationBlockMoc?.trim() || null) : existing.twsCalibrationBlockMoc,
+      twsReferenceReflector: body.twsReferenceReflector !== undefined ? (body.twsReferenceReflector?.trim() || null) : existing.twsReferenceReflector,
+      twsReferenceLevel: body.twsReferenceLevel !== undefined ? (body.twsReferenceLevel?.trim() || null) : existing.twsReferenceLevel,
+      twsFlawSizingTechnique: body.twsFlawSizingTechnique !== undefined ? (body.twsFlawSizingTechnique?.trim() || null) : existing.twsFlawSizingTechnique,
+      twsSurfaceTemperature: body.twsSurfaceTemperature !== undefined ? (body.twsSurfaceTemperature?.trim() || null) : existing.twsSurfaceTemperature,
+      twsTestingMethod: body.twsTestingMethod !== undefined ? (body.twsTestingMethod?.trim() || null) : existing.twsTestingMethod,
+      twsCouplant: body.twsCouplant !== undefined ? (body.twsCouplant?.trim() || null) : existing.twsCouplant,
+      twsSurfacePreparation: body.twsSurfacePreparation !== undefined ? (body.twsSurfacePreparation?.trim() || null) : existing.twsSurfacePreparation,
+      twsSurfaceFinish: body.twsSurfaceFinish !== undefined ? (body.twsSurfaceFinish?.trim() || null) : existing.twsSurfaceFinish,
+      twsExtentOfScanning: body.twsExtentOfScanning !== undefined ? (body.twsExtentOfScanning?.trim() || null) : existing.twsExtentOfScanning,
+      twsProbeDetails: body.twsProbeDetails !== undefined ? (typeof body.twsProbeDetails === "string" ? body.twsProbeDetails : null) : existing.twsProbeDetails,
+      twsDetailRows: body.twsDetailRows !== undefined ? (typeof body.twsDetailRows === "string" ? body.twsDetailRows : null) : existing.twsDetailRows,
+      tutmDateOfExamination: body.tutmDateOfExamination !== undefined ? (body.tutmDateOfExamination ? new Date(body.tutmDateOfExamination) : null) : existing.tutmDateOfExamination,
+      tutmTestingStandard: body.tutmTestingStandard !== undefined ? (body.tutmTestingStandard?.trim() || null) : existing.tutmTestingStandard,
+      tutmAcceptanceCriteria: body.tutmAcceptanceCriteria !== undefined ? (body.tutmAcceptanceCriteria?.trim() || null) : existing.tutmAcceptanceCriteria,
+      tutmUtProcedure: body.tutmUtProcedure !== undefined ? (body.tutmUtProcedure?.trim() || null) : existing.tutmUtProcedure,
+      tutmEquipmentMake: body.tutmEquipmentMake !== undefined ? (body.tutmEquipmentMake?.trim() || null) : existing.tutmEquipmentMake,
+      tutmEquipmentModel: body.tutmEquipmentModel !== undefined ? (body.tutmEquipmentModel?.trim() || null) : existing.tutmEquipmentModel,
+      tutmEquipmentSerialNo: body.tutmEquipmentSerialNo !== undefined ? (body.tutmEquipmentSerialNo?.trim() || null) : existing.tutmEquipmentSerialNo,
+      tutmCableLengthAndType: body.tutmCableLengthAndType !== undefined ? (body.tutmCableLengthAndType?.trim() || null) : existing.tutmCableLengthAndType,
+      tutmTypeOfCrystal: body.tutmTypeOfCrystal !== undefined ? (body.tutmTypeOfCrystal?.trim() || null) : existing.tutmTypeOfCrystal,
+      tutmCalibrationBlock: body.tutmCalibrationBlock !== undefined ? (body.tutmCalibrationBlock?.trim() || null) : existing.tutmCalibrationBlock,
+      tutmSurfaceTemperature: body.tutmSurfaceTemperature !== undefined ? (body.tutmSurfaceTemperature?.trim() || null) : existing.tutmSurfaceTemperature,
+      tutmMethod: body.tutmMethod !== undefined ? (body.tutmMethod?.trim() || null) : existing.tutmMethod,
+      tutmCouplant: body.tutmCouplant !== undefined ? (body.tutmCouplant?.trim() || null) : existing.tutmCouplant,
+      tutmSurfacePreparation: body.tutmSurfacePreparation !== undefined ? (body.tutmSurfacePreparation?.trim() || null) : existing.tutmSurfacePreparation,
+      tutmSurfaceFinish: body.tutmSurfaceFinish !== undefined ? (body.tutmSurfaceFinish?.trim() || null) : existing.tutmSurfaceFinish,
+      tutmLwProbeRows: body.tutmLwProbeRows !== undefined ? (typeof body.tutmLwProbeRows === "string" ? body.tutmLwProbeRows : null) : existing.tutmLwProbeRows,
+      tutmPlateRows:
+        body.tutmPlateRows !== undefined
+          ? normalizeVutmRows(body.tutmPlateRows, "HORIZONTAL")
+          : existing.tutmPlateRows,
+      // ─── TANK WELD SCAN DATES: twsCalibrationDueDate handled with the
+      // other date fields below ───
+      twsCalibrationDueDate: body.twsCalibrationDueDate !== undefined ? (body.twsCalibrationDueDate ? new Date(body.twsCalibrationDueDate) : null) : existing.twsCalibrationDueDate,
+      tutmCalibrationDueDate: body.tutmCalibrationDueDate !== undefined ? (body.tutmCalibrationDueDate ? new Date(body.tutmCalibrationDueDate) : null) : existing.tutmCalibrationDueDate,
     },
   });
 

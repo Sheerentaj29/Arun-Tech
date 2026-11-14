@@ -86,6 +86,10 @@ export type PipelineReportType =
   | "VESSEL_MPT"
   | "VESSEL_WELD_SCAN"
   | "VESSEL_UTM"
+  | "TANK_DPT"
+  | "TANK_MPT"
+  | "TANK_WELD_SCAN"
+  | "TANK_UTM"
   | "VESSEL_VISUAL"
   | "PIPELINE_VISUAL"
   | "PIPELINE_CONDITION";
@@ -93,7 +97,7 @@ export type PipelineReportType =
 // Equipment type chosen in the report-creation flow (Step 1 of the
 // selector). Persisted on the report so the list / review / PDF know
 // whether the inspection was performed on piping or a vessel.
-export type EquipmentType = "PIPING" | "VESSEL";
+export type EquipmentType = "PIPING" | "VESSEL" | "TANK";
 
 // Vessel orientation — required ONLY for VESSEL_UTM (Vessel UT Thickness
 // Measurement) reports, picked in the selector before the form opens.

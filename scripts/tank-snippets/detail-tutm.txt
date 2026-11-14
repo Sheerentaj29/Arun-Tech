@@ -1,0 +1,210 @@
+        {/* ─── TANK UT THICKNESS MEASUREMENT: PARAMETERS + READINGS ───
+            Shown only for TANK_UTM reports (Tank equipment — Storage
+            Tank). Completely separate from the Vessel UT Thickness
+            Measurement and Piping Thickness Measurement blocks above.
+            Renders the grouped UT Thickness Measurement Parameters (incl.
+            the repeatable Longitudinal Wave 0° probe grid) and the
+            course/plate clock-position readings table (12 / 3 / 6 / 9
+            o'clock — every reading the user entered, no empty slots).
+            Minimum Measured Thickness is recomputed from the stored
+            readings. */}
+        {report.reportType === "TANK_UTM" && (() => {
+          let tutmProbes: Array<Record<string, string>> = [];
+          try {
+            const parsed = JSON.parse(report.tutmLwProbeRows ?? "[]");
+            if (Array.isArray(parsed) && parsed.length > 0) tutmProbes = parsed;
+          } catch {}
+          // Course/plate readings rows — clock positions (12 / 3 / 6 / 9
+          // o'clock). Parsed defensively; every stored reading survives.
+          const tutmRows: Array<Record<string, unknown>> = (() => {
+            try {
+              const parsed = JSON.parse(report.tutmPlateRows ?? "[]");
+              if (Array.isArray(parsed)) return parsed;
+            } catch {}
+            return [];
+          })();
+          const tutmParamGroups: Array<{ title: string; rows: Array<[string, string | null | undefined, boolean?]> }> = [
+            {
+              title: "General Information",
+              rows: [
+                ["Date of Examination", report.tutmDateOfExamination, true],
+                ["Testing Standard", report.tutmTestingStandard],
+                ["Acceptance Criteria", report.tutmAcceptanceCriteria],
+                ["UT Procedure", report.tutmUtProcedure],
+              ],
+            },
+            {
+              title: "Equipment Details",
+              rows: [
+                ["Equipment Make", report.tutmEquipmentMake],
+                ["Equipment Model", report.tutmEquipmentModel],
+                ["Equipment Serial Number", report.tutmEquipmentSerialNo],
+                ["Calibration Due Date", report.tutmCalibrationDueDate, true],
+              ],
+            },
+            {
+              title: "Cable & Crystal Details",
+              rows: [
+                ["Cable Length and Type", report.tutmCableLengthAndType],
+                ["Type of Crystal", report.tutmTypeOfCrystal],
+              ],
+            },
+            {
+              title: "Calibration Details",
+              rows: [
+                ["Calibration Block Dimension / MOC", report.tutmCalibrationBlock],
+              ],
+            },
+            {
+              title: "Other Testing Parameters",
+              rows: [
+                ["Surface Temperature", report.tutmSurfaceTemperature],
+                ["Method", report.tutmMethod],
+                ["Couplant", report.tutmCouplant],
+                ["Surface Preparation", report.tutmSurfacePreparation],
+                ["Surface Finish", report.tutmSurfaceFinish],
+              ],
+            },
+          ];
+          const tutmCell = (min: unknown) => (min && String(min).trim() ? String(min) : "—");
+          return (
+            <div className="mt-6 space-y-6">
+              {/* Equipment type badge */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="outline" className="border-teal-400 text-teal-700">
+                  Equipment: Tank
+                </Badge>
+              </div>
+
+              {/* UT Thickness Measurement Parameters — grouped two-column table */}
+              <div>
+                <h3 className="mb-2 text-xs font-bold uppercase text-teal-700 border-b border-teal-300 pb-1">
+                  UT Thickness Measurement Parameters
+                </h3>
+                <table className="w-full border-collapse text-xs">
+                  <tbody>
+                    {tutmParamGroups.map((group) => (
+                      <Fragment key={group.title}>
+                        <tr className="bg-teal-100">
+                          <td colSpan={2} className="border border-zinc-300 px-3 py-1.5 font-semibold text-teal-800">
+                            {group.title}
+                          </td>
+                        </tr>
+                        {group.rows.map(([label, value, isDate], idx) => {
+                          let v = value && String(value).trim() ? String(value).trim() : null;
+                          if (v && isDate) {
+                            try { v = new Date(v).toISOString().slice(0, 10); } catch {}
+                          }
+                          return (
+                            <tr key={`${group.title}-${idx}`} className="border-b border-zinc-200">
+                              <td className="bg-teal-50 border-r border-zinc-200 px-3 py-1.5 font-medium text-zinc-700 w-1/3">
+                                {label}
+                              </td>
+                              <td className="px-3 py-1.5">
+                                {v ? v : <span className="text-muted-foreground">—</span>}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Probe Details — repeatable Longitudinal Wave (0°) grid */}
+              {tutmProbes.length > 0 && (
+                <div>
+                  <h3 className="mb-2 text-xs font-bold uppercase text-teal-700 border-b border-teal-300 pb-1">
+                    Probe Details — Longitudinal Wave (0°)
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-teal-700 text-white">
+                          <th className="border border-teal-800 px-2 py-2 text-center">Probe</th>
+                          <th className="border border-teal-800 px-2 py-2 text-center">Probe Angle</th>
+                          <th className="border border-teal-800 px-2 py-2 text-center">Frequency</th>
+                          <th className="border border-teal-800 px-2 py-2 text-center">Size</th>
+                          <th className="border border-teal-800 px-2 py-2 text-center">S.No.</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tutmProbes.map((row, idx) => (
+                          <tr key={idx} className="hover:bg-muted/30">
+                            <td className="border border-zinc-300 px-2 py-1 font-medium">Longitudinal Wave Probe</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">0°</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.frequency || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.probeSize || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center font-mono">{row.serialNo || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* UT Thickness Measurement Readings — course/plate clock positions */}
+              <div>
+                <h3 className="mb-2 text-xs font-bold uppercase text-teal-700 border-b border-teal-300 pb-1">
+                  UT Thickness Measurement Readings — Course / Plate Measurements (Clock Positions)
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-teal-700 text-white">
+                        <th className="border border-teal-800 px-2 py-2 text-center">MOC</th>
+                        <th className="border border-teal-800 px-2 py-2 text-center">Course / Section</th>
+                        <th className="border border-teal-800 px-2 py-2 text-center">Plate / Location ID</th>
+                        <th className="border border-teal-800 px-2 py-2 text-center">Nominal Thickness (mm)</th>
+                        <th className="border border-teal-800 px-2 py-2 text-center">12 O&apos;clock (mm)</th>
+                        <th className="border border-teal-800 px-2 py-2 text-center">3 O&apos;clock (mm)</th>
+                        <th className="border border-teal-800 px-2 py-2 text-center">6 O&apos;clock (mm)</th>
+                        <th className="border border-teal-800 px-2 py-2 text-center">9 O&apos;clock (mm)</th>
+                        <th className="border border-teal-800 px-2 py-2 text-center">Minimum Measured Thickness (mm)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tutmRows.length === 0 && (
+                        <tr><td colSpan={9} className="text-center py-4 text-muted-foreground border border-zinc-300">No course / plate measurement rows recorded.</td></tr>
+                      )}
+                      {tutmRows.map((row, idx) => {
+                        const spot = (k: string): string[] => {
+                          const v = row[k];
+                          return Array.isArray(v) ? (v as unknown[]).map((s) => String(s ?? "")) : [];
+                        };
+                        const c12 = spot("c12");
+                        const c3 = spot("c3");
+                        const c6 = spot("c6");
+                        const c9 = spot("c9");
+                        const renderSpots = (spots: string[]) => {
+                          const filled = spots.filter((s) => s && String(s).trim());
+                          return filled.length > 0 ? (
+                            <span className="whitespace-pre-line">{filled.join("\n")}</span>
+                          ) : "—";
+                        };
+                        return (
+                          <tr key={idx} className="hover:bg-muted/30 align-top">
+                            <td className="border border-zinc-300 px-2 py-1">{String(row.moc ?? "") || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1">{String(row.componentType ?? "") || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1">{String(row.componentId ?? "") || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{String(row.nominalThickness ?? "") || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{renderSpots(c12)}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{renderSpots(c3)}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{renderSpots(c6)}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{renderSpots(c9)}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center font-mono font-semibold">
+                              {tutmCell(vutmMinOfSpots(c12, c3, c6, c9))}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+

@@ -187,6 +187,38 @@ const REPORT_TYPE_INFO: Record<PipelineReportType, {
     step2Label: "UT Thickness Readings",
     accent: "border-emerald-500 text-emerald-700",
   },
+  TANK_DPT: {
+    title: "STORAGE TANK DYE PENETRANT TESTING REPORT",
+    shortLabel: "Tank DPT",
+    formHeading: "New Tank DPT Report",
+    formDescription: "Storage tank dye penetrant testing with DPT parameters, consumable details, testing details table, and photographs.",
+    step2Label: "DPT Details",
+    accent: "border-fuchsia-500 text-fuchsia-700",
+  },
+  TANK_MPT: {
+    title: "STORAGE TANK MAGNETIC PARTICLE TESTING REPORT",
+    shortLabel: "Tank MPT",
+    formHeading: "New Tank MPT Report",
+    formDescription: "Storage tank magnetic particle testing with MPT parameters, consumable details, testing details table, and photographs.",
+    step2Label: "MPT Details",
+    accent: "border-amber-500 text-amber-700",
+  },
+  TANK_WELD_SCAN: {
+    title: "STORAGE TANK WELD SCAN REPORT",
+    shortLabel: "Tank Weld Scan",
+    formHeading: "New Tank Weld Scan Report",
+    formDescription: "Storage tank weld scan with Weld Scan Testing Parameters, Weld Scan Testing Details table, and photographs.",
+    step2Label: "Weld Scan Details",
+    accent: "border-sky-500 text-sky-700",
+  },
+  TANK_UTM: {
+    title: "STORAGE TANK UT THICKNESS MEASUREMENT REPORT",
+    shortLabel: "Tank UT Thickness",
+    formHeading: "New Tank UT Thickness Measurement Report",
+    formDescription: "Storage tank UT thickness measurement with UT Thickness Measurement Parameters, course/plate clock-position readings, and photographs.",
+    step2Label: "UT Thickness Readings",
+    accent: "border-teal-500 text-teal-700",
+  },
   // VESSEL_VISUAL is reserved (shown as a "Coming soon" card in the
   // selector only). Reports of this type cannot be created — the API
   // refuses the type — so this entry is never reached in practice; it
@@ -476,6 +508,129 @@ interface ReportHeader {
   vutmShellRows: string;
   vutmDishRows: string;
   vutmNozzleRows: string;
+  // ─── TANK (STORAGE TANK) FIELDS ───
+  // Populated when reportType = TANK_DPT / TANK_MPT / TANK_WELD_SCAN /
+  // TANK_UTM (the Tank equipment category — Storage Tank). Completely
+  // separate from the Vessel vws*/vutm* and Piping dpt*/mpt*/ws* fields
+  // above — storage-tank reports never read or write Vessel/Piping
+  // fields. Dates are strings in "YYYY-MM-DD" form in the header
+  // (converted to DateTime by the API, like the other report types).
+  // TANK DPT (TANK_DPT)
+  tdptDateOfExamination: string;
+  tdptTestingStandard: string;
+  tdptAcceptanceCriteria: string;
+  tdptSurfacePreparation: string;
+  tdptSurfaceTemperature: string;
+  tdptPenetrantType: string;
+  tdptPenetrantProcess: string;
+  tdptMethodOfPreCleaning: string;
+  tdptDryingTimeAfterPreCleaning: string;
+  tdptMethodOfApplyingPenetrant: string;
+  tdptPenetratingTime: string;
+  tdptMethodOfRemovingExcessPenetrant: string;
+  tdptMethodOfApplyingDeveloper: string;
+  tdptDevelopmentTime: string;
+  tdptInterpretationTime: string;
+  tdptLightingEquipment: string;
+  tdptPostCleaning: string;
+  tdptSolventMake: string;
+  tdptSolventProduct: string;
+  tdptSolventBatchNo: string;
+  tdptSolventExpiry: string;
+  tdptPenetrantMake: string;
+  tdptPenetrantProduct: string;
+  tdptPenetrantBatchNo: string;
+  tdptPenetrantExpiry: string;
+  tdptDeveloperMake: string;
+  tdptDeveloperProduct: string;
+  tdptDeveloperBatchNo: string;
+  tdptDeveloperExpiry: string;
+  // Testing-details rows JSON — written from the local tdptRows state
+  // on save.
+  tdptObservationRows: string;
+  // TANK MPT (TANK_MPT)
+  tmptDateOfExamination: string;
+  tmptTestingStandard: string;
+  tmptAcceptanceCriteria: string;
+  tmptSurfacePreparation: string;
+  tmptSurfaceTemperature: string;
+  tmptInstrumentSerialNo: string;
+  tmptMethod: string;
+  tmptTypeOfCurrent: string;
+  tmptAcYokeLiftingCapacity: string;
+  tmptContrastMedium: string;
+  tmptMethodOfPreCleaning: string;
+  tmptMethodOfApplyingWhiteContrast: string;
+  tmptAcYokePoleSpacing: string;
+  tmptMagneticMedium: string;
+  tmptMethodOfApplyingMagneticMedium: string;
+  tmptDevelopmentTime: string;
+  tmptInterpretationTime: string;
+  tmptLightingEquipment: string;
+  tmptPostCleaning: string;
+  tmptWhiteContrastMake: string;
+  tmptWhiteContrastProduct: string;
+  tmptWhiteContrastLotNo: string;
+  tmptWhiteContrastExpiry: string;
+  tmptInkMake: string;
+  tmptInkProduct: string;
+  tmptInkLotNo: string;
+  tmptInkExpiry: string;
+  // Testing-details rows JSON — written from the local tmptRows state
+  // on save.
+  tmptRows: string;
+  // TANK WELD SCAN (TANK_WELD_SCAN)
+  twsDateOfExamination: string;
+  twsTestingStandard: string;
+  twsAcceptanceCriteria: string;
+  twsUtProcedure: string;
+  twsEquipmentMake: string;
+  twsEquipmentModel: string;
+  twsEquipmentSerialNo: string;
+  twsCalibrationDueDate: string;
+  twsCableLength: string;
+  twsCableType: string;
+  // Probe Details — fixed 4-probe grid JSON (Longitudinal Wave 0°,
+  // Shear Wave 45° / 60° / 70°). The user types the actual inspection
+  // values for each probe.
+  twsProbeDetails: string;
+  twsCalibrationBlock: string;
+  twsCalibrationBlockMoc: string;
+  twsReferenceReflector: string;
+  twsReferenceLevel: string;
+  twsFlawSizingTechnique: string;
+  twsSurfaceTemperature: string;
+  twsTestingMethod: string;
+  twsCouplant: string;
+  twsSurfacePreparation: string;
+  twsSurfaceFinish: string;
+  twsExtentOfScanning: string;
+  // Testing-details rows JSON — written from the local twsRows state
+  // on save.
+  twsDetailRows: string;
+  // TANK UT THICKNESS MEASUREMENT (TANK_UTM)
+  tutmDateOfExamination: string;
+  tutmTestingStandard: string;
+  tutmAcceptanceCriteria: string;
+  tutmUtProcedure: string;
+  tutmEquipmentMake: string;
+  tutmEquipmentModel: string;
+  tutmEquipmentSerialNo: string;
+  tutmCalibrationDueDate: string;
+  tutmCableLengthAndType: string;
+  // Longitudinal Wave (0°) probe rows JSON — repeatable rows of
+  // { frequency, probeSize, serialNo }.
+  tutmLwProbeRows: string;
+  tutmTypeOfCrystal: string;
+  tutmCalibrationBlock: string;
+  tutmSurfaceTemperature: string;
+  tutmMethod: string;
+  tutmCouplant: string;
+  tutmSurfacePreparation: string;
+  tutmSurfaceFinish: string;
+  // Course/plate readings rows JSON (clock positions) — written from
+  // the local tutmRows state on save.
+  tutmPlateRows: string;
   // Condition fields default empty
   pipelineAgeYears: string;
   serviceFluid: string;
@@ -759,6 +914,106 @@ const EMPTY_HEADER: ReportHeader = {
   vutmShellRows: "[]",
   vutmDishRows: "[]",
   vutmNozzleRows: "[]",
+  // Tank (Storage Tank) fields default empty
+  tdptDateOfExamination: new Date().toISOString().slice(0, 10),
+  tdptTestingStandard: "",
+  tdptAcceptanceCriteria: "",
+  tdptSurfacePreparation: "",
+  tdptSurfaceTemperature: "",
+  tdptPenetrantType: "",
+  tdptPenetrantProcess: "",
+  tdptMethodOfPreCleaning: "",
+  tdptDryingTimeAfterPreCleaning: "",
+  tdptMethodOfApplyingPenetrant: "",
+  tdptPenetratingTime: "",
+  tdptMethodOfRemovingExcessPenetrant: "",
+  tdptMethodOfApplyingDeveloper: "",
+  tdptDevelopmentTime: "",
+  tdptInterpretationTime: "",
+  tdptLightingEquipment: "",
+  tdptPostCleaning: "",
+  tdptSolventMake: "",
+  tdptSolventProduct: "",
+  tdptSolventBatchNo: "",
+  tdptSolventExpiry: "",
+  tdptPenetrantMake: "",
+  tdptPenetrantProduct: "",
+  tdptPenetrantBatchNo: "",
+  tdptPenetrantExpiry: "",
+  tdptDeveloperMake: "",
+  tdptDeveloperProduct: "",
+  tdptDeveloperBatchNo: "",
+  tdptDeveloperExpiry: "",
+  tdptObservationRows: "[]",
+  tmptDateOfExamination: new Date().toISOString().slice(0, 10),
+  tmptTestingStandard: "",
+  tmptAcceptanceCriteria: "",
+  tmptSurfacePreparation: "",
+  tmptSurfaceTemperature: "",
+  tmptInstrumentSerialNo: "",
+  tmptMethod: "",
+  tmptTypeOfCurrent: "",
+  tmptAcYokeLiftingCapacity: "",
+  tmptContrastMedium: "",
+  tmptMethodOfPreCleaning: "",
+  tmptMethodOfApplyingWhiteContrast: "",
+  tmptAcYokePoleSpacing: "",
+  tmptMagneticMedium: "",
+  tmptMethodOfApplyingMagneticMedium: "",
+  tmptDevelopmentTime: "",
+  tmptInterpretationTime: "",
+  tmptLightingEquipment: "",
+  tmptPostCleaning: "",
+  tmptWhiteContrastMake: "",
+  tmptWhiteContrastProduct: "",
+  tmptWhiteContrastLotNo: "",
+  tmptWhiteContrastExpiry: "",
+  tmptInkMake: "",
+  tmptInkProduct: "",
+  tmptInkLotNo: "",
+  tmptInkExpiry: "",
+  tmptRows: "[]",
+  twsDateOfExamination: "",
+  twsTestingStandard: "",
+  twsAcceptanceCriteria: "",
+  twsUtProcedure: "",
+  twsEquipmentMake: "",
+  twsEquipmentModel: "",
+  twsEquipmentSerialNo: "",
+  twsCalibrationDueDate: "",
+  twsCableLength: "",
+  twsCableType: "",
+  twsProbeDetails: "[]",
+  twsCalibrationBlock: "",
+  twsCalibrationBlockMoc: "",
+  twsReferenceReflector: "",
+  twsReferenceLevel: "",
+  twsFlawSizingTechnique: "",
+  twsSurfaceTemperature: "",
+  twsTestingMethod: "",
+  twsCouplant: "",
+  twsSurfacePreparation: "",
+  twsSurfaceFinish: "",
+  twsExtentOfScanning: "",
+  twsDetailRows: "[]",
+  tutmDateOfExamination: "",
+  tutmTestingStandard: "",
+  tutmAcceptanceCriteria: "",
+  tutmUtProcedure: "",
+  tutmEquipmentMake: "",
+  tutmEquipmentModel: "",
+  tutmEquipmentSerialNo: "",
+  tutmCalibrationDueDate: "",
+  tutmCableLengthAndType: "",
+  tutmLwProbeRows: "[]",
+  tutmTypeOfCrystal: "",
+  tutmCalibrationBlock: "",
+  tutmSurfaceTemperature: "",
+  tutmMethod: "",
+  tutmCouplant: "",
+  tutmSurfacePreparation: "",
+  tutmSurfaceFinish: "",
+  tutmPlateRows: "[]",
   // Condition fields default empty
   pipelineAgeYears: "",
   serviceFluid: "",
@@ -971,6 +1226,171 @@ const VWS_OBSERVATION_QUICK_OPTIONS = [
   "Reject",
 ];
 
+// ─── TANK (STORAGE TANK) ROW TYPES ───
+// Storage-tank testing-details / readings rows are stored as JSON
+// columns on the report itself (same persistence pattern as the vessel
+// rows, but on completely separate tdpt*/tmpt*/tws*/tutm* columns —
+// tank reports never read or write Vessel/Piping columns).
+
+// One row of the Tank DPT / Tank MPT testing-details tables. Same
+// column set for both modules: Part Details | ID | Weld Dimension |
+// Size of Indication Approx. (mm) | Observation & Result. Serial
+// numbers are auto-generated from the row index. Every cell is
+// editable free text — nothing is hardcoded.
+interface TankDetailRow {
+  partDetails: string;
+  idNo: string;
+  weldDimension: string;
+  indicationSize: string;
+  observationResult: string;
+}
+const EMPTY_TANK_DETAIL_ROW: TankDetailRow = {
+  partDetails: "",
+  idNo: "",
+  weldDimension: "",
+  indicationSize: "",
+  observationResult: "",
+};
+function parseTankDetailRows(json: string | null | undefined): TankDetailRow[] {
+  try {
+    const parsed = JSON.parse(json ?? "[]");
+    if (Array.isArray(parsed)) {
+      return parsed.map((r: Record<string, unknown>) => ({
+        partDetails: String(r.partDetails ?? ""),
+        idNo: String(r.idNo ?? ""),
+        weldDimension: String(r.weldDimension ?? ""),
+        indicationSize: String(r.indicationSize ?? ""),
+        observationResult: String(r.observationResult ?? ""),
+      }));
+    }
+  } catch {}
+  return [];
+}
+
+// One row of the "Weld Scan Testing Details" table on TANK_WELD_SCAN
+// reports. Tank column set: Course / Plate | Weld Seam ID | Weld
+// Dimension | Probe Angle | Probe Frequency | Observation & Result.
+// Sl. No is auto-generated from the row index. Every cell is editable —
+// suggestions exist for Course / Plate and Weld Seam ID and a dropdown
+// for Probe Angle, but custom values are always allowed.
+interface TankWeldScanDetailRow {
+  component: string;
+  plateWeldId: string;
+  weldDimension: string;
+  probeAngle: string;
+  probeFrequency: string;
+  observationResult: string;
+}
+const EMPTY_TANK_WELD_SCAN_ROW: TankWeldScanDetailRow = {
+  component: "",
+  plateWeldId: "",
+  weldDimension: "",
+  probeAngle: "",
+  probeFrequency: "",
+  observationResult: "",
+};
+function parseTankWeldScanRows(json: string | null | undefined): TankWeldScanDetailRow[] {
+  try {
+    const parsed = JSON.parse(json ?? "[]");
+    if (Array.isArray(parsed)) {
+      return parsed.map((r: Record<string, unknown>) => ({
+        component: String(r.component ?? ""),
+        plateWeldId: String(r.plateWeldId ?? ""),
+        weldDimension: String(r.weldDimension ?? ""),
+        probeAngle: String(r.probeAngle ?? ""),
+        probeFrequency: String(r.probeFrequency ?? ""),
+        observationResult: String(r.observationResult ?? ""),
+      }));
+    }
+  } catch {}
+  return [];
+}
+// Tank-appropriate suggestion lists (not restrictions — the user can
+// type any value).
+const TWS_COMPONENT_SUGGESTIONS = [
+  "Course-1", "Course-2", "Course-3", "Course-4",
+  "Roof Plate", "Bottom Plate", "Annular Plate", "Nozzle",
+];
+const TWS_WELD_SEAM_ID_SUGGESTIONS = [
+  "Vertical Seam CS-1",
+  "Horizontal Seam CS-1/2",
+  "Roof-to-Shell Weld",
+  "Bottom-to-Shell Weld",
+  "Annular Plate Weld",
+  "Nozzle Weld",
+];
+const TWS_PROBE_ANGLE_OPTIONS = ["0°", "45°", "60°", "70°"];
+const TWS_PROBE_FREQUENCY_SUGGESTIONS = ["1 MHz", "2 MHz", "2.5 MHz", "4 MHz", "5 MHz", "7.5 MHz", "10 MHz"];
+const TWS_OBSERVATION_QUICK_OPTIONS = [
+  "No Significant Indication Observed",
+  "Accept",
+  "Reject",
+];
+
+// One row of the Tank UT course/plate readings table (clock positions,
+// same unified row shape as the vessel clock rows but stored on the
+// tank's own tutmPlateRows column). Every clock position (12 / 3 / 6 /
+// 9 o'clock) starts with ONE reading input the user can extend
+// dynamically (Add Reading) or trim. Minimum Measured Thickness is
+// ALWAYS derived from all readings of the row via vutmMinOfSpots at
+// render time — it is read-only everywhere and recomputed on every
+// keystroke.
+interface TankUtmRow {
+  moc: string;
+  componentType: string;
+  componentId: string;
+  nominalThickness: string;
+  c12: string[];
+  c3: string[];
+  c6: string[];
+  c9: string[];
+}
+const EMPTY_TANK_UTM_ROW: TankUtmRow = {
+  moc: "",
+  componentType: "",
+  componentId: "",
+  nominalThickness: "",
+  c12: [""],
+  c3: [""],
+  c6: [""],
+  c9: [""],
+};
+function parseTankUtmRows(json: string | null | undefined): TankUtmRow[] {
+  try {
+    const parsed = JSON.parse(json ?? "[]");
+    if (Array.isArray(parsed)) {
+      return parsed.map((r: Record<string, unknown>) => {
+        const spots = (key: string): string[] => {
+          const v = r[key];
+          return Array.isArray(v) && v.length > 0
+            ? (v as unknown[]).map((x) => String(x ?? ""))
+            : [""];
+        };
+        return {
+          moc: String(r.moc ?? ""),
+          componentType: String(r.componentType ?? ""),
+          componentId: String(r.componentId ?? ""),
+          nominalThickness: String(r.nominalThickness ?? ""),
+          c12: spots("c12"),
+          c3: spots("c3"),
+          c6: spots("c6"),
+          c9: spots("c9"),
+        };
+      });
+    }
+  } catch {}
+  return [];
+}
+// Tank course / plate suggestions (not restrictions — the user can
+// type any value).
+const TUTM_COMPONENT_TYPES = [
+  "Course-1", "Course-2", "Course-3", "Course-4", "Course-5", "Course-6",
+  "Roof Plate", "Bottom Plate", "Annular Plate", "Shell Plate", "Nozzle",
+];
+const TUTM_PLATE_ID_SUGGESTIONS = [
+  "Plate-1", "Plate-2", "Plate-3", "Location A", "Location B", "T-1",
+];
+
 // ─── VESSEL UT THICKNESS MEASUREMENT (VESSEL_UTM) ───
 // Types + helpers for the VESSEL_UTM report (Vessel → UT Thickness
 // Measurement). Completely separate from the Piping Thickness Measurement
@@ -1103,6 +1523,14 @@ export function PipelineReportFormView() {
   // Measured Thickness is derived at render time from the readings —
   // never stored in local state.
   const [vutmShellRows, setVutmShellRows] = useState<VutmRow[]>([]);
+  // Tank (Storage Tank) testing-details / readings rows — local state is
+  // the source of truth; persisted as the tdptObservationRows / tmptRows
+  // / twsDetailRows / tutmPlateRows JSON columns whenever the header is
+  // saved. Tank UT Minimum Measured Thickness is derived at render time.
+  const [tdptRows, setTdptRows] = useState<TankDetailRow[]>([]);
+  const [tmptRows, setTmptRows] = useState<TankDetailRow[]>([]);
+  const [twsRows, setTwsRows] = useState<TankWeldScanDetailRow[]>([]);
+  const [tutmRows, setTutmRows] = useState<TankUtmRow[]>([]);
   const [clients, setClients] = useState<ClientItem[]>([]);
   const [componentTypes, setComponentTypes] = useState<ComponentTypeItem[]>([]);
   const [standards, setStandards] = useState<PipeStandardItem[]>([]);
@@ -1354,6 +1782,106 @@ export function PipelineReportFormView() {
           vutmShellRows: r.vutmShellRows ?? "[]",
           vutmDishRows: r.vutmDishRows ?? "[]",
           vutmNozzleRows: r.vutmNozzleRows ?? "[]",
+          // Tank (Storage Tank) fields (TANK_*)
+          tdptDateOfExamination: r.tdptDateOfExamination ? r.tdptDateOfExamination.slice(0, 10) : new Date().toISOString().slice(0, 10),
+          tdptTestingStandard: r.tdptTestingStandard ?? "",
+          tdptAcceptanceCriteria: r.tdptAcceptanceCriteria ?? "",
+          tdptSurfacePreparation: r.tdptSurfacePreparation ?? "",
+          tdptSurfaceTemperature: r.tdptSurfaceTemperature ?? "",
+          tdptPenetrantType: r.tdptPenetrantType ?? "",
+          tdptPenetrantProcess: r.tdptPenetrantProcess ?? "",
+          tdptMethodOfPreCleaning: r.tdptMethodOfPreCleaning ?? "",
+          tdptDryingTimeAfterPreCleaning: r.tdptDryingTimeAfterPreCleaning ?? "",
+          tdptMethodOfApplyingPenetrant: r.tdptMethodOfApplyingPenetrant ?? "",
+          tdptPenetratingTime: r.tdptPenetratingTime ?? "",
+          tdptMethodOfRemovingExcessPenetrant: r.tdptMethodOfRemovingExcessPenetrant ?? "",
+          tdptMethodOfApplyingDeveloper: r.tdptMethodOfApplyingDeveloper ?? "",
+          tdptDevelopmentTime: r.tdptDevelopmentTime ?? "",
+          tdptInterpretationTime: r.tdptInterpretationTime ?? "",
+          tdptLightingEquipment: r.tdptLightingEquipment ?? "",
+          tdptPostCleaning: r.tdptPostCleaning ?? "",
+          tdptSolventMake: r.tdptSolventMake ?? "",
+          tdptSolventProduct: r.tdptSolventProduct ?? "",
+          tdptSolventBatchNo: r.tdptSolventBatchNo ?? "",
+          tdptSolventExpiry: r.tdptSolventExpiry ?? "",
+          tdptPenetrantMake: r.tdptPenetrantMake ?? "",
+          tdptPenetrantProduct: r.tdptPenetrantProduct ?? "",
+          tdptPenetrantBatchNo: r.tdptPenetrantBatchNo ?? "",
+          tdptPenetrantExpiry: r.tdptPenetrantExpiry ?? "",
+          tdptDeveloperMake: r.tdptDeveloperMake ?? "",
+          tdptDeveloperProduct: r.tdptDeveloperProduct ?? "",
+          tdptDeveloperBatchNo: r.tdptDeveloperBatchNo ?? "",
+          tdptDeveloperExpiry: r.tdptDeveloperExpiry ?? "",
+          tdptObservationRows: r.tdptObservationRows ?? "[]",
+          tmptDateOfExamination: r.tmptDateOfExamination ? r.tmptDateOfExamination.slice(0, 10) : new Date().toISOString().slice(0, 10),
+          tmptTestingStandard: r.tmptTestingStandard ?? "",
+          tmptAcceptanceCriteria: r.tmptAcceptanceCriteria ?? "",
+          tmptSurfacePreparation: r.tmptSurfacePreparation ?? "",
+          tmptSurfaceTemperature: r.tmptSurfaceTemperature ?? "",
+          tmptInstrumentSerialNo: r.tmptInstrumentSerialNo ?? "",
+          tmptMethod: r.tmptMethod ?? "",
+          tmptTypeOfCurrent: r.tmptTypeOfCurrent ?? "",
+          tmptAcYokeLiftingCapacity: r.tmptAcYokeLiftingCapacity ?? "",
+          tmptContrastMedium: r.tmptContrastMedium ?? "",
+          tmptMethodOfPreCleaning: r.tmptMethodOfPreCleaning ?? "",
+          tmptMethodOfApplyingWhiteContrast: r.tmptMethodOfApplyingWhiteContrast ?? "",
+          tmptAcYokePoleSpacing: r.tmptAcYokePoleSpacing ?? "",
+          tmptMagneticMedium: r.tmptMagneticMedium ?? "",
+          tmptMethodOfApplyingMagneticMedium: r.tmptMethodOfApplyingMagneticMedium ?? "",
+          tmptDevelopmentTime: r.tmptDevelopmentTime ?? "",
+          tmptInterpretationTime: r.tmptInterpretationTime ?? "",
+          tmptLightingEquipment: r.tmptLightingEquipment ?? "",
+          tmptPostCleaning: r.tmptPostCleaning ?? "",
+          tmptWhiteContrastMake: r.tmptWhiteContrastMake ?? "",
+          tmptWhiteContrastProduct: r.tmptWhiteContrastProduct ?? "",
+          tmptWhiteContrastLotNo: r.tmptWhiteContrastLotNo ?? "",
+          tmptWhiteContrastExpiry: r.tmptWhiteContrastExpiry ?? "",
+          tmptInkMake: r.tmptInkMake ?? "",
+          tmptInkProduct: r.tmptInkProduct ?? "",
+          tmptInkLotNo: r.tmptInkLotNo ?? "",
+          tmptInkExpiry: r.tmptInkExpiry ?? "",
+          tmptRows: r.tmptRows ?? "[]",
+          twsDateOfExamination: r.twsDateOfExamination ? r.twsDateOfExamination.slice(0, 10) : "",
+          twsTestingStandard: r.twsTestingStandard ?? "",
+          twsAcceptanceCriteria: r.twsAcceptanceCriteria ?? "",
+          twsUtProcedure: r.twsUtProcedure ?? "",
+          twsEquipmentMake: r.twsEquipmentMake ?? "",
+          twsEquipmentModel: r.twsEquipmentModel ?? "",
+          twsEquipmentSerialNo: r.twsEquipmentSerialNo ?? "",
+          twsCalibrationDueDate: r.twsCalibrationDueDate ? r.twsCalibrationDueDate.slice(0, 10) : "",
+          twsCableLength: r.twsCableLength ?? "",
+          twsCableType: r.twsCableType ?? "",
+          twsProbeDetails: r.twsProbeDetails ?? JSON.stringify(VWS_PROBE_GRID_DEFAULTS),
+          twsCalibrationBlock: r.twsCalibrationBlock ?? "",
+          twsCalibrationBlockMoc: r.twsCalibrationBlockMoc ?? "",
+          twsReferenceReflector: r.twsReferenceReflector ?? "",
+          twsReferenceLevel: r.twsReferenceLevel ?? "",
+          twsFlawSizingTechnique: r.twsFlawSizingTechnique ?? "",
+          twsSurfaceTemperature: r.twsSurfaceTemperature ?? "",
+          twsTestingMethod: r.twsTestingMethod ?? "",
+          twsCouplant: r.twsCouplant ?? "",
+          twsSurfacePreparation: r.twsSurfacePreparation ?? "",
+          twsSurfaceFinish: r.twsSurfaceFinish ?? "",
+          twsExtentOfScanning: r.twsExtentOfScanning ?? "",
+          twsDetailRows: r.twsDetailRows ?? "[]",
+          tutmDateOfExamination: r.tutmDateOfExamination ? r.tutmDateOfExamination.slice(0, 10) : "",
+          tutmTestingStandard: r.tutmTestingStandard ?? "",
+          tutmAcceptanceCriteria: r.tutmAcceptanceCriteria ?? "",
+          tutmUtProcedure: r.tutmUtProcedure ?? "",
+          tutmEquipmentMake: r.tutmEquipmentMake ?? "",
+          tutmEquipmentModel: r.tutmEquipmentModel ?? "",
+          tutmEquipmentSerialNo: r.tutmEquipmentSerialNo ?? "",
+          tutmCalibrationDueDate: r.tutmCalibrationDueDate ? r.tutmCalibrationDueDate.slice(0, 10) : "",
+          tutmCableLengthAndType: r.tutmCableLengthAndType ?? "",
+          tutmLwProbeRows: r.tutmLwProbeRows ?? JSON.stringify([{ frequency: "", probeSize: "", serialNo: "" }]),
+          tutmTypeOfCrystal: r.tutmTypeOfCrystal ?? "",
+          tutmCalibrationBlock: r.tutmCalibrationBlock ?? "",
+          tutmSurfaceTemperature: r.tutmSurfaceTemperature ?? "",
+          tutmMethod: r.tutmMethod ?? "",
+          tutmCouplant: r.tutmCouplant ?? "",
+          tutmSurfacePreparation: r.tutmSurfacePreparation ?? "",
+          tutmSurfaceFinish: r.tutmSurfaceFinish ?? "",
+          tutmPlateRows: r.tutmPlateRows ?? "[]",
           // Condition fields (only populated for PIPELINE_CONDITION reports)
           pipelineAgeYears: r.pipelineAgeYears != null ? String(r.pipelineAgeYears) : "",
           serviceFluid: r.serviceFluid ?? "",
@@ -1526,6 +2054,12 @@ export function PipelineReportFormView() {
             (r.vesselOrientation as VutmOrientation | null) ?? null,
           ),
         );
+        // Tank (Storage Tank) testing-details / readings rows — parsed
+        // from the tank JSON columns (TANK_* reports only).
+        setTdptRows(parseTankDetailRows(r.tdptObservationRows));
+        setTmptRows(parseTankDetailRows(r.tmptRows));
+        setTwsRows(parseTankWeldScanRows(r.twsDetailRows));
+        setTutmRows(parseTankUtmRows(r.tutmPlateRows));
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -1781,6 +2315,34 @@ export function PipelineReportFormView() {
         payload.vutmShellRows = JSON.stringify(vutmShellRows);
         payload.vutmDishRows = "[]";
         payload.vutmNozzleRows = "[]";
+      } else if (header.reportType === "TANK_DPT") {
+        // Tank DPT: the testing-details rows are stored as the
+        // tdptObservationRows JSON column (the local tdptRows state is
+        // the source of truth). The DPT parameters and consumable fields
+        // (tdpt*) pass through verbatim from the header spread.
+        payload.tdptObservationRows = JSON.stringify(tdptRows);
+      } else if (header.reportType === "TANK_MPT") {
+        // Tank MPT: the testing-details rows are stored as the tmptRows
+        // JSON column (the local tmptRows state is the source of truth).
+        // The consumable fields (tmpt*) and the MPT parameters (tmpt*)
+        // pass through verbatim from the header spread.
+        payload.tmptRows = JSON.stringify(tmptRows);
+      } else if (header.reportType === "TANK_WELD_SCAN") {
+        // Tank Weld Scan: the testing-details rows are stored as the
+        // twsDetailRows JSON column (the local twsRows state is the
+        // source of truth). The Weld Scan Testing Parameters (tws*
+        // fields incl. the fixed 4-probe twsProbeDetails grid) pass
+        // through verbatim from the header spread.
+        payload.twsDetailRows = JSON.stringify(twsRows);
+      } else if (header.reportType === "TANK_UTM") {
+        // Tank UT Thickness Measurement: the course/plate clock-position
+        // readings rows are stored as the tutmPlateRows JSON column (the
+        // local tutmRows state is the source of truth). The UT Thickness
+        // Measurement Parameters (tutm* fields incl. the repeatable
+        // tutmLwProbeRows grid) pass through verbatim from the header
+        // spread. The API recomputes Minimum Measured Thickness from the
+        // readings server-side.
+        payload.tutmPlateRows = JSON.stringify(tutmRows);
       } else {
         payload.pipelineAgeYears = null;
       }
@@ -2126,6 +2688,22 @@ export function PipelineReportFormView() {
       if (vutmShellRows.length === 0) {
         toast.warning("No UT thickness measurement rows yet. You can proceed, but you'll need to add at least one component reading before submitting.");
       }
+    } else if (header.reportType === "TANK_DPT") {
+      if (tdptRows.length === 0) {
+        toast.warning("No Dye Penetrant Testing Details rows yet. You can proceed, but you'll need to add at least one before submitting.");
+      }
+    } else if (header.reportType === "TANK_MPT") {
+      if (tmptRows.length === 0) {
+        toast.warning("No Magnetic Particle Testing Details rows yet. You can proceed, but you'll need to add at least one before submitting.");
+      }
+    } else if (header.reportType === "TANK_WELD_SCAN") {
+      if (twsRows.length === 0) {
+        toast.warning("No Weld Scan Testing Details rows yet. You can proceed, but you'll need to add at least one before submitting.");
+      }
+    } else if (header.reportType === "TANK_UTM") {
+      if (tutmRows.length === 0) {
+        toast.warning("No UT thickness measurement rows yet. You can proceed, but you'll need to add at least one course/plate reading before submitting.");
+      }
     }
     // PIPELINE_CONDITION and PIPELINE_MPT (piping) have no row requirement.
     return true;
@@ -2145,6 +2723,14 @@ export function PipelineReportFormView() {
     header.reportType === "VESSEL_MPT" ||
     header.reportType === "VESSEL_WELD_SCAN" ||
     header.reportType === "VESSEL_UTM";
+
+  // Tank report types — Step 1 uses tank wording ("Equipment / Tank
+  // Description", "Equipment Identification No.") for these reports.
+  const IS_TANK_REPORT: boolean =
+    header.reportType === "TANK_DPT" ||
+    header.reportType === "TANK_MPT" ||
+    header.reportType === "TANK_WELD_SCAN" ||
+    header.reportType === "TANK_UTM";
 
   async function proceedToNext() {
     if (step === 1) {
@@ -3020,6 +3606,161 @@ export function PipelineReportFormView() {
     updateHeader("vutmLwProbeRows", JSON.stringify(probes));
   }
 
+  // ─── TANK (STORAGE TANK) ROW OPERATIONS (TANK_*) ───
+  // Testing-details rows live in local state and persist as the tank
+  // JSON columns on save (no per-row API calls). Serial numbers are
+  // auto-generated from the row index at render time. Tank UT
+  // clock-position readings follow the same dynamic "Add Reading"
+  // mechanics as the vessel clock rows; Minimum Measured Thickness is
+  // derived at render time — never stored in local state.
+
+  function addTdptRow() {
+    setTdptRows((arr) => [...arr, { ...EMPTY_TANK_DETAIL_ROW }]);
+  }
+
+  function updateTdptRow(idx: number, patch: Partial<TankDetailRow>) {
+    setTdptRows((arr) => {
+      const next = [...arr];
+      next[idx] = { ...next[idx], ...patch };
+      return next;
+    });
+  }
+
+  function removeTdptRow(idx: number) {
+    setTdptRows((arr) => arr.filter((_, i) => i !== idx));
+  }
+
+  function addTmptRow() {
+    setTmptRows((arr) => [...arr, { ...EMPTY_TANK_DETAIL_ROW }]);
+  }
+
+  function updateTmptRow(idx: number, patch: Partial<TankDetailRow>) {
+    setTmptRows((arr) => {
+      const next = [...arr];
+      next[idx] = { ...next[idx], ...patch };
+      return next;
+    });
+  }
+
+  function removeTmptRow(idx: number) {
+    setTmptRows((arr) => arr.filter((_, i) => i !== idx));
+  }
+
+  function addTwsRow() {
+    setTwsRows((arr) => [...arr, { ...EMPTY_TANK_WELD_SCAN_ROW }]);
+  }
+
+  function updateTwsRow(idx: number, patch: Partial<TankWeldScanDetailRow>) {
+    setTwsRows((arr) => {
+      const next = [...arr];
+      next[idx] = { ...next[idx], ...patch };
+      return next;
+    });
+  }
+
+  function removeTwsRow(idx: number) {
+    setTwsRows((arr) => arr.filter((_, i) => i !== idx));
+  }
+
+  // Update one entry of the fixed 4-probe grid (Tank Weld Scan Testing
+  // Parameters → Probe Details). The grid itself is structural — only
+  // the frequency / probe size / serial number values change.
+  function updateTwsProbe(idx: number, patch: Partial<VwsProbeEntry>) {
+    const probes = parseVwsProbes(header.twsProbeDetails);
+    probes[idx] = { ...probes[idx], ...patch };
+    updateHeader("twsProbeDetails", JSON.stringify(probes));
+  }
+
+  function addTutmRow() {
+    setTutmRows((arr) => [...arr, { ...EMPTY_TANK_UTM_ROW, c12: [""], c3: [""], c6: [""], c9: [""] }]);
+  }
+
+  function updateTutmRow(idx: number, patch: Partial<TankUtmRow>) {
+    setTutmRows((arr) => {
+      const next = [...arr];
+      next[idx] = { ...next[idx], ...patch };
+      return next;
+    });
+  }
+
+  /** Update one reading of a clock-position group on a tank row. */
+  function updateTutmClockSpot(
+    idx: number,
+    clock: VutmClockKey,
+    spotIdx: number,
+    value: string,
+  ) {
+    setTutmRows((arr) => {
+      const cur = arr[idx];
+      if (!cur) return arr;
+      const spots = [...cur[clock]];
+      spots[spotIdx] = value;
+      const nextRow = { ...cur, [clock]: spots };
+      const next = [...arr];
+      next[idx] = nextRow;
+      return next;
+    });
+  }
+
+  /** Append one more reading slot to a clock position (no limit). */
+  function addTutmReading(idx: number, clock: VutmClockKey) {
+    setTutmRows((arr) => {
+      const cur = arr[idx];
+      if (!cur) return arr;
+      const nextRow = { ...cur, [clock]: [...cur[clock], ""] };
+      const next = [...arr];
+      next[idx] = nextRow;
+      return next;
+    });
+  }
+
+  /**
+   * Remove one reading slot from a clock position. The LAST remaining
+   * slot cannot be removed — every position always keeps one input.
+   */
+  function removeTutmReading(idx: number, clock: VutmClockKey, spotIdx: number) {
+    setTutmRows((arr) => {
+      const cur = arr[idx];
+      if (!cur) return arr;
+      if (cur[clock].length <= 1) return arr;
+      const spots = cur[clock].filter((_, i) => i !== spotIdx);
+      const nextRow = { ...cur, [clock]: spots };
+      const next = [...arr];
+      next[idx] = nextRow;
+      return next;
+    });
+  }
+
+  function removeTutmRow(idx: number) {
+    setTutmRows((arr) => arr.filter((_, i) => i !== idx));
+  }
+
+  // Longitudinal Wave (0°) probe rows — repeatable rows stored as the
+  // tutmLwProbeRows JSON header field (same pattern as the Vessel UT
+  // probe grid, on the tank's own column).
+  function updateTutmLwProbe(idx: number, patch: Partial<VutmLwProbeEntry>) {
+    const probes = parseVutmLwProbes(header.tutmLwProbeRows);
+    probes[idx] = { ...probes[idx], ...patch };
+    updateHeader("tutmLwProbeRows", JSON.stringify(probes));
+  }
+
+  function addTutmLwProbe() {
+    const probes = parseVutmLwProbes(header.tutmLwProbeRows);
+    probes.push({ frequency: "", probeSize: "", serialNo: "" });
+    updateHeader("tutmLwProbeRows", JSON.stringify(probes));
+  }
+
+  function removeTutmLwProbe(idx: number) {
+    const probes = parseVutmLwProbes(header.tutmLwProbeRows);
+    if (probes.length <= 1) {
+      // Keep at least one row — the grid is repeatable but never empty.
+      updateHeader("tutmLwProbeRows", JSON.stringify([{ frequency: "", probeSize: "", serialNo: "" }]));
+      return;
+    }
+    probes.splice(idx, 1);
+    updateHeader("tutmLwProbeRows", JSON.stringify(probes));
+  }
+
   // ─── SAVE DRAFT (saves header + custom columns without navigating) ───
   async function saveDraft() {
     if (header.reportType === "PIPELINE_THICKNESS") {
@@ -3248,23 +3989,25 @@ export function PipelineReportFormView() {
             />
           </div>
           <div className="space-y-2 sm:col-span-2">
-            <Label>{IS_VESSEL_REPORT ? "Equipment / Vessel Description" : "Pipeline Description"}</Label>
+            <Label>{IS_VESSEL_REPORT ? "Equipment / Vessel Description" : IS_TANK_REPORT ? "Equipment / Tank Description" : "Pipeline Description"}</Label>
             <Input
               value={header.pipelineDescription}
               onChange={(e) => updateHeader("pipelineDescription", e.target.value)}
               placeholder={
                 IS_VESSEL_REPORT
                   ? "e.g. V-311 Final Separator, nozzle welds"
-                  : "e.g. 2-inch water pipeline, top pipe rack, west side"
+                  : IS_TANK_REPORT
+                    ? "e.g. Storage Tank T-101, shell course welds"
+                    : "e.g. 2-inch water pipeline, top pipe rack, west side"
               }
             />
           </div>
           <div className="space-y-2">
-            <Label>{IS_VESSEL_REPORT ? "Equipment Identification No." : "Pipeline Identification No."}</Label>
+            <Label>{IS_VESSEL_REPORT || IS_TANK_REPORT ? "Equipment Identification No." : "Pipeline Identification No."}</Label>
             <Input
               value={header.pipelineIdentificationNumber}
               onChange={(e) => updateHeader("pipelineIdentificationNumber", e.target.value)}
-              placeholder={IS_VESSEL_REPORT ? "Equipment / tag number" : "PID line number"}
+              placeholder={IS_VESSEL_REPORT ? "Equipment / tag number" : IS_TANK_REPORT ? "Equipment / tank tag number" : "PID line number"}
               className="font-mono"
             />
           </div>
@@ -6571,6 +7314,1588 @@ export function PipelineReportFormView() {
         </div>
         </>
       )} {/* end step 2 — VESSEL UT THICKNESS MEASUREMENT */}
+
+      {/* ═══ STEP 2 (TANK DPT): STORAGE TANK DYE PENETRANT TESTING ═══ */}
+      {step === 2 && header.reportType === "TANK_DPT" && (
+      <>
+      {/* ═══ A. DYE PENETRANT TESTING PARAMETERS ═══ */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Droplet className="h-4 w-4 text-fuchsia-700" />
+            Dye Penetrant Testing Parameters
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <tbody>
+                {/* ─── General Information ─── */}
+                <tr className="bg-fuchsia-800 text-white">
+                  <td colSpan={2} className="border border-fuchsia-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    General Information
+                  </td>
+                </tr>
+                {/* Date of Examination — editable date field */}
+                <tr className="border-b border-zinc-200">
+                  <td className="bg-fuchsia-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/3">
+                    Date of Examination
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <Input
+                      type="date"
+                      className="h-8 text-sm"
+                      value={header.tdptDateOfExamination}
+                      onChange={(e) => updateHeader("tdptDateOfExamination", e.target.value)}
+                    />
+                  </td>
+                </tr>
+                {([
+                  ["Testing Standard", "tdptTestingStandard", "e.g. ASME Section V 2023, Article 6"],
+                  ["Acceptance Criteria", "tdptAcceptanceCriteria", "e.g. ASME Section VIII Div. 1, Appx. 8, Clause 8.4"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-fuchsia-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+                {/* ─── Surface & Preparation ─── */}
+                <tr className="bg-fuchsia-800 text-white">
+                  <td colSpan={2} className="border border-fuchsia-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    Surface &amp; Preparation
+                  </td>
+                </tr>
+                {([
+                  ["Surface Preparation", "tdptSurfacePreparation", "e.g. Grinding and wire brush"],
+                  ["Surface Temperature", "tdptSurfaceTemperature", "e.g. 32 °C"],
+                  ["Method of Pre-cleaning", "tdptMethodOfPreCleaning", "e.g. Solvent cleaning"],
+                  ["Drying Time After Pre-cleaning", "tdptDryingTimeAfterPreCleaning", "e.g. 5 minutes"],
+                  ["Post Cleaning", "tdptPostCleaning", "e.g. Solvent wipe / Water wash"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-fuchsia-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+                {/* ─── Testing Materials / Consumables ─── */}
+                <tr className="bg-fuchsia-800 text-white">
+                  <td colSpan={2} className="border border-fuchsia-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    Testing Materials / Consumables
+                  </td>
+                </tr>
+                {([
+                  ["Penetrant Type", "tdptPenetrantType", "e.g. Colour contrast (visible), solvent removable"],
+                  ["Penetrant Process", "tdptPenetrantProcess", "e.g. Solvent removable / Water washable"],
+                  ["Method of Applying Penetrant", "tdptMethodOfApplyingPenetrant", "e.g. Spray"],
+                  ["Method of Removing Excess Penetrant", "tdptMethodOfRemovingExcessPenetrant", "e.g. Solvent wipe"],
+                  ["Method of Applying Developer", "tdptMethodOfApplyingDeveloper", "e.g. Spray"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-fuchsia-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+                {/* ─── Testing Timing & Interpretation ─── */}
+                <tr className="bg-fuchsia-800 text-white">
+                  <td colSpan={2} className="border border-fuchsia-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    Testing Timing &amp; Interpretation
+                  </td>
+                </tr>
+                {([
+                  ["Penetrating Time", "tdptPenetratingTime", "e.g. 10 minutes"],
+                  ["Development Time", "tdptDevelopmentTime", "e.g. 10 minutes"],
+                  ["Interpretation Time", "tdptInterpretationTime", "e.g. 10 minutes"],
+                  ["Lighting Equipment", "tdptLightingEquipment", "e.g. LED torch ≥ 1000 lux"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-fuchsia-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ═══ B. CONSUMABLE DETAILS ═══
+          Separate Make / Product / Batch Number / Expiry Date entry for
+          each of the three consumables. All values are typeable — nothing
+          is hardcoded from any sample report. */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Droplet className="h-4 w-4 text-fuchsia-700" />
+            Consumable Details
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="bg-fuchsia-800 text-white">
+                  <th className="border border-fuchsia-900 px-2 py-2 text-center w-1/5">Consumable</th>
+                  <th className="border border-fuchsia-900 px-2 py-2 text-center">Make</th>
+                  <th className="border border-fuchsia-900 px-2 py-2 text-center">Product / Description</th>
+                  <th className="border border-fuchsia-900 px-2 py-2 text-center">Batch Number</th>
+                  <th className="border border-fuchsia-900 px-2 py-2 text-center">Expiry Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {([
+                  ["Solvent", "tdptSolvent"],
+                  ["Penetrant", "tdptPenetrant"],
+                  ["Developer", "tdptDeveloper"],
+                ] as const).map(([label, prefix]) => (
+                  <tr key={prefix} className="border-b border-zinc-200">
+                    <td className="bg-fuchsia-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[`${prefix}Make` as keyof ReportHeader] as string}
+                        onChange={(e) => updateHeader(`${prefix}Make` as keyof ReportHeader, e.target.value as never)}
+                        placeholder="e.g. Magnaflux"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[`${prefix}Product` as keyof ReportHeader] as string}
+                        onChange={(e) => updateHeader(`${prefix}Product` as keyof ReportHeader, e.target.value as never)}
+                        placeholder="e.g. SKC-01 cleaner"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[`${prefix}BatchNo` as keyof ReportHeader] as string}
+                        onChange={(e) => updateHeader(`${prefix}BatchNo` as keyof ReportHeader, e.target.value as never)}
+                        placeholder="Batch number"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[`${prefix}Expiry` as keyof ReportHeader] as string}
+                        onChange={(e) => updateHeader(`${prefix}Expiry` as keyof ReportHeader, e.target.value as never)}
+                        placeholder="e.g. Nov-2027"
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ═══ C. DYE PENETRANT TESTING DETAILS ═══
+          Editable table: Part Details | ID | Weld Dimension | Size of
+          Indication Approx. (mm) | Observation & Result. Rows are stored
+          as the tdptObservationRows JSON column on the report itself.
+          Rows can be added / removed and every cell is editable. Serial
+          numbers are auto-generated. */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base">Dye Penetrant Testing Details</CardTitle>
+            </div>
+            <Button onClick={addTdptRow} size="sm">
+              <Plus className="mr-1 h-4 w-4" /> Add Row
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-fuchsia-800 text-white">
+                <tr>
+                  <th className="border border-fuchsia-900 px-2 py-2 text-center" style={{ minWidth: 40 }}>Sl. No</th>
+                  <th className="border border-fuchsia-900 px-2 py-2 text-center" style={{ minWidth: 160 }}>Part Details</th>
+                  <th className="border border-fuchsia-900 px-2 py-2 text-center" style={{ minWidth: 90 }}>ID</th>
+                  <th className="border border-fuchsia-900 px-2 py-2 text-center" style={{ minWidth: 120 }}>Weld Dimension</th>
+                  <th className="border border-fuchsia-900 px-2 py-2 text-center" style={{ minWidth: 110 }}>Size of Indication Approx. (mm)</th>
+                  <th className="border border-fuchsia-900 px-2 py-2 text-center" style={{ minWidth: 200 }}>Observation &amp; Result</th>
+                  <th className="border border-fuchsia-900 px-2 py-2 text-center" style={{ minWidth: 70 }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tdptRows.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="text-center py-6 text-muted-foreground border border-zinc-300">
+                      No rows yet.
+                    </td>
+                  </tr>
+                )}
+                {tdptRows.map((row, idx) => (
+                  <tr key={idx} className="hover:bg-muted/30">
+                    <td className="border border-zinc-300 p-1 text-center font-mono tabular-nums">{idx + 1}</td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input
+                        className="h-8 text-xs"
+                        value={row.partDetails}
+                        onChange={(e) => updateTdptRow(idx, { partDetails: e.target.value })}
+                        placeholder="e.g. Course-1 vertical seam weld"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input
+                        className="h-8 text-xs"
+                        value={row.idNo}
+                        onChange={(e) => updateTdptRow(idx, { idNo: e.target.value })}
+                        placeholder="ID"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input
+                        className="h-8 text-xs"
+                        value={row.weldDimension}
+                        onChange={(e) => updateTdptRow(idx, { weldDimension: e.target.value })}
+                        placeholder="e.g. 12 mm thk"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input
+                        type="text"
+                        className="h-8 text-xs text-center"
+                        value={row.indicationSize}
+                        onChange={(e) => updateTdptRow(idx, { indicationSize: e.target.value })}
+                        placeholder="e.g. Nil"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Textarea
+                        rows={1}
+                        className="text-xs min-h-[32px] py-1"
+                        value={row.observationResult}
+                        onChange={(e) => updateTdptRow(idx, { observationResult: e.target.value })}
+                        placeholder="e.g. No relevant indication"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <div className="flex justify-center">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+                          onClick={() => removeTdptRow(idx)}
+                          title="Remove row"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+
+      {/* Step 2 navigation */}
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" onClick={goPrevious}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> Previous
+        </Button>
+        <Button variant="ghost" onClick={saveDraft} disabled={saving}>
+          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+          Save Draft
+        </Button>
+        <Button onClick={proceedToNext} disabled={saving}>
+          Proceed to Next <ArrowRight className="ml-2 h-4 w-4" />
+        </Button>
+      </div>
+      </>
+      )} {/* end step 2 — TANK DPT */}
+      {/* ═══ STEP 2 (TANK MPT): STORAGE TANK MAGNETIC PARTICLE TESTING ═══ */}
+      {step === 2 && header.reportType === "TANK_MPT" && (
+      <>
+      {/* ═══ A. MAGNETIC PARTICLE TESTING PARAMETERS ═══ */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Magnet className="h-4 w-4 text-amber-700" />
+            Magnetic Particle Testing Parameters
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <tbody>
+                {/* ─── General Information ─── */}
+                <tr className="bg-amber-800 text-white">
+                  <td colSpan={2} className="border border-amber-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    General Information
+                  </td>
+                </tr>
+                {/* Date of Examination — editable date field */}
+                <tr className="border-b border-zinc-200">
+                  <td className="bg-amber-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/3">
+                    Date of Examination
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <Input
+                      type="date"
+                      className="h-8 text-sm"
+                      value={header.tmptDateOfExamination}
+                      onChange={(e) => updateHeader("tmptDateOfExamination", e.target.value)}
+                    />
+                  </td>
+                </tr>
+                {([
+                  ["Testing Standard", "tmptTestingStandard", "e.g. ASME Section V 2023, Article 7"],
+                  ["Acceptance Criteria", "tmptAcceptanceCriteria", "e.g. ASME Section VIII Div. 1, Appx. 6"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-amber-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+                {/* ─── Surface & Preparation ─── */}
+                <tr className="bg-amber-800 text-white">
+                  <td colSpan={2} className="border border-amber-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    Surface &amp; Preparation
+                  </td>
+                </tr>
+                {([
+                  ["Surface Preparation", "tmptSurfacePreparation", "e.g. Grinding and wire brush"],
+                  ["Surface Temperature", "tmptSurfaceTemperature", "e.g. 32 °C"],
+                  ["Method of Pre-cleaning", "tmptMethodOfPreCleaning", "e.g. Solvent cleaning"],
+                  ["Post Cleaning", "tmptPostCleaning", "e.g. Solvent wipe"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-amber-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+                {/* ─── Equipment Details ─── */}
+                <tr className="bg-amber-800 text-white">
+                  <td colSpan={2} className="border border-amber-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    Equipment Details
+                  </td>
+                </tr>
+                {([
+                  ["Type of Instrument / Sl. No.", "tmptInstrumentSerialNo", "e.g. AC Yoke / 201501012123"],
+                  ["AC Yoke Lifting Capacity", "tmptAcYokeLiftingCapacity", "e.g. 5 kg / 50 N"],
+                  ["AC Yoke Pole Spacing", "tmptAcYokePoleSpacing", "e.g. 150 mm"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-amber-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+                {/* ─── Testing Method ─── */}
+                <tr className="bg-amber-800 text-white">
+                  <td colSpan={2} className="border border-amber-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    Testing Method
+                  </td>
+                </tr>
+                {([
+                  ["MPT Method", "tmptMethod", "e.g. Wet Continuous"],
+                  ["Type of Current", "tmptTypeOfCurrent", "e.g. AC"],
+                  ["Contrast Medium", "tmptContrastMedium", "e.g. White contrast"],
+                  ["Method of Applying White Contrast", "tmptMethodOfApplyingWhiteContrast", "e.g. Spray"],
+                  ["Magnetic Medium", "tmptMagneticMedium", "e.g. Wet particle iron ink"],
+                  ["Method of Applying Magnetic Medium", "tmptMethodOfApplyingMagneticMedium", "e.g. Spray"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-amber-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+                {/* ─── Testing Timing & Interpretation ─── */}
+                <tr className="bg-amber-800 text-white">
+                  <td colSpan={2} className="border border-amber-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    Testing Timing &amp; Interpretation
+                  </td>
+                </tr>
+                {([
+                  ["Development Time", "tmptDevelopmentTime", "e.g. 5 minutes"],
+                  ["Interpretation Time", "tmptInterpretationTime", "e.g. 10 minutes"],
+                  ["Lighting Equipment", "tmptLightingEquipment", "e.g. LED torch ≥ 1000 lux"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-amber-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ═══ B. CONSUMABLE DETAILS ═══
+          Separate Make / Product / Lot Number / Expiry Date entry for each
+          of the two consumables (White Contrast, Wet Particle Iron Ink).
+          All values are typeable — nothing is hardcoded from any sample. */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Magnet className="h-4 w-4 text-amber-700" />
+            Consumable Details
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="bg-amber-800 text-white">
+                  <th className="border border-amber-900 px-2 py-2 text-center w-1/5">Consumable</th>
+                  <th className="border border-amber-900 px-2 py-2 text-center">Make</th>
+                  <th className="border border-amber-900 px-2 py-2 text-center">Product / Description</th>
+                  <th className="border border-amber-900 px-2 py-2 text-center">Lot Number</th>
+                  <th className="border border-amber-900 px-2 py-2 text-center">Expiry Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {([
+                  ["White Contrast", "tmptWhiteContrast"],
+                  ["Wet Particle Iron Ink", "tmptInk"],
+                ] as const).map(([label, prefix]) => (
+                  <tr key={prefix} className="border-b border-zinc-200">
+                    <td className="bg-amber-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[`${prefix}Make` as keyof ReportHeader] as string}
+                        onChange={(e) => updateHeader(`${prefix}Make` as keyof ReportHeader, e.target.value as never)}
+                        placeholder="e.g. Magnaflux"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[`${prefix}Product` as keyof ReportHeader] as string}
+                        onChange={(e) => updateHeader(`${prefix}Product` as keyof ReportHeader, e.target.value as never)}
+                        placeholder="Product / description"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[`${prefix}LotNo` as keyof ReportHeader] as string}
+                        onChange={(e) => updateHeader(`${prefix}LotNo` as keyof ReportHeader, e.target.value as never)}
+                        placeholder="Lot number"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[`${prefix}Expiry` as keyof ReportHeader] as string}
+                        onChange={(e) => updateHeader(`${prefix}Expiry` as keyof ReportHeader, e.target.value as never)}
+                        placeholder="e.g. Nov-2027"
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ═══ C. MAGNETIC PARTICLE TESTING DETAILS ═══
+          Editable table: Part Details | ID | Weld Dimension | Size of
+          Indication Approx. (mm) | Observation & Result. Rows are stored
+          as the tmptRows JSON column on the report itself. Rows can be
+          added / removed and every cell is editable. Serial numbers are
+          auto-generated. Nothing is hardcoded — all values are typed by
+          the user. */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base">Magnetic Particle Testing Details</CardTitle>
+            </div>
+            <Button onClick={addTmptRow} size="sm">
+              <Plus className="mr-1 h-4 w-4" /> Add Row
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-amber-800 text-white">
+                <tr>
+                  <th className="border border-amber-900 px-2 py-2 text-center" style={{ minWidth: 40 }}>Sl. No</th>
+                  <th className="border border-amber-900 px-2 py-2 text-center" style={{ minWidth: 160 }}>Part Details</th>
+                  <th className="border border-amber-900 px-2 py-2 text-center" style={{ minWidth: 90 }}>ID</th>
+                  <th className="border border-amber-900 px-2 py-2 text-center" style={{ minWidth: 120 }}>Weld Dimension</th>
+                  <th className="border border-amber-900 px-2 py-2 text-center" style={{ minWidth: 110 }}>Size of Indication Approx. (mm)</th>
+                  <th className="border border-amber-900 px-2 py-2 text-center" style={{ minWidth: 200 }}>Observation &amp; Result</th>
+                  <th className="border border-amber-900 px-2 py-2 text-center" style={{ minWidth: 70 }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tmptRows.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="text-center py-6 text-muted-foreground border border-zinc-300">
+                      No rows yet.
+                    </td>
+                  </tr>
+                )}
+                {tmptRows.map((row, idx) => (
+                  <tr key={idx} className="hover:bg-muted/30">
+                    <td className="border border-zinc-300 p-1 text-center font-mono tabular-nums">{idx + 1}</td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input
+                        className="h-8 text-xs"
+                        value={row.partDetails}
+                        onChange={(e) => updateTmptRow(idx, { partDetails: e.target.value })}
+                        placeholder="e.g. Course-1 vertical seam weld"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input
+                        className="h-8 text-xs"
+                        value={row.idNo}
+                        onChange={(e) => updateTmptRow(idx, { idNo: e.target.value })}
+                        placeholder="ID"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input
+                        className="h-8 text-xs"
+                        value={row.weldDimension}
+                        onChange={(e) => updateTmptRow(idx, { weldDimension: e.target.value })}
+                        placeholder="e.g. 10 mm thk"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input
+                        type="text"
+                        className="h-8 text-xs text-center"
+                        value={row.indicationSize}
+                        onChange={(e) => updateTmptRow(idx, { indicationSize: e.target.value })}
+                        placeholder="e.g. Nil"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Textarea
+                        rows={1}
+                        className="text-xs min-h-[32px] py-1"
+                        value={row.observationResult}
+                        onChange={(e) => updateTmptRow(idx, { observationResult: e.target.value })}
+                        placeholder="e.g. No relevant indication"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <div className="flex justify-center">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+                          onClick={() => removeTmptRow(idx)}
+                          title="Remove row"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+
+      {/* Step 2 navigation */}
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" onClick={goPrevious}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> Previous
+        </Button>
+        <Button variant="ghost" onClick={saveDraft} disabled={saving}>
+          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+          Save Draft
+        </Button>
+        <Button onClick={proceedToNext} disabled={saving}>
+          Proceed to Next <ArrowRight className="ml-2 h-4 w-4" />
+        </Button>
+      </div>
+      </>
+      )} {/* end step 2 — TANK MPT */}
+      {/* ═══ STEP 2 (TANK WELD SCAN): STORAGE TANK WELD SCAN ═══ */}
+      {step === 2 && header.reportType === "TANK_WELD_SCAN" && (
+      <>
+      {/* ═══ A. WELD SCAN TESTING PARAMETERS ═══
+          Clean two-column table layout grouped into General Information /
+          Equipment Details / Cable Details / Calibration Details / Other
+          Testing Parameters, plus the fixed 4-probe grid. Every value is
+          typed by the user — nothing is prefilled from any sample. */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Zap className="h-4 w-4 text-sky-700" />
+            Weld Scan Testing Parameters
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0 space-y-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <tbody>
+                {/* ─── General Information ─── */}
+                <tr className="bg-sky-800 text-white">
+                  <td colSpan={2} className="border border-sky-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    General Information
+                  </td>
+                </tr>
+                <tr className="border-b border-zinc-200">
+                  <td className="bg-sky-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/3">
+                    Date of Examination
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <Input
+                      type="date"
+                      className="h-8 text-sm"
+                      value={header.twsDateOfExamination}
+                      onChange={(e) => updateHeader("twsDateOfExamination", e.target.value)}
+                    />
+                  </td>
+                </tr>
+                {([
+                  ["Testing Standard", "twsTestingStandard", "e.g. ASME Section V 2023, Article 4"],
+                  ["Acceptance Criteria", "twsAcceptanceCriteria", "e.g. ASME Section VIII Div. 1, Appx. 12"],
+                  ["UT Procedure", "twsUtProcedure", "e.g. Procedure / document number"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-sky-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+
+                {/* ─── Equipment Details ─── */}
+                <tr className="bg-sky-800 text-white">
+                  <td colSpan={2} className="border border-sky-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    Equipment Details
+                  </td>
+                </tr>
+                {([
+                  ["Equipment Make", "twsEquipmentMake", "e.g. Olympus / Krautkramer / Sonatest"],
+                  ["Equipment Model", "twsEquipmentModel", "e.g. EPOCH 650 / USM Go"],
+                  ["Equipment Serial Number", "twsEquipmentSerialNo", "Instrument serial number"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-sky-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+                <tr className="border-b border-zinc-200">
+                  <td className="bg-sky-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                    Calibration Due Date
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <Input
+                      type="date"
+                      className="h-8 text-sm"
+                      value={header.twsCalibrationDueDate}
+                      onChange={(e) => updateHeader("twsCalibrationDueDate", e.target.value)}
+                    />
+                  </td>
+                </tr>
+
+                {/* ─── Cable Details ─── */}
+                <tr className="bg-sky-800 text-white">
+                  <td colSpan={2} className="border border-sky-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    Cable Details
+                  </td>
+                </tr>
+                {([
+                  ["Cable Length", "twsCableLength", "e.g. 2.0 meters"],
+                  ["Cable Type", "twsCableType", "e.g. Coaxial"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-sky-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+
+                {/* ─── Calibration Details ─── */}
+                <tr className="bg-sky-800 text-white">
+                  <td colSpan={2} className="border border-sky-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    Calibration Details
+                  </td>
+                </tr>
+                {([
+                  ["Calibration Block", "twsCalibrationBlock", "e.g. V1 / V2 / ASME basic calibration block"],
+                  ["Calibration Block Material / MOC", "twsCalibrationBlockMoc", "Material of the calibration block"],
+                  ["Reference Reflector", "twsReferenceReflector", "e.g. Side drilled hole / flat bottom hole"],
+                  ["Reference Level", "twsReferenceLevel", "e.g. 100% DAC / 50% DAC"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-sky-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+
+                {/* ─── Other Testing Parameters ─── */}
+                <tr className="bg-sky-800 text-white">
+                  <td colSpan={2} className="border border-sky-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    Other Testing Parameters
+                  </td>
+                </tr>
+                {([
+                  ["Flaw Sizing Technique", "twsFlawSizingTechnique", "e.g. DAC / dB drop / AWS"],
+                  ["Surface Temperature", "twsSurfaceTemperature", "e.g. 32 °C"],
+                  ["Method", "twsTestingMethod", "e.g. Contact pulse echo"],
+                  ["Couplant", "twsCouplant", "e.g. Gel / oil / glycerine"],
+                  ["Surface Preparation", "twsSurfacePreparation", "e.g. Grinding / wire brush"],
+                  ["Surface Finish", "twsSurfaceFinish", "e.g. Smooth / machined / as welded"],
+                  ["Extent of Scanning", "twsExtentOfScanning", "e.g. 100% of weld length, 150 mm beam spread"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-sky-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* ─── Probe Details: fixed 4-probe grid ─── */}
+          <div className="border-t border-zinc-200 p-4 space-y-3">
+            <div>
+              <div className="text-sm font-semibold text-zinc-700">Probe Details</div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs border-collapse">
+                <thead className="bg-sky-800 text-white">
+                  <tr>
+                    <th className="border border-sky-900 px-2 py-2 text-center" style={{ minWidth: 170 }}>Probe</th>
+                    <th className="border border-sky-900 px-2 py-2 text-center" style={{ minWidth: 90 }}>Probe Angle</th>
+                    <th className="border border-sky-900 px-2 py-2 text-center" style={{ minWidth: 130 }}>Frequency</th>
+                    <th className="border border-sky-900 px-2 py-2 text-center" style={{ minWidth: 130 }}>Probe Size</th>
+                    <th className="border border-sky-900 px-2 py-2 text-center" style={{ minWidth: 150 }}>Serial Number</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {parseVwsProbes(header.twsProbeDetails).map((probe, idx) => (
+                    <tr key={idx} className="hover:bg-muted/30">
+                      <td className="border border-zinc-300 px-2 py-1.5 font-medium text-zinc-700">
+                        {probe.probeType === "Longitudinal Wave" ? "Longitudinal Wave Probe" : "Shear Wave Probe"}
+                      </td>
+                      <td className="border border-zinc-300 px-2 py-1.5 text-center text-zinc-700">
+                        {probe.probeAngle}
+                      </td>
+                      <td className="border border-zinc-300 p-1">
+                        <Input
+                          className="h-8 text-xs"
+                          value={probe.frequency}
+                          onChange={(e) => updateTwsProbe(idx, { frequency: e.target.value })}
+                          placeholder="e.g. 4 MHz"
+                        />
+                      </td>
+                      <td className="border border-zinc-300 p-1">
+                        <Input
+                          className="h-8 text-xs"
+                          value={probe.probeSize}
+                          onChange={(e) => updateTwsProbe(idx, { probeSize: e.target.value })}
+                          placeholder="e.g. 10 mm × 10 mm"
+                        />
+                      </td>
+                      <td className="border border-zinc-300 p-1">
+                        <Input
+                          className="h-8 text-xs"
+                          value={probe.serialNo}
+                          onChange={(e) => updateTwsProbe(idx, { serialNo: e.target.value })}
+                          placeholder="Probe serial number"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ═══ B. WELD SCAN TESTING DETAILS ═══
+          Dynamic table — Tank column set: Sl. No | Course / Plate |
+          Weld Seam ID | Weld Dimension | Probe Angle | Probe Frequency |
+          Observation & Result. Rows are stored as the twsDetailRows JSON
+          column on the report itself. Rows can be added / removed, every
+          cell is editable, serial numbers are auto-generated. Course /
+          Plate and Weld Seam ID offer suggestions but accept any custom
+          value. */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base">Weld Scan Testing Details</CardTitle>
+            </div>
+            <Button onClick={addTwsRow} size="sm">
+              <Plus className="mr-1 h-4 w-4" /> Add Row
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-sky-800 text-white">
+                <tr>
+                  <th className="border border-sky-900 px-2 py-2 text-center" style={{ minWidth: 40 }}>Sl. No</th>
+                  <th className="border border-sky-900 px-2 py-2 text-center" style={{ minWidth: 140 }}>Course / Plate</th>
+                  <th className="border border-sky-900 px-2 py-2 text-center" style={{ minWidth: 170 }}>Weld Seam ID</th>
+                  <th className="border border-sky-900 px-2 py-2 text-center" style={{ minWidth: 140 }}>Weld Dimension</th>
+                  <th className="border border-sky-900 px-2 py-2 text-center" style={{ minWidth: 110 }}>Probe Angle</th>
+                  <th className="border border-sky-900 px-2 py-2 text-center" style={{ minWidth: 130 }}>Probe Frequency</th>
+                  <th className="border border-sky-900 px-2 py-2 text-center" style={{ minWidth: 220 }}>Observation &amp; Result</th>
+                  <th className="border border-sky-900 px-2 py-2 text-center" style={{ minWidth: 70 }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {twsRows.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="text-center py-6 text-muted-foreground border border-zinc-300">
+                      No rows yet.
+                    </td>
+                  </tr>
+                )}
+                {twsRows.map((row, idx) => (
+                  <tr key={idx} className="hover:bg-muted/30">
+                    <td className="border border-zinc-300 p-1 text-center font-mono tabular-nums">{idx + 1}</td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input
+                        className="h-8 text-xs"
+                        list={`tws-component-suggestions-${idx}`}
+                        value={row.component}
+                        onChange={(e) => updateTwsRow(idx, { component: e.target.value })}
+                        placeholder="e.g. Course-1 / Roof Plate"
+                      />
+                      <datalist id={`tws-component-suggestions-${idx}`}>
+                        {TWS_COMPONENT_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
+                      </datalist>
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input
+                        className="h-8 text-xs"
+                        list={`tws-weld-id-suggestions-${idx}`}
+                        value={row.plateWeldId}
+                        onChange={(e) => updateTwsRow(idx, { plateWeldId: e.target.value })}
+                        placeholder="e.g. Vertical Seam CS-1"
+                      />
+                      <datalist id={`tws-weld-id-suggestions-${idx}`}>
+                        {TWS_WELD_SEAM_ID_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
+                      </datalist>
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input
+                        className="h-8 text-xs"
+                        value={row.weldDimension}
+                        onChange={(e) => updateTwsRow(idx, { weldDimension: e.target.value })}
+                        placeholder="e.g. L600 mm × T24 mm"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Select
+                        value={row.probeAngle || undefined}
+                        onValueChange={(v) => updateTwsRow(idx, { probeAngle: v })}
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {TWS_PROBE_ANGLE_OPTIONS.map((a) => (
+                            <SelectItem key={a} value={a}>{a}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input
+                        className="h-8 text-xs"
+                        list={`tws-frequency-suggestions-${idx}`}
+                        value={row.probeFrequency}
+                        onChange={(e) => updateTwsRow(idx, { probeFrequency: e.target.value })}
+                        placeholder="e.g. 4 MHz"
+                      />
+                      <datalist id={`tws-frequency-suggestions-${idx}`}>
+                        {TWS_PROBE_FREQUENCY_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
+                      </datalist>
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Textarea
+                        rows={1}
+                        className="text-xs min-h-[32px] py-1"
+                        value={row.observationResult}
+                        onChange={(e) => updateTwsRow(idx, { observationResult: e.target.value })}
+                        placeholder="No Significant Indication Observed / Accept / Reject or custom text"
+                      />
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {TWS_OBSERVATION_QUICK_OPTIONS.map((opt) => (
+                          <button
+                            key={opt}
+                            type="button"
+                            className={`px-1.5 py-0.5 text-[10px] rounded border transition-colors ${
+                              row.observationResult === opt
+                                ? "bg-sky-700 text-white border-sky-800"
+                                : "bg-white text-zinc-600 border-zinc-300 hover:bg-sky-50"
+                            }`}
+                            onClick={() => updateTwsRow(idx, { observationResult: opt })}
+                          >
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <div className="flex justify-center">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+                          onClick={() => removeTwsRow(idx)}
+                          title="Remove row"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+
+      {/* Step 2 navigation */}
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" onClick={goPrevious}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> Previous
+        </Button>
+        <Button variant="ghost" onClick={saveDraft} disabled={saving}>
+          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+          Save Draft
+        </Button>
+        <Button onClick={proceedToNext} disabled={saving}>
+          Proceed to Next <ArrowRight className="ml-2 h-4 w-4" />
+        </Button>
+      </div>
+      </>
+      )} {/* end step 2 — TANK WELD SCAN */}
+      {/* ═══ STEP 2 (TANK UT THICKNESS MEASUREMENT) ═══
+          Shown only for TANK_UTM reports. Storage tanks are vertical
+          cylindrical equipment — every course / plate component is
+          measured at the 12 / 3 / 6 / 9 o'clock positions; each position
+          starts with ONE reading input and "+ Add Reading" appends more
+          slots (no limit) that can be removed again. Minimum Measured
+          Thickness is read-only and auto-calculated from ALL readings of
+          the row on every change.
+          Completely separate from the Vessel UT Thickness Measurement
+          Step 2 and from the Piping Thickness Measurement Step 2 — both
+          stay untouched. */}
+      {step === 2 && header.reportType === "TANK_UTM" && (
+      <>
+        {/* ═══ A. UT THICKNESS MEASUREMENT PARAMETERS ═══ */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Gauge className="h-4 w-4 text-teal-700" />
+              UT Thickness Measurement Parameters
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 space-y-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <tbody>
+                  {/* ─── General Information ─── */}
+                  <tr className="bg-teal-800 text-white">
+                    <td colSpan={2} className="border border-teal-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                      General Information
+                    </td>
+                  </tr>
+                  <tr className="border-b border-zinc-200">
+                    <td className="bg-teal-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/3">
+                      Date of Examination
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        type="date"
+                        className="h-8 text-sm"
+                        value={header.tutmDateOfExamination}
+                        onChange={(e) => updateHeader("tutmDateOfExamination", e.target.value)}
+                      />
+                    </td>
+                  </tr>
+                  {([
+                    ["Testing Standard", "tutmTestingStandard", "e.g. API 653 / ASME Section V 2023, Article 4"],
+                    ["Acceptance Criteria", "tutmAcceptanceCriteria", "e.g. API 653 minimum thickness tables"],
+                    ["UT Procedure", "tutmUtProcedure", "e.g. Procedure / document number"],
+                  ] as const).map(([label, fieldKey, placeholder]) => (
+                    <tr key={fieldKey} className="border-b border-zinc-200">
+                      <td className="bg-teal-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                        {label}
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <Input
+                          className="h-8 text-sm"
+                          value={header[fieldKey]}
+                          onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                          placeholder={placeholder}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+
+                  {/* ─── Equipment Details ─── */}
+                  <tr className="bg-teal-800 text-white">
+                    <td colSpan={2} className="border border-teal-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                      Equipment Details
+                    </td>
+                  </tr>
+                  {([
+                    ["Equipment Make", "tutmEquipmentMake", "e.g. Olympus / Krautkramer / Sonatest"],
+                    ["Equipment Model", "tutmEquipmentModel", "e.g. EPOCH 650 / USM Go"],
+                    ["Equipment Serial Number", "tutmEquipmentSerialNo", "Instrument serial number"],
+                  ] as const).map(([label, fieldKey, placeholder]) => (
+                    <tr key={fieldKey} className="border-b border-zinc-200">
+                      <td className="bg-teal-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                        {label}
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <Input
+                          className="h-8 text-sm"
+                          value={header[fieldKey]}
+                          onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                          placeholder={placeholder}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                  <tr className="border-b border-zinc-200">
+                    <td className="bg-teal-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      Calibration Due Date
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        type="date"
+                        className="h-8 text-sm"
+                        value={header.tutmCalibrationDueDate}
+                        onChange={(e) => updateHeader("tutmCalibrationDueDate", e.target.value)}
+                      />
+                    </td>
+                  </tr>
+
+                  {/* ─── Cable & Crystal Details ─── */}
+                  <tr className="bg-teal-800 text-white">
+                    <td colSpan={2} className="border border-teal-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                      Cable &amp; Crystal Details
+                    </td>
+                  </tr>
+                  <tr className="border-b border-zinc-200">
+                    <td className="bg-teal-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      Cable Length and Type
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header.tutmCableLengthAndType}
+                        onChange={(e) => updateHeader("tutmCableLengthAndType", e.target.value)}
+                        placeholder="e.g. 2.0 meters, Coaxial"
+                      />
+                    </td>
+                  </tr>
+                  <tr className="border-b border-zinc-200">
+                    <td className="bg-teal-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      Type of Crystal
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        list="tutm-crystal-suggestions"
+                        value={header.tutmTypeOfCrystal}
+                        onChange={(e) => updateHeader("tutmTypeOfCrystal", e.target.value)}
+                        placeholder="Select or type — e.g. Dual Element"
+                      />
+                      <datalist id="tutm-crystal-suggestions">
+                        {VUTM_CRYSTAL_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
+                      </datalist>
+                    </td>
+                  </tr>
+
+                  {/* ─── Calibration Details ─── */}
+                  <tr className="bg-teal-800 text-white">
+                    <td colSpan={2} className="border border-teal-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                      Calibration Details
+                    </td>
+                  </tr>
+                  <tr className="border-b border-zinc-200">
+                    <td className="bg-teal-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      Calibration Block Dimension / MOC
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header.tutmCalibrationBlock}
+                        onChange={(e) => updateHeader("tutmCalibrationBlock", e.target.value)}
+                        placeholder="e.g. 12.5 mm step wedge, Carbon Steel (V1 block)"
+                      />
+                    </td>
+                  </tr>
+
+                  {/* ─── Other Testing Parameters ─── */}
+                  <tr className="bg-teal-800 text-white">
+                    <td colSpan={2} className="border border-teal-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                      Other Testing Parameters
+                    </td>
+                  </tr>
+                  <tr className="border-b border-zinc-200">
+                    <td className="bg-teal-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      Surface Temperature
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <div className="flex items-center gap-2">
+                        <Input
+                          className="h-8 text-sm w-32"
+                          inputMode="decimal"
+                          value={header.tutmSurfaceTemperature}
+                          onChange={(e) => updateHeader("tutmSurfaceTemperature", e.target.value)}
+                          placeholder="e.g. 32"
+                        />
+                        <span className="text-sm text-zinc-500">°C</span>
+                      </div>
+                    </td>
+                  </tr>
+                  {([
+                    ["Method", "tutmMethod", "tutm-method-suggestions", VUTM_METHOD_SUGGESTIONS, "e.g. Contact Pulse Echo"],
+                    ["Couplant", "tutmCouplant", "tutm-couplant-suggestions", VUTM_COUPLANT_SUGGESTIONS, "e.g. Gel / oil / glycerine"],
+                  ] as const).map(([label, fieldKey, listId, suggestions, placeholder]) => (
+                    <tr key={fieldKey} className="border-b border-zinc-200">
+                      <td className="bg-teal-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                        {label}
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <Input
+                          className="h-8 text-sm"
+                          list={listId}
+                          value={header[fieldKey]}
+                          onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                          placeholder={placeholder}
+                        />
+                        <datalist id={listId}>
+                          {suggestions.map((s) => <option key={s} value={s} />)}
+                        </datalist>
+                      </td>
+                    </tr>
+                  ))}
+                  {([
+                    ["Surface Preparation", "tutmSurfacePreparation", "e.g. Grinding / wire brush"],
+                    ["Surface Finish", "tutmSurfaceFinish", "e.g. Smooth / machined / as welded"],
+                  ] as const).map(([label, fieldKey, placeholder]) => (
+                    <tr key={fieldKey} className="border-b border-zinc-200">
+                      <td className="bg-teal-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                        {label}
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <Input
+                          className="h-8 text-sm"
+                          value={header[fieldKey]}
+                          onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                          placeholder={placeholder}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* ─── Probe Details: repeatable Longitudinal Wave (0°) grid ─── */}
+            <div className="border-t border-zinc-200 p-4 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-zinc-700">
+                    Probe Details — Longitudinal Wave (0°)
+                  </div>
+                </div>
+                <Button onClick={addTutmLwProbe} size="sm" variant="outline">
+                  <Plus className="mr-1 h-4 w-4" /> Add Probe Row
+                </Button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs border-collapse">
+                  <thead className="bg-teal-800 text-white">
+                    <tr>
+                      <th className="border border-teal-900 px-2 py-2 text-center" style={{ minWidth: 190 }}>Probe</th>
+                      <th className="border border-teal-900 px-2 py-2 text-center" style={{ minWidth: 90 }}>Probe Angle</th>
+                      <th className="border border-teal-900 px-2 py-2 text-center" style={{ minWidth: 130 }}>Frequency</th>
+                      <th className="border border-teal-900 px-2 py-2 text-center" style={{ minWidth: 130 }}>Size</th>
+                      <th className="border border-teal-900 px-2 py-2 text-center" style={{ minWidth: 150 }}>S.No.</th>
+                      <th className="border border-teal-900 px-2 py-2 text-center" style={{ minWidth: 60 }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {parseVutmLwProbes(header.tutmLwProbeRows).map((probe, idx) => (
+                      <tr key={idx} className="hover:bg-muted/30">
+                        <td className="border border-zinc-300 px-2 py-1.5 font-medium text-zinc-700">
+                          Longitudinal Wave Probe
+                        </td>
+                        <td className="border border-zinc-300 px-2 py-1.5 text-center text-zinc-700">
+                          0°
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          <Input
+                            className="h-8 text-xs"
+                            value={probe.frequency}
+                            onChange={(e) => updateTutmLwProbe(idx, { frequency: e.target.value })}
+                            placeholder="e.g. 2 MHz / 4 MHz"
+                          />
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          <Input
+                            className="h-8 text-xs"
+                            value={probe.probeSize}
+                            onChange={(e) => updateTutmLwProbe(idx, { probeSize: e.target.value })}
+                            placeholder="e.g. 10 mm Ø"
+                          />
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          <Input
+                            className="h-8 text-xs"
+                            value={probe.serialNo}
+                            onChange={(e) => updateTutmLwProbe(idx, { serialNo: e.target.value })}
+                            placeholder="Probe serial number"
+                          />
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          <div className="flex justify-center">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+                              onClick={() => removeTutmLwProbe(idx)}
+                              title="Remove probe row"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ═══ B. UT THICKNESS MEASUREMENT READINGS ═══ */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  UT Thickness Measurement Readings
+                </CardTitle>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0 space-y-6">
+            {/* ─── B.1 COURSE / PLATE MEASUREMENTS (CLOCK POSITIONS) ─── */}
+            <div className="p-4 pb-0">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-sm font-semibold text-zinc-700">
+                  Course / Plate Measurements (Clock Positions)
+                </div>
+                <Button onClick={addTutmRow} size="sm">
+                  <Plus className="mr-1 h-4 w-4" /> Add Course / Plate Row
+                </Button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs border-collapse">
+                  <thead className="bg-teal-800 text-white">
+                    <tr>
+                      <th rowSpan={2} className="border border-teal-900 px-2 py-2 text-center align-middle" style={{ minWidth: 110 }}>MOC</th>
+                      <th rowSpan={2} className="border border-teal-900 px-2 py-2 text-center align-middle" style={{ minWidth: 130 }}>Course / Section</th>
+                      <th rowSpan={2} className="border border-teal-900 px-2 py-2 text-center align-middle" style={{ minWidth: 120 }}>Plate / Location ID</th>
+                      <th rowSpan={2} className="border border-teal-900 px-2 py-2 text-center align-middle" style={{ minWidth: 90 }}>Nominal Thickness (mm)</th>
+                      <th colSpan={4} className="border border-teal-900 px-2 py-2 text-center">Clock-Position Readings (mm)</th>
+                      <th rowSpan={2} className="border border-teal-900 px-2 py-2 text-center align-middle" style={{ minWidth: 80 }}>Minimum Measured Thickness (mm)</th>
+                      <th rowSpan={2} className="border border-teal-900 px-2 py-2 text-center align-middle" style={{ minWidth: 60 }}>Actions</th>
+                    </tr>
+                    <tr>
+                      <th className="border border-teal-900 px-2 py-1.5 text-center font-normal" style={{ minWidth: 160 }}>12 O&apos;clock</th>
+                      <th className="border border-teal-900 px-2 py-1.5 text-center font-normal" style={{ minWidth: 160 }}>3 O&apos;clock</th>
+                      <th className="border border-teal-900 px-2 py-1.5 text-center font-normal" style={{ minWidth: 160 }}>6 O&apos;clock</th>
+                      <th className="border border-teal-900 px-2 py-1.5 text-center font-normal" style={{ minWidth: 160 }}>9 O&apos;clock</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tutmRows.length === 0 && (
+                      <tr>
+                        <td colSpan={9} className="text-center py-6 text-muted-foreground border border-zinc-300">
+                          No rows yet.
+                        </td>
+                      </tr>
+                    )}
+                    {tutmRows.map((row, idx) => (
+                      <tr key={idx} className="hover:bg-muted/30 align-top">
+                        <td className="border border-zinc-300 p-1">
+                          <Input
+                            className="h-8 text-xs"
+                            list={`tutm-moc-suggestions-${idx}`}
+                            value={row.moc}
+                            onChange={(e) => updateTutmRow(idx, { moc: e.target.value })}
+                            placeholder="e.g. Carbon Steel"
+                          />
+                          <datalist id={`tutm-moc-suggestions-${idx}`}>
+                            {VUTM_MOC_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
+                          </datalist>
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          <Input
+                            className="h-8 text-xs"
+                            list={`tutm-comp-type-${idx}`}
+                            value={row.componentType}
+                            onChange={(e) => updateTutmRow(idx, { componentType: e.target.value })}
+                            placeholder="e.g. Course-1 / Roof Plate"
+                          />
+                          <datalist id={`tutm-comp-type-${idx}`}>
+                            {TUTM_COMPONENT_TYPES.map((s) => <option key={s} value={s} />)}
+                          </datalist>
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          <Input
+                            className="h-8 text-xs"
+                            list={`tutm-plate-id-${idx}`}
+                            value={row.componentId}
+                            onChange={(e) => updateTutmRow(idx, { componentId: e.target.value })}
+                            placeholder="e.g. Plate-3 / Location A"
+                          />
+                          <datalist id={`tutm-plate-id-${idx}`}>
+                            {TUTM_PLATE_ID_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
+                          </datalist>
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          <Input
+                            className="h-8 text-xs"
+                            inputMode="decimal"
+                            value={row.nominalThickness}
+                            onChange={(e) => updateTutmRow(idx, { nominalThickness: e.target.value })}
+                            placeholder="mm"
+                          />
+                        </td>
+                        {(["c12", "c3", "c6", "c9"] as const).map((clock) => (
+                          <td key={clock} className="border border-zinc-300 p-1 align-top">
+                            <div className="space-y-1">
+                              {row[clock].map((reading, ri) => (
+                                <div key={ri} className="flex items-center gap-1">
+                                  <span className="w-8 shrink-0 text-[10px] leading-8 text-muted-foreground">
+                                    R{ri + 1}
+                                  </span>
+                                  <Input
+                                    className="h-8 flex-1 text-xs px-1 text-center"
+                                    inputMode="decimal"
+                                    value={reading}
+                                    onChange={(e) => updateTutmClockSpot(idx, clock, ri, e.target.value)}
+                                    placeholder="—"
+                                    aria-label={`${VUTM_CLOCK_LABELS[clock]} — reading ${ri + 1}`}
+                                  />
+                                  {row[clock].length > 1 && (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-6 w-6 p-0 text-red-600 hover:text-red-700 shrink-0"
+                                      onClick={() => removeTutmReading(idx, clock, ri)}
+                                      title="Remove this reading"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </Button>
+                                  )}
+                                </div>
+                              ))}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 w-full px-1 text-[10px]"
+                                onClick={() => addTutmReading(idx, clock)}
+                                title={`Add another reading at ${VUTM_CLOCK_LABELS[clock]}`}
+                              >
+                                <Plus className="mr-0.5 h-3 w-3" /> Add Reading
+                              </Button>
+                            </div>
+                          </td>
+                        ))}
+                        <td className="border border-zinc-300 p-1 text-center bg-zinc-50 font-mono tabular-nums font-semibold">
+                          {vutmMinOfSpots(row.c12, row.c3, row.c6, row.c9) || "—"}
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          <div className="flex justify-center">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+                              onClick={() => removeTutmRow(idx)}
+                              title="Remove row"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </CardContent>
+        </Card>
+
+
+        {/* Step 2 navigation */}
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" onClick={goPrevious}>
+            <ArrowLeft className="mr-2 h-4 w-4" /> Previous
+          </Button>
+          <Button variant="ghost" onClick={saveDraft} disabled={saving}>
+            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            Save Draft
+          </Button>
+          <Button onClick={proceedToNext} disabled={saving}>
+            Proceed to Next <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
+        </div>
+        </>
+      )} {/* end step 2 — TANK UT THICKNESS MEASUREMENT */}
 
       {/* ═══ STEP 2 (MPT): MAGNETIC PARTICLE TESTING PROCEDURE ═══ */}
       {step === 2 && header.reportType === "PIPELINE_MPT" && (

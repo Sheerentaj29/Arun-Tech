@@ -1,0 +1,184 @@
+        {/* ─── TANK WELD SCAN: TESTING PARAMETERS + DETAILS ───
+            Shown only for TANK_WELD_SCAN reports (Tank equipment —
+            Storage Tank). Completely separate from the Vessel Weld Scan
+            and Piping Weld Scan blocks above. Renders the grouped Weld
+            Scan Testing Parameters (incl. the fixed 4-probe grid) and
+            the tank Weld Scan Testing Details table (rows stored in the
+            tank's own twsDetailRows JSON column). */}
+        {report.reportType === "TANK_WELD_SCAN" && (() => {
+          let twsProbes: Array<Record<string, string>> = [];
+          let twsRows: Array<Record<string, string>> = [];
+          try {
+            const parsed = JSON.parse(report.twsProbeDetails ?? "[]");
+            if (Array.isArray(parsed)) twsProbes = parsed;
+          } catch {}
+          try {
+            const parsed = JSON.parse(report.twsDetailRows ?? "[]");
+            if (Array.isArray(parsed)) twsRows = parsed;
+          } catch {}
+          const twsParamGroups: Array<{ title: string; rows: Array<[string, string | null | undefined, boolean?]> }> = [
+            {
+              title: "General Information",
+              rows: [
+                ["Date of Examination", report.twsDateOfExamination, true],
+                ["Testing Standard", report.twsTestingStandard],
+                ["Acceptance Criteria", report.twsAcceptanceCriteria],
+                ["UT Procedure", report.twsUtProcedure],
+              ],
+            },
+            {
+              title: "Equipment Details",
+              rows: [
+                ["Equipment Make", report.twsEquipmentMake],
+                ["Equipment Model", report.twsEquipmentModel],
+                ["Equipment Serial Number", report.twsEquipmentSerialNo],
+                ["Calibration Due Date", report.twsCalibrationDueDate, true],
+              ],
+            },
+            {
+              title: "Cable Details",
+              rows: [
+                ["Cable Length", report.twsCableLength],
+                ["Cable Type", report.twsCableType],
+              ],
+            },
+            {
+              title: "Calibration Details",
+              rows: [
+                ["Calibration Block", report.twsCalibrationBlock],
+                ["Calibration Block Material / MOC", report.twsCalibrationBlockMoc],
+                ["Reference Reflector", report.twsReferenceReflector],
+                ["Reference Level", report.twsReferenceLevel],
+              ],
+            },
+            {
+              title: "Other Testing Parameters",
+              rows: [
+                ["Flaw Sizing Technique", report.twsFlawSizingTechnique],
+                ["Surface Temperature", report.twsSurfaceTemperature],
+                ["Method", report.twsTestingMethod],
+                ["Couplant", report.twsCouplant],
+                ["Surface Preparation", report.twsSurfacePreparation],
+                ["Surface Finish", report.twsSurfaceFinish],
+                ["Extent of Scanning", report.twsExtentOfScanning],
+              ],
+            },
+          ];
+          return (
+            <div className="mt-6 space-y-6">
+              {/* Equipment type badge */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="outline" className="border-sky-400 text-sky-700">
+                  Equipment: Tank
+                </Badge>
+              </div>
+
+              {/* Weld Scan Testing Parameters — grouped two-column table */}
+              <div>
+                <h3 className="mb-2 text-xs font-bold uppercase text-sky-700 border-b border-sky-300 pb-1">
+                  Weld Scan Testing Parameters
+                </h3>
+                <table className="w-full border-collapse text-xs">
+                  <tbody>
+                    {twsParamGroups.map((group) => (
+                      <Fragment key={group.title}>
+                        <tr className="bg-sky-100">
+                          <td colSpan={2} className="border border-zinc-300 px-3 py-1.5 font-semibold text-sky-800">
+                            {group.title}
+                          </td>
+                        </tr>
+                        {group.rows.map(([label, value, isDate], idx) => {
+                          let v = value && String(value).trim() ? String(value).trim() : null;
+                          if (v && isDate) {
+                            try { v = new Date(v).toISOString().slice(0, 10); } catch {}
+                          }
+                          return (
+                            <tr key={`${group.title}-${idx}`} className="border-b border-zinc-200">
+                              <td className="bg-sky-50 border-r border-zinc-200 px-3 py-1.5 font-medium text-zinc-700 w-1/3">
+                                {label}
+                              </td>
+                              <td className="px-3 py-1.5">
+                                {v ? v : <span className="text-muted-foreground">—</span>}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Probe Details — fixed 4-probe grid */}
+              {twsProbes.length > 0 && (
+                <div>
+                  <h3 className="mb-2 text-xs font-bold uppercase text-sky-700 border-b border-sky-300 pb-1">
+                    Probe Details
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-sky-700 text-white">
+                          <th className="border border-sky-800 px-2 py-2 text-center">Probe</th>
+                          <th className="border border-sky-800 px-2 py-2 text-center">Probe Angle</th>
+                          <th className="border border-sky-800 px-2 py-2 text-center">Frequency</th>
+                          <th className="border border-sky-800 px-2 py-2 text-center">Probe Size</th>
+                          <th className="border border-sky-800 px-2 py-2 text-center">Serial Number</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {twsProbes.map((row, idx) => (
+                          <tr key={idx} className="hover:bg-muted/30">
+                            <td className="border border-zinc-300 px-2 py-1 font-medium">{row.probeType === "Longitudinal Wave" ? "Longitudinal Wave Probe" : "Shear Wave Probe"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.probeAngle || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.frequency || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.probeSize || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center font-mono">{row.serialNo || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Weld Scan Testing Details — Tank column set */}
+              {twsRows.length > 0 && (
+                <div>
+                  <h3 className="mb-2 text-xs font-bold uppercase text-sky-700 border-b border-sky-300 pb-1">
+                    Weld Scan Testing Details ({twsRows.length})
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-sky-700 text-white">
+                          <th className="border border-sky-800 px-2 py-2 text-center">Sl. No</th>
+                          <th className="border border-sky-800 px-2 py-2 text-center">Course / Plate</th>
+                          <th className="border border-sky-800 px-2 py-2 text-center">Weld Seam ID</th>
+                          <th className="border border-sky-800 px-2 py-2 text-center">Weld Dimension</th>
+                          <th className="border border-sky-800 px-2 py-2 text-center">Probe Angle</th>
+                          <th className="border border-sky-800 px-2 py-2 text-center">Probe Frequency</th>
+                          <th className="border border-sky-800 px-2 py-2 text-center">Observation &amp; Result</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {twsRows.map((row, idx) => (
+                          <tr key={idx} className="hover:bg-muted/30">
+                            <td className="border border-zinc-300 px-2 py-1 text-center font-mono">{idx + 1}</td>
+                            <td className="border border-zinc-300 px-2 py-1">{row.component || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1">{row.plateWeldId || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1">{row.weldDimension || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.probeAngle || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.probeFrequency || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1">{row.observationResult || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+

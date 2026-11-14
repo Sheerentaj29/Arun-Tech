@@ -1,0 +1,17 @@
+    } else if (header.reportType === "TANK_DPT") {
+      if (tdptRows.length === 0) {
+        toast.warning("No Dye Penetrant Testing Details rows yet. You can proceed, but you'll need to add at least one before submitting.");
+      }
+    } else if (header.reportType === "TANK_MPT") {
+      if (tmptRows.length === 0) {
+        toast.warning("No Magnetic Particle Testing Details rows yet. You can proceed, but you'll need to add at least one before submitting.");
+      }
+    } else if (header.reportType === "TANK_WELD_SCAN") {
+      if (twsRows.length === 0) {
+        toast.warning("No Weld Scan Testing Details rows yet. You can proceed, but you'll need to add at least one before submitting.");
+      }
+    } else if (header.reportType === "TANK_UTM") {
+      if (tutmRows.length === 0) {
+        toast.warning("No UT thickness measurement rows yet. You can proceed, but you'll need to add at least one course/plate reading before submitting.");
+      }
+    }

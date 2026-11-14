@@ -1,0 +1,155 @@
+  // ─── TANK (STORAGE TANK) ROW OPERATIONS (TANK_*) ───
+  // Testing-details rows live in local state and persist as the tank
+  // JSON columns on save (no per-row API calls). Serial numbers are
+  // auto-generated from the row index at render time. Tank UT
+  // clock-position readings follow the same dynamic "Add Reading"
+  // mechanics as the vessel clock rows; Minimum Measured Thickness is
+  // derived at render time — never stored in local state.
+
+  function addTdptRow() {
+    setTdptRows((arr) => [...arr, { ...EMPTY_TANK_DETAIL_ROW }]);
+  }
+
+  function updateTdptRow(idx: number, patch: Partial<TankDetailRow>) {
+    setTdptRows((arr) => {
+      const next = [...arr];
+      next[idx] = { ...next[idx], ...patch };
+      return next;
+    });
+  }
+
+  function removeTdptRow(idx: number) {
+    setTdptRows((arr) => arr.filter((_, i) => i !== idx));
+  }
+
+  function addTmptRow() {
+    setTmptRows((arr) => [...arr, { ...EMPTY_TANK_DETAIL_ROW }]);
+  }
+
+  function updateTmptRow(idx: number, patch: Partial<TankDetailRow>) {
+    setTmptRows((arr) => {
+      const next = [...arr];
+      next[idx] = { ...next[idx], ...patch };
+      return next;
+    });
+  }
+
+  function removeTmptRow(idx: number) {
+    setTmptRows((arr) => arr.filter((_, i) => i !== idx));
+  }
+
+  function addTwsRow() {
+    setTwsRows((arr) => [...arr, { ...EMPTY_TANK_WELD_SCAN_ROW }]);
+  }
+
+  function updateTwsRow(idx: number, patch: Partial<TankWeldScanDetailRow>) {
+    setTwsRows((arr) => {
+      const next = [...arr];
+      next[idx] = { ...next[idx], ...patch };
+      return next;
+    });
+  }
+
+  function removeTwsRow(idx: number) {
+    setTwsRows((arr) => arr.filter((_, i) => i !== idx));
+  }
+
+  // Update one entry of the fixed 4-probe grid (Tank Weld Scan Testing
+  // Parameters → Probe Details). The grid itself is structural — only
+  // the frequency / probe size / serial number values change.
+  function updateTwsProbe(idx: number, patch: Partial<VwsProbeEntry>) {
+    const probes = parseVwsProbes(header.twsProbeDetails);
+    probes[idx] = { ...probes[idx], ...patch };
+    updateHeader("twsProbeDetails", JSON.stringify(probes));
+  }
+
+  function addTutmRow() {
+    setTutmRows((arr) => [...arr, { ...EMPTY_TANK_UTM_ROW, c12: [""], c3: [""], c6: [""], c9: [""] }]);
+  }
+
+  function updateTutmRow(idx: number, patch: Partial<TankUtmRow>) {
+    setTutmRows((arr) => {
+      const next = [...arr];
+      next[idx] = { ...next[idx], ...patch };
+      return next;
+    });
+  }
+
+  /** Update one reading of a clock-position group on a tank row. */
+  function updateTutmClockSpot(
+    idx: number,
+    clock: VutmClockKey,
+    spotIdx: number,
+    value: string,
+  ) {
+    setTutmRows((arr) => {
+      const cur = arr[idx];
+      if (!cur) return arr;
+      const spots = [...cur[clock]];
+      spots[spotIdx] = value;
+      const nextRow = { ...cur, [clock]: spots };
+      const next = [...arr];
+      next[idx] = nextRow;
+      return next;
+    });
+  }
+
+  /** Append one more reading slot to a clock position (no limit). */
+  function addTutmReading(idx: number, clock: VutmClockKey) {
+    setTutmRows((arr) => {
+      const cur = arr[idx];
+      if (!cur) return arr;
+      const nextRow = { ...cur, [clock]: [...cur[clock], ""] };
+      const next = [...arr];
+      next[idx] = nextRow;
+      return next;
+    });
+  }
+
+  /**
+   * Remove one reading slot from a clock position. The LAST remaining
+   * slot cannot be removed — every position always keeps one input.
+   */
+  function removeTutmReading(idx: number, clock: VutmClockKey, spotIdx: number) {
+    setTutmRows((arr) => {
+      const cur = arr[idx];
+      if (!cur) return arr;
+      if (cur[clock].length <= 1) return arr;
+      const spots = cur[clock].filter((_, i) => i !== spotIdx);
+      const nextRow = { ...cur, [clock]: spots };
+      const next = [...arr];
+      next[idx] = nextRow;
+      return next;
+    });
+  }
+
+  function removeTutmRow(idx: number) {
+    setTutmRows((arr) => arr.filter((_, i) => i !== idx));
+  }
+
+  // Longitudinal Wave (0°) probe rows — repeatable rows stored as the
+  // tutmLwProbeRows JSON header field (same pattern as the Vessel UT
+  // probe grid, on the tank's own column).
+  function updateTutmLwProbe(idx: number, patch: Partial<VutmLwProbeEntry>) {
+    const probes = parseVutmLwProbes(header.tutmLwProbeRows);
+    probes[idx] = { ...probes[idx], ...patch };
+    updateHeader("tutmLwProbeRows", JSON.stringify(probes));
+  }
+
+  function addTutmLwProbe() {
+    const probes = parseVutmLwProbes(header.tutmLwProbeRows);
+    probes.push({ frequency: "", probeSize: "", serialNo: "" });
+    updateHeader("tutmLwProbeRows", JSON.stringify(probes));
+  }
+
+  function removeTutmLwProbe(idx: number) {
+    const probes = parseVutmLwProbes(header.tutmLwProbeRows);
+    if (probes.length <= 1) {
+      // Keep at least one row — the grid is repeatable but never empty.
+      updateHeader("tutmLwProbeRows", JSON.stringify([{ frequency: "", probeSize: "", serialNo: "" }]));
+      return;
+    }
+    probes.splice(idx, 1);
+    updateHeader("tutmLwProbeRows", JSON.stringify(probes));
+  }
+

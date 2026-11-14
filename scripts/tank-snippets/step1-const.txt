@@ -1,0 +1,8 @@
+
+  // Tank report types — Step 1 uses tank wording ("Equipment / Tank
+  // Description", "Equipment Identification No.") for these reports.
+  const IS_TANK_REPORT: boolean =
+    header.reportType === "TANK_DPT" ||
+    header.reportType === "TANK_MPT" ||
+    header.reportType === "TANK_WELD_SCAN" ||
+    header.reportType === "TANK_UTM";

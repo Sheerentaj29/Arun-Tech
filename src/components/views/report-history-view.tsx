@@ -99,6 +99,11 @@ const REPORT_TYPE_LABEL: Record<string, { label: string; color: string }> = {
   // Legacy types (no longer creatable but may exist on old rows)
   PIPELINE_VISUAL:    { label: "Visual",                 color: "border-blue-500 text-blue-700" },
   PIPELINE_CONDITION: { label: "Condition",              color: "border-amber-500 text-amber-700" },
+  // Tank (Storage Tank) modules
+  TANK_DPT:           { label: "Tank DPT",               color: "border-fuchsia-500 text-fuchsia-700" },
+  TANK_MPT:           { label: "Tank MPT",               color: "border-amber-500 text-amber-700" },
+  TANK_WELD_SCAN:     { label: "Tank Weld Scan",         color: "border-sky-500 text-sky-700" },
+  TANK_UTM:           { label: "Tank UT Thickness",      color: "border-teal-500 text-teal-700" },
 };
 
 // The active report types offered in the type filter (mirrors the report
@@ -108,6 +113,11 @@ const ACTIVE_TYPES: Array<{ value: string; label: string }> = [
   { value: "PIPELINE_MPT", label: "Particle Testing" },
   { value: "PIPELINE_WELD_SCAN", label: "Weld Scan" },
   { value: "PIPELINE_THICKNESS", label: "Thickness Measurement" },
+  // Tank (Storage Tank) modules
+  { value: "TANK_DPT", label: "Tank Penetrant Testing" },
+  { value: "TANK_MPT", label: "Tank Particle Testing" },
+  { value: "TANK_WELD_SCAN", label: "Tank Weld Scan" },
+  { value: "TANK_UTM", label: "Tank Thickness Measurement" },
 ];
 
 export function ReportHistoryView() {
@@ -244,6 +254,7 @@ export function ReportHistoryView() {
                   <SelectItem value="ALL">All equipment</SelectItem>
                   <SelectItem value="PIPING">Piping</SelectItem>
                   <SelectItem value="VESSEL">Vessel</SelectItem>
+                  <SelectItem value="TANK">Tank</SelectItem>
                 </SelectContent>
               </Select>
             </div>

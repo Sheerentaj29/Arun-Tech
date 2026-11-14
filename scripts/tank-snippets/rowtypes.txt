@@ -1,0 +1,164 @@
+// ─── TANK (STORAGE TANK) ROW TYPES ───
+// Storage-tank testing-details / readings rows are stored as JSON
+// columns on the report itself (same persistence pattern as the vessel
+// rows, but on completely separate tdpt*/tmpt*/tws*/tutm* columns —
+// tank reports never read or write Vessel/Piping columns).
+
+// One row of the Tank DPT / Tank MPT testing-details tables. Same
+// column set for both modules: Part Details | ID | Weld Dimension |
+// Size of Indication Approx. (mm) | Observation & Result. Serial
+// numbers are auto-generated from the row index. Every cell is
+// editable free text — nothing is hardcoded.
+interface TankDetailRow {
+  partDetails: string;
+  idNo: string;
+  weldDimension: string;
+  indicationSize: string;
+  observationResult: string;
+}
+const EMPTY_TANK_DETAIL_ROW: TankDetailRow = {
+  partDetails: "",
+  idNo: "",
+  weldDimension: "",
+  indicationSize: "",
+  observationResult: "",
+};
+function parseTankDetailRows(json: string | null | undefined): TankDetailRow[] {
+  try {
+    const parsed = JSON.parse(json ?? "[]");
+    if (Array.isArray(parsed)) {
+      return parsed.map((r: Record<string, unknown>) => ({
+        partDetails: String(r.partDetails ?? ""),
+        idNo: String(r.idNo ?? ""),
+        weldDimension: String(r.weldDimension ?? ""),
+        indicationSize: String(r.indicationSize ?? ""),
+        observationResult: String(r.observationResult ?? ""),
+      }));
+    }
+  } catch {}
+  return [];
+}
+
+// One row of the "Weld Scan Testing Details" table on TANK_WELD_SCAN
+// reports. Tank column set: Course / Plate | Weld Seam ID | Weld
+// Dimension | Probe Angle | Probe Frequency | Observation & Result.
+// Sl. No is auto-generated from the row index. Every cell is editable —
+// suggestions exist for Course / Plate and Weld Seam ID and a dropdown
+// for Probe Angle, but custom values are always allowed.
+interface TankWeldScanDetailRow {
+  component: string;
+  plateWeldId: string;
+  weldDimension: string;
+  probeAngle: string;
+  probeFrequency: string;
+  observationResult: string;
+}
+const EMPTY_TANK_WELD_SCAN_ROW: TankWeldScanDetailRow = {
+  component: "",
+  plateWeldId: "",
+  weldDimension: "",
+  probeAngle: "",
+  probeFrequency: "",
+  observationResult: "",
+};
+function parseTankWeldScanRows(json: string | null | undefined): TankWeldScanDetailRow[] {
+  try {
+    const parsed = JSON.parse(json ?? "[]");
+    if (Array.isArray(parsed)) {
+      return parsed.map((r: Record<string, unknown>) => ({
+        component: String(r.component ?? ""),
+        plateWeldId: String(r.plateWeldId ?? ""),
+        weldDimension: String(r.weldDimension ?? ""),
+        probeAngle: String(r.probeAngle ?? ""),
+        probeFrequency: String(r.probeFrequency ?? ""),
+        observationResult: String(r.observationResult ?? ""),
+      }));
+    }
+  } catch {}
+  return [];
+}
+// Tank-appropriate suggestion lists (not restrictions — the user can
+// type any value).
+const TWS_COMPONENT_SUGGESTIONS = [
+  "Course-1", "Course-2", "Course-3", "Course-4",
+  "Roof Plate", "Bottom Plate", "Annular Plate", "Nozzle",
+];
+const TWS_WELD_SEAM_ID_SUGGESTIONS = [
+  "Vertical Seam CS-1",
+  "Horizontal Seam CS-1/2",
+  "Roof-to-Shell Weld",
+  "Bottom-to-Shell Weld",
+  "Annular Plate Weld",
+  "Nozzle Weld",
+];
+const TWS_PROBE_ANGLE_OPTIONS = ["0°", "45°", "60°", "70°"];
+const TWS_PROBE_FREQUENCY_SUGGESTIONS = ["1 MHz", "2 MHz", "2.5 MHz", "4 MHz", "5 MHz", "7.5 MHz", "10 MHz"];
+const TWS_OBSERVATION_QUICK_OPTIONS = [
+  "No Significant Indication Observed",
+  "Accept",
+  "Reject",
+];
+
+// One row of the Tank UT course/plate readings table (clock positions,
+// same unified row shape as the vessel clock rows but stored on the
+// tank's own tutmPlateRows column). Every clock position (12 / 3 / 6 /
+// 9 o'clock) starts with ONE reading input the user can extend
+// dynamically (Add Reading) or trim. Minimum Measured Thickness is
+// ALWAYS derived from all readings of the row via vutmMinOfSpots at
+// render time — it is read-only everywhere and recomputed on every
+// keystroke.
+interface TankUtmRow {
+  moc: string;
+  componentType: string;
+  componentId: string;
+  nominalThickness: string;
+  c12: string[];
+  c3: string[];
+  c6: string[];
+  c9: string[];
+}
+const EMPTY_TANK_UTM_ROW: TankUtmRow = {
+  moc: "",
+  componentType: "",
+  componentId: "",
+  nominalThickness: "",
+  c12: [""],
+  c3: [""],
+  c6: [""],
+  c9: [""],
+};
+function parseTankUtmRows(json: string | null | undefined): TankUtmRow[] {
+  try {
+    const parsed = JSON.parse(json ?? "[]");
+    if (Array.isArray(parsed)) {
+      return parsed.map((r: Record<string, unknown>) => {
+        const spots = (key: string): string[] => {
+          const v = r[key];
+          return Array.isArray(v) && v.length > 0
+            ? (v as unknown[]).map((x) => String(x ?? ""))
+            : [""];
+        };
+        return {
+          moc: String(r.moc ?? ""),
+          componentType: String(r.componentType ?? ""),
+          componentId: String(r.componentId ?? ""),
+          nominalThickness: String(r.nominalThickness ?? ""),
+          c12: spots("c12"),
+          c3: spots("c3"),
+          c6: spots("c6"),
+          c9: spots("c9"),
+        };
+      });
+    }
+  } catch {}
+  return [];
+}
+// Tank course / plate suggestions (not restrictions — the user can
+// type any value).
+const TUTM_COMPONENT_TYPES = [
+  "Course-1", "Course-2", "Course-3", "Course-4", "Course-5", "Course-6",
+  "Roof Plate", "Bottom Plate", "Annular Plate", "Shell Plate", "Nozzle",
+];
+const TUTM_PLATE_ID_SUGGESTIONS = [
+  "Plate-1", "Plate-2", "Plate-3", "Location A", "Location B", "T-1",
+];

@@ -63,8 +63,13 @@ interface FullReport {
     | "VESSEL_DPT"
     | "VESSEL_MPT"
     | "VESSEL_WELD_SCAN"
-    | "VESSEL_UTM";
-  // Equipment type ("PIPING" | "VESSEL") from the report-creation flow.
+    | "VESSEL_UTM"
+    | "TANK_DPT"
+    | "TANK_MPT"
+    | "TANK_WELD_SCAN"
+    | "TANK_UTM";
+  // Equipment type ("PIPING" | "VESSEL" | "TANK") from the report-creation
+  // flow.
   // vesselOrientation is set ONLY for VESSEL_UTM reports (the orientation
   // decides the readings-table structure); null for legacy rows.
   equipmentType?: string | null;
@@ -230,6 +235,110 @@ interface FullReport {
   vutmShellRows?: string | null;
   vutmDishRows?: string | null;
   vutmNozzleRows?: string | null;
+  // ─── TANK (STORAGE TANK) FIELDS ───
+  // Populated when reportType = TANK_DPT / TANK_MPT / TANK_WELD_SCAN /
+  // TANK_UTM. Completely separate from the Vessel vws*/vutm* and Piping
+  // dpt*/mpt*/ws* fields — tank reports never read or write Vessel/
+  // Piping columns.
+  tdptDateOfExamination?: string | null;
+  tdptTestingStandard?: string | null;
+  tdptAcceptanceCriteria?: string | null;
+  tdptSurfacePreparation?: string | null;
+  tdptSurfaceTemperature?: string | null;
+  tdptPenetrantType?: string | null;
+  tdptPenetrantProcess?: string | null;
+  tdptMethodOfPreCleaning?: string | null;
+  tdptDryingTimeAfterPreCleaning?: string | null;
+  tdptMethodOfApplyingPenetrant?: string | null;
+  tdptPenetratingTime?: string | null;
+  tdptMethodOfRemovingExcessPenetrant?: string | null;
+  tdptMethodOfApplyingDeveloper?: string | null;
+  tdptDevelopmentTime?: string | null;
+  tdptInterpretationTime?: string | null;
+  tdptLightingEquipment?: string | null;
+  tdptPostCleaning?: string | null;
+  tdptSolventMake?: string | null;
+  tdptSolventProduct?: string | null;
+  tdptSolventBatchNo?: string | null;
+  tdptSolventExpiry?: string | null;
+  tdptPenetrantMake?: string | null;
+  tdptPenetrantProduct?: string | null;
+  tdptPenetrantBatchNo?: string | null;
+  tdptPenetrantExpiry?: string | null;
+  tdptDeveloperMake?: string | null;
+  tdptDeveloperProduct?: string | null;
+  tdptDeveloperBatchNo?: string | null;
+  tdptDeveloperExpiry?: string | null;
+  tdptObservationRows?: string | null;
+  tmptDateOfExamination?: string | null;
+  tmptTestingStandard?: string | null;
+  tmptAcceptanceCriteria?: string | null;
+  tmptSurfacePreparation?: string | null;
+  tmptSurfaceTemperature?: string | null;
+  tmptInstrumentSerialNo?: string | null;
+  tmptMethod?: string | null;
+  tmptTypeOfCurrent?: string | null;
+  tmptAcYokeLiftingCapacity?: string | null;
+  tmptContrastMedium?: string | null;
+  tmptMethodOfPreCleaning?: string | null;
+  tmptMethodOfApplyingWhiteContrast?: string | null;
+  tmptAcYokePoleSpacing?: string | null;
+  tmptMagneticMedium?: string | null;
+  tmptMethodOfApplyingMagneticMedium?: string | null;
+  tmptDevelopmentTime?: string | null;
+  tmptInterpretationTime?: string | null;
+  tmptLightingEquipment?: string | null;
+  tmptPostCleaning?: string | null;
+  tmptWhiteContrastMake?: string | null;
+  tmptWhiteContrastProduct?: string | null;
+  tmptWhiteContrastLotNo?: string | null;
+  tmptWhiteContrastExpiry?: string | null;
+  tmptInkMake?: string | null;
+  tmptInkProduct?: string | null;
+  tmptInkLotNo?: string | null;
+  tmptInkExpiry?: string | null;
+  tmptRows?: string | null;
+  twsDateOfExamination?: string | null;
+  twsTestingStandard?: string | null;
+  twsAcceptanceCriteria?: string | null;
+  twsUtProcedure?: string | null;
+  twsEquipmentMake?: string | null;
+  twsEquipmentModel?: string | null;
+  twsEquipmentSerialNo?: string | null;
+  twsCalibrationDueDate?: string | null;
+  twsCableLength?: string | null;
+  twsCableType?: string | null;
+  twsProbeDetails?: string | null;
+  twsCalibrationBlock?: string | null;
+  twsCalibrationBlockMoc?: string | null;
+  twsReferenceReflector?: string | null;
+  twsReferenceLevel?: string | null;
+  twsFlawSizingTechnique?: string | null;
+  twsSurfaceTemperature?: string | null;
+  twsTestingMethod?: string | null;
+  twsCouplant?: string | null;
+  twsSurfacePreparation?: string | null;
+  twsSurfaceFinish?: string | null;
+  twsExtentOfScanning?: string | null;
+  twsDetailRows?: string | null;
+  tutmDateOfExamination?: string | null;
+  tutmTestingStandard?: string | null;
+  tutmAcceptanceCriteria?: string | null;
+  tutmUtProcedure?: string | null;
+  tutmEquipmentMake?: string | null;
+  tutmEquipmentModel?: string | null;
+  tutmEquipmentSerialNo?: string | null;
+  tutmCalibrationDueDate?: string | null;
+  tutmCableLengthAndType?: string | null;
+  tutmLwProbeRows?: string | null;
+  tutmTypeOfCrystal?: string | null;
+  tutmCalibrationBlock?: string | null;
+  tutmSurfaceTemperature?: string | null;
+  tutmMethod?: string | null;
+  tutmCouplant?: string | null;
+  tutmSurfacePreparation?: string | null;
+  tutmSurfaceFinish?: string | null;
+  tutmPlateRows?: string | null;
   // ─── UT (ULTRASONIC TEST) FIELDS ───
   utSubContract?: string | null;
   utProject?: string | null;
@@ -1842,6 +1951,739 @@ export function PipelineReportDetailView() {
                     </tbody>
                   </table>
                   )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ─── TANK DPT: PARAMETERS + CONSUMABLE DETAILS ───
+            Shown only for TANK_DPT reports (Tank equipment — Storage
+            Tank). Completely separate from the Vessel DPT and Piping DPT
+            blocks above — the testing-details rows are stored in the
+            tank's own tdptObservationRows JSON column and rendered here. */}
+        {report.reportType === "TANK_DPT" && (() => {
+          let tdptRows: Array<Record<string, string>> = [];
+          try {
+            const parsed = JSON.parse(report.tdptObservationRows ?? "[]");
+            if (Array.isArray(parsed)) tdptRows = parsed;
+          } catch {}
+          const tdptParamGroups: Array<{ title: string; rows: Array<[string, string | null | undefined, boolean?]> }> = [
+            {
+              title: "General Information",
+              rows: [
+                ["Date of Examination", report.tdptDateOfExamination, true],
+                ["Testing Standard", report.tdptTestingStandard],
+                ["Acceptance Criteria", report.tdptAcceptanceCriteria],
+              ],
+            },
+            {
+              title: "Surface & Preparation",
+              rows: [
+                ["Surface Preparation", report.tdptSurfacePreparation],
+                ["Surface Temperature", report.tdptSurfaceTemperature],
+                ["Method of Pre-cleaning", report.tdptMethodOfPreCleaning],
+                ["Drying Time After Pre-cleaning", report.tdptDryingTimeAfterPreCleaning],
+                ["Post Cleaning", report.tdptPostCleaning],
+              ],
+            },
+            {
+              title: "Testing Materials / Consumables",
+              rows: [
+                ["Penetrant Type", report.tdptPenetrantType],
+                ["Penetrant Process", report.tdptPenetrantProcess],
+                ["Method of Applying Penetrant", report.tdptMethodOfApplyingPenetrant],
+                ["Method of Removing Excess Penetrant", report.tdptMethodOfRemovingExcessPenetrant],
+                ["Method of Applying Developer", report.tdptMethodOfApplyingDeveloper],
+              ],
+            },
+            {
+              title: "Testing Timing & Interpretation",
+              rows: [
+                ["Penetrating Time", report.tdptPenetratingTime],
+                ["Development Time", report.tdptDevelopmentTime],
+                ["Interpretation Time", report.tdptInterpretationTime],
+                ["Lighting Equipment", report.tdptLightingEquipment],
+              ],
+            },
+          ];
+          return (
+            <div className="mt-6 space-y-6">
+              {/* Equipment type badge */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="outline" className="border-fuchsia-400 text-fuchsia-700">
+                  Equipment: Tank
+                </Badge>
+              </div>
+
+              {/* 3. Dye Penetrant Testing Parameters — grouped two-column table */}
+              <div>
+                <h3 className="mb-2 text-xs font-bold uppercase text-fuchsia-700 border-b border-fuchsia-300 pb-1">
+                  3. Dye Penetrant Testing Parameters
+                </h3>
+                <table className="w-full border-collapse text-xs">
+                  <tbody>
+                    {tdptParamGroups.map((group) => (
+                      <Fragment key={group.title}>
+                        <tr className="bg-fuchsia-100">
+                          <td colSpan={2} className="border border-zinc-300 px-3 py-1.5 font-semibold text-fuchsia-800">
+                            {group.title}
+                          </td>
+                        </tr>
+                        {group.rows.map(([label, value, isDate], idx) => {
+                          let v = value && String(value).trim() ? String(value).trim() : null;
+                          if (v && isDate) {
+                            try { v = new Date(v).toISOString().slice(0, 10); } catch {}
+                          }
+                          return (
+                            <tr key={`${group.title}-${idx}`} className="border-b border-zinc-200">
+                              <td className="bg-fuchsia-50 border-r border-zinc-200 px-3 py-1.5 font-medium text-zinc-700 w-1/3">
+                                {label}
+                              </td>
+                              <td className="px-3 py-1.5">
+                                {v ? v : <span className="text-muted-foreground">—</span>}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Consumable Details — Make / Product / Batch / Expiry per consumable */}
+              <div>
+                <h3 className="mb-2 text-xs font-bold uppercase text-fuchsia-700 border-b border-fuchsia-300 pb-1">
+                  Consumable Details
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-fuchsia-800 text-white">
+                        <th className="border border-fuchsia-900 px-2 py-2 text-center">Consumable</th>
+                        <th className="border border-fuchsia-900 px-2 py-2 text-center">Make</th>
+                        <th className="border border-fuchsia-900 px-2 py-2 text-center">Product / Description</th>
+                        <th className="border border-fuchsia-900 px-2 py-2 text-center">Batch Number</th>
+                        <th className="border border-fuchsia-900 px-2 py-2 text-center">Expiry Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {([
+                        ["Solvent", report.tdptSolventMake, report.tdptSolventProduct, report.tdptSolventBatchNo, report.tdptSolventExpiry],
+                        ["Penetrant", report.tdptPenetrantMake, report.tdptPenetrantProduct, report.tdptPenetrantBatchNo, report.tdptPenetrantExpiry],
+                        ["Developer", report.tdptDeveloperMake, report.tdptDeveloperProduct, report.tdptDeveloperBatchNo, report.tdptDeveloperExpiry],
+                      ] as Array<[string, string | null | undefined, string | null | undefined, string | null | undefined, string | null | undefined]>).map(([label, make, product, batchNo, expiry], idx) => (
+                        <tr key={idx} className="hover:bg-muted/30">
+                          <td className="bg-fuchsia-50 border border-zinc-300 px-3 py-1.5 font-medium text-zinc-700">{label}</td>
+                          <td className="border border-zinc-300 px-3 py-1.5">{make && make.trim() ? make : <span className="text-muted-foreground">—</span>}</td>
+                          <td className="border border-zinc-300 px-3 py-1.5">{product && product.trim() ? product : <span className="text-muted-foreground">—</span>}</td>
+                          <td className="border border-zinc-300 px-3 py-1.5">{batchNo && batchNo.trim() ? batchNo : <span className="text-muted-foreground">—</span>}</td>
+                          <td className="border border-zinc-300 px-3 py-1.5">{expiry && expiry.trim() ? expiry : <span className="text-muted-foreground">—</span>}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Dye Penetrant Testing Details — rows from the tank JSON column */}
+              {tdptRows.length > 0 && (
+                <div>
+                  <h3 className="mb-2 text-xs font-bold uppercase text-fuchsia-700 border-b border-fuchsia-300 pb-1">
+                    Dye Penetrant Testing Details ({tdptRows.length})
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-fuchsia-800 text-white">
+                          <th className="border border-fuchsia-900 px-2 py-2 text-center">Sl. No</th>
+                          <th className="border border-fuchsia-900 px-2 py-2 text-center">Part Details</th>
+                          <th className="border border-fuchsia-900 px-2 py-2 text-center">ID</th>
+                          <th className="border border-fuchsia-900 px-2 py-2 text-center">Weld Dimension</th>
+                          <th className="border border-fuchsia-900 px-2 py-2 text-center">Size of Indication Approx. (mm)</th>
+                          <th className="border border-fuchsia-900 px-2 py-2 text-center">Observation &amp; Result</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tdptRows.map((row, idx) => (
+                          <tr key={idx} className="hover:bg-muted/30">
+                            <td className="border border-zinc-300 px-2 py-1 text-center font-mono">{idx + 1}</td>
+                            <td className="border border-zinc-300 px-2 py-1">{row.partDetails || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1">{row.idNo || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1">{row.weldDimension || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.indicationSize || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1">{row.observationResult || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+        {/* ─── TANK MPT: PARAMETERS + CONSUMABLE DETAILS ───
+            Shown only for TANK_MPT reports (Tank equipment — Storage
+            Tank). Completely separate from the Vessel MPT and Piping MPT
+            blocks above — the testing-details rows are stored in the
+            tank's own tmptRows JSON column and rendered here. */}
+        {report.reportType === "TANK_MPT" && (() => {
+          let tmptRows: Array<Record<string, string>> = [];
+          try {
+            const parsed = JSON.parse(report.tmptRows ?? "[]");
+            if (Array.isArray(parsed)) tmptRows = parsed;
+          } catch {}
+          const tmptParamGroups: Array<{ title: string; rows: Array<[string, string | null | undefined, boolean?]> }> = [
+            {
+              title: "General Information",
+              rows: [
+                ["Date of Examination", report.tmptDateOfExamination, true],
+                ["Testing Standard", report.tmptTestingStandard],
+                ["Acceptance Criteria", report.tmptAcceptanceCriteria],
+              ],
+            },
+            {
+              title: "Surface & Preparation",
+              rows: [
+                ["Surface Preparation", report.tmptSurfacePreparation],
+                ["Surface Temperature", report.tmptSurfaceTemperature],
+                ["Method of Pre-cleaning", report.tmptMethodOfPreCleaning],
+                ["Post Cleaning", report.tmptPostCleaning],
+              ],
+            },
+            {
+              title: "Equipment Details",
+              rows: [
+                ["Type of Instrument / Sl. No.", report.tmptInstrumentSerialNo],
+                ["AC Yoke Lifting Capacity", report.tmptAcYokeLiftingCapacity],
+                ["AC Yoke Pole Spacing", report.tmptAcYokePoleSpacing],
+              ],
+            },
+            {
+              title: "Testing Method",
+              rows: [
+                ["MPT Method", report.tmptMethod],
+                ["Type of Current", report.tmptTypeOfCurrent],
+                ["Contrast Medium", report.tmptContrastMedium],
+                ["Method of Applying White Contrast", report.tmptMethodOfApplyingWhiteContrast],
+                ["Magnetic Medium", report.tmptMagneticMedium],
+                ["Method of Applying Magnetic Medium", report.tmptMethodOfApplyingMagneticMedium],
+              ],
+            },
+            {
+              title: "Testing Timing & Interpretation",
+              rows: [
+                ["Development Time", report.tmptDevelopmentTime],
+                ["Interpretation Time", report.tmptInterpretationTime],
+                ["Lighting Equipment", report.tmptLightingEquipment],
+              ],
+            },
+          ];
+          return (
+            <div className="mt-6 space-y-6">
+              {/* Equipment type badge */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="outline" className="border-amber-400 text-amber-700">
+                  Equipment: Tank
+                </Badge>
+              </div>
+
+              {/* 3. Magnetic Particle Testing Parameters — grouped two-column table */}
+              <div>
+                <h3 className="mb-2 text-xs font-bold uppercase text-amber-700 border-b border-amber-300 pb-1">
+                  3. Magnetic Particle Testing Parameters
+                </h3>
+                <table className="w-full border-collapse text-xs">
+                  <tbody>
+                    {tmptParamGroups.map((group) => (
+                      <Fragment key={group.title}>
+                        <tr className="bg-amber-100">
+                          <td colSpan={2} className="border border-zinc-300 px-3 py-1.5 font-semibold text-amber-800">
+                            {group.title}
+                          </td>
+                        </tr>
+                        {group.rows.map(([label, value, isDate], idx) => {
+                          let v = value && String(value).trim() ? String(value).trim() : null;
+                          if (v && isDate) {
+                            try { v = new Date(v).toISOString().slice(0, 10); } catch {}
+                          }
+                          return (
+                            <tr key={`${group.title}-${idx}`} className="border-b border-zinc-200">
+                              <td className="bg-amber-50 border-r border-zinc-200 px-3 py-1.5 font-medium text-zinc-700 w-1/3">
+                                {label}
+                              </td>
+                              <td className="px-3 py-1.5">
+                                {v ? v : <span className="text-muted-foreground">—</span>}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Consumable Details — Make / Product / Lot Number / Expiry per consumable */}
+              <div>
+                <h3 className="mb-2 text-xs font-bold uppercase text-amber-700 border-b border-amber-300 pb-1">
+                  Consumable Details
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-amber-800 text-white">
+                        <th className="border border-amber-900 px-2 py-2 text-center">Consumable</th>
+                        <th className="border border-amber-900 px-2 py-2 text-center">Make</th>
+                        <th className="border border-amber-900 px-2 py-2 text-center">Product / Description</th>
+                        <th className="border border-amber-900 px-2 py-2 text-center">Lot Number</th>
+                        <th className="border border-amber-900 px-2 py-2 text-center">Expiry Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {([
+                        ["White Contrast", report.tmptWhiteContrastMake, report.tmptWhiteContrastProduct, report.tmptWhiteContrastLotNo, report.tmptWhiteContrastExpiry],
+                        ["Wet Particle Iron Ink", report.tmptInkMake, report.tmptInkProduct, report.tmptInkLotNo, report.tmptInkExpiry],
+                      ] as Array<[string, string | null | undefined, string | null | undefined, string | null | undefined, string | null | undefined]>).map(([label, make, product, lotNo, expiry], idx) => (
+                        <tr key={idx} className="hover:bg-muted/30">
+                          <td className="bg-amber-50 border border-zinc-300 px-3 py-1.5 font-medium text-zinc-700">{label}</td>
+                          <td className="border border-zinc-300 px-3 py-1.5">{make && make.trim() ? make : <span className="text-muted-foreground">—</span>}</td>
+                          <td className="border border-zinc-300 px-3 py-1.5">{product && product.trim() ? product : <span className="text-muted-foreground">—</span>}</td>
+                          <td className="border border-zinc-300 px-3 py-1.5">{lotNo && lotNo.trim() ? lotNo : <span className="text-muted-foreground">—</span>}</td>
+                          <td className="border border-zinc-300 px-3 py-1.5">{expiry && expiry.trim() ? expiry : <span className="text-muted-foreground">—</span>}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Magnetic Particle Testing Details — rows from the tank JSON column */}
+              {tmptRows.length > 0 && (
+                <div>
+                  <h3 className="mb-2 text-xs font-bold uppercase text-amber-700 border-b border-amber-300 pb-1">
+                    Magnetic Particle Testing Details ({tmptRows.length})
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-amber-800 text-white">
+                          <th className="border border-amber-900 px-2 py-2 text-center">Sl. No</th>
+                          <th className="border border-amber-900 px-2 py-2 text-center">Part Details</th>
+                          <th className="border border-amber-900 px-2 py-2 text-center">ID</th>
+                          <th className="border border-amber-900 px-2 py-2 text-center">Weld Dimension</th>
+                          <th className="border border-amber-900 px-2 py-2 text-center">Size of Indication Approx. (mm)</th>
+                          <th className="border border-amber-900 px-2 py-2 text-center">Observation &amp; Result</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tmptRows.map((row, idx) => (
+                          <tr key={idx} className="hover:bg-muted/30">
+                            <td className="border border-zinc-300 px-2 py-1 text-center font-mono">{idx + 1}</td>
+                            <td className="border border-zinc-300 px-2 py-1">{row.partDetails || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1">{row.idNo || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1">{row.weldDimension || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.indicationSize || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1">{row.observationResult || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+        {/* ─── TANK WELD SCAN: TESTING PARAMETERS + DETAILS ───
+            Shown only for TANK_WELD_SCAN reports (Tank equipment —
+            Storage Tank). Completely separate from the Vessel Weld Scan
+            and Piping Weld Scan blocks above. Renders the grouped Weld
+            Scan Testing Parameters (incl. the fixed 4-probe grid) and
+            the tank Weld Scan Testing Details table (rows stored in the
+            tank's own twsDetailRows JSON column). */}
+        {report.reportType === "TANK_WELD_SCAN" && (() => {
+          let twsProbes: Array<Record<string, string>> = [];
+          let twsRows: Array<Record<string, string>> = [];
+          try {
+            const parsed = JSON.parse(report.twsProbeDetails ?? "[]");
+            if (Array.isArray(parsed)) twsProbes = parsed;
+          } catch {}
+          try {
+            const parsed = JSON.parse(report.twsDetailRows ?? "[]");
+            if (Array.isArray(parsed)) twsRows = parsed;
+          } catch {}
+          const twsParamGroups: Array<{ title: string; rows: Array<[string, string | null | undefined, boolean?]> }> = [
+            {
+              title: "General Information",
+              rows: [
+                ["Date of Examination", report.twsDateOfExamination, true],
+                ["Testing Standard", report.twsTestingStandard],
+                ["Acceptance Criteria", report.twsAcceptanceCriteria],
+                ["UT Procedure", report.twsUtProcedure],
+              ],
+            },
+            {
+              title: "Equipment Details",
+              rows: [
+                ["Equipment Make", report.twsEquipmentMake],
+                ["Equipment Model", report.twsEquipmentModel],
+                ["Equipment Serial Number", report.twsEquipmentSerialNo],
+                ["Calibration Due Date", report.twsCalibrationDueDate, true],
+              ],
+            },
+            {
+              title: "Cable Details",
+              rows: [
+                ["Cable Length", report.twsCableLength],
+                ["Cable Type", report.twsCableType],
+              ],
+            },
+            {
+              title: "Calibration Details",
+              rows: [
+                ["Calibration Block", report.twsCalibrationBlock],
+                ["Calibration Block Material / MOC", report.twsCalibrationBlockMoc],
+                ["Reference Reflector", report.twsReferenceReflector],
+                ["Reference Level", report.twsReferenceLevel],
+              ],
+            },
+            {
+              title: "Other Testing Parameters",
+              rows: [
+                ["Flaw Sizing Technique", report.twsFlawSizingTechnique],
+                ["Surface Temperature", report.twsSurfaceTemperature],
+                ["Method", report.twsTestingMethod],
+                ["Couplant", report.twsCouplant],
+                ["Surface Preparation", report.twsSurfacePreparation],
+                ["Surface Finish", report.twsSurfaceFinish],
+                ["Extent of Scanning", report.twsExtentOfScanning],
+              ],
+            },
+          ];
+          return (
+            <div className="mt-6 space-y-6">
+              {/* Equipment type badge */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="outline" className="border-sky-400 text-sky-700">
+                  Equipment: Tank
+                </Badge>
+              </div>
+
+              {/* Weld Scan Testing Parameters — grouped two-column table */}
+              <div>
+                <h3 className="mb-2 text-xs font-bold uppercase text-sky-700 border-b border-sky-300 pb-1">
+                  Weld Scan Testing Parameters
+                </h3>
+                <table className="w-full border-collapse text-xs">
+                  <tbody>
+                    {twsParamGroups.map((group) => (
+                      <Fragment key={group.title}>
+                        <tr className="bg-sky-100">
+                          <td colSpan={2} className="border border-zinc-300 px-3 py-1.5 font-semibold text-sky-800">
+                            {group.title}
+                          </td>
+                        </tr>
+                        {group.rows.map(([label, value, isDate], idx) => {
+                          let v = value && String(value).trim() ? String(value).trim() : null;
+                          if (v && isDate) {
+                            try { v = new Date(v).toISOString().slice(0, 10); } catch {}
+                          }
+                          return (
+                            <tr key={`${group.title}-${idx}`} className="border-b border-zinc-200">
+                              <td className="bg-sky-50 border-r border-zinc-200 px-3 py-1.5 font-medium text-zinc-700 w-1/3">
+                                {label}
+                              </td>
+                              <td className="px-3 py-1.5">
+                                {v ? v : <span className="text-muted-foreground">—</span>}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Probe Details — fixed 4-probe grid */}
+              {twsProbes.length > 0 && (
+                <div>
+                  <h3 className="mb-2 text-xs font-bold uppercase text-sky-700 border-b border-sky-300 pb-1">
+                    Probe Details
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-sky-700 text-white">
+                          <th className="border border-sky-800 px-2 py-2 text-center">Probe</th>
+                          <th className="border border-sky-800 px-2 py-2 text-center">Probe Angle</th>
+                          <th className="border border-sky-800 px-2 py-2 text-center">Frequency</th>
+                          <th className="border border-sky-800 px-2 py-2 text-center">Probe Size</th>
+                          <th className="border border-sky-800 px-2 py-2 text-center">Serial Number</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {twsProbes.map((row, idx) => (
+                          <tr key={idx} className="hover:bg-muted/30">
+                            <td className="border border-zinc-300 px-2 py-1 font-medium">{row.probeType === "Longitudinal Wave" ? "Longitudinal Wave Probe" : "Shear Wave Probe"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.probeAngle || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.frequency || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.probeSize || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center font-mono">{row.serialNo || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Weld Scan Testing Details — Tank column set */}
+              {twsRows.length > 0 && (
+                <div>
+                  <h3 className="mb-2 text-xs font-bold uppercase text-sky-700 border-b border-sky-300 pb-1">
+                    Weld Scan Testing Details ({twsRows.length})
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-sky-700 text-white">
+                          <th className="border border-sky-800 px-2 py-2 text-center">Sl. No</th>
+                          <th className="border border-sky-800 px-2 py-2 text-center">Course / Plate</th>
+                          <th className="border border-sky-800 px-2 py-2 text-center">Weld Seam ID</th>
+                          <th className="border border-sky-800 px-2 py-2 text-center">Weld Dimension</th>
+                          <th className="border border-sky-800 px-2 py-2 text-center">Probe Angle</th>
+                          <th className="border border-sky-800 px-2 py-2 text-center">Probe Frequency</th>
+                          <th className="border border-sky-800 px-2 py-2 text-center">Observation &amp; Result</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {twsRows.map((row, idx) => (
+                          <tr key={idx} className="hover:bg-muted/30">
+                            <td className="border border-zinc-300 px-2 py-1 text-center font-mono">{idx + 1}</td>
+                            <td className="border border-zinc-300 px-2 py-1">{row.component || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1">{row.plateWeldId || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1">{row.weldDimension || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.probeAngle || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.probeFrequency || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1">{row.observationResult || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+        {/* ─── TANK UT THICKNESS MEASUREMENT: PARAMETERS + READINGS ───
+            Shown only for TANK_UTM reports (Tank equipment — Storage
+            Tank). Completely separate from the Vessel UT Thickness
+            Measurement and Piping Thickness Measurement blocks above.
+            Renders the grouped UT Thickness Measurement Parameters (incl.
+            the repeatable Longitudinal Wave 0° probe grid) and the
+            course/plate clock-position readings table (12 / 3 / 6 / 9
+            o'clock — every reading the user entered, no empty slots).
+            Minimum Measured Thickness is recomputed from the stored
+            readings. */}
+        {report.reportType === "TANK_UTM" && (() => {
+          let tutmProbes: Array<Record<string, string>> = [];
+          try {
+            const parsed = JSON.parse(report.tutmLwProbeRows ?? "[]");
+            if (Array.isArray(parsed) && parsed.length > 0) tutmProbes = parsed;
+          } catch {}
+          // Course/plate readings rows — clock positions (12 / 3 / 6 / 9
+          // o'clock). Parsed defensively; every stored reading survives.
+          const tutmRows: Array<Record<string, unknown>> = (() => {
+            try {
+              const parsed = JSON.parse(report.tutmPlateRows ?? "[]");
+              if (Array.isArray(parsed)) return parsed;
+            } catch {}
+            return [];
+          })();
+          const tutmParamGroups: Array<{ title: string; rows: Array<[string, string | null | undefined, boolean?]> }> = [
+            {
+              title: "General Information",
+              rows: [
+                ["Date of Examination", report.tutmDateOfExamination, true],
+                ["Testing Standard", report.tutmTestingStandard],
+                ["Acceptance Criteria", report.tutmAcceptanceCriteria],
+                ["UT Procedure", report.tutmUtProcedure],
+              ],
+            },
+            {
+              title: "Equipment Details",
+              rows: [
+                ["Equipment Make", report.tutmEquipmentMake],
+                ["Equipment Model", report.tutmEquipmentModel],
+                ["Equipment Serial Number", report.tutmEquipmentSerialNo],
+                ["Calibration Due Date", report.tutmCalibrationDueDate, true],
+              ],
+            },
+            {
+              title: "Cable & Crystal Details",
+              rows: [
+                ["Cable Length and Type", report.tutmCableLengthAndType],
+                ["Type of Crystal", report.tutmTypeOfCrystal],
+              ],
+            },
+            {
+              title: "Calibration Details",
+              rows: [
+                ["Calibration Block Dimension / MOC", report.tutmCalibrationBlock],
+              ],
+            },
+            {
+              title: "Other Testing Parameters",
+              rows: [
+                ["Surface Temperature", report.tutmSurfaceTemperature],
+                ["Method", report.tutmMethod],
+                ["Couplant", report.tutmCouplant],
+                ["Surface Preparation", report.tutmSurfacePreparation],
+                ["Surface Finish", report.tutmSurfaceFinish],
+              ],
+            },
+          ];
+          const tutmCell = (min: unknown) => (min && String(min).trim() ? String(min) : "—");
+          return (
+            <div className="mt-6 space-y-6">
+              {/* Equipment type badge */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="outline" className="border-teal-400 text-teal-700">
+                  Equipment: Tank
+                </Badge>
+              </div>
+
+              {/* UT Thickness Measurement Parameters — grouped two-column table */}
+              <div>
+                <h3 className="mb-2 text-xs font-bold uppercase text-teal-700 border-b border-teal-300 pb-1">
+                  UT Thickness Measurement Parameters
+                </h3>
+                <table className="w-full border-collapse text-xs">
+                  <tbody>
+                    {tutmParamGroups.map((group) => (
+                      <Fragment key={group.title}>
+                        <tr className="bg-teal-100">
+                          <td colSpan={2} className="border border-zinc-300 px-3 py-1.5 font-semibold text-teal-800">
+                            {group.title}
+                          </td>
+                        </tr>
+                        {group.rows.map(([label, value, isDate], idx) => {
+                          let v = value && String(value).trim() ? String(value).trim() : null;
+                          if (v && isDate) {
+                            try { v = new Date(v).toISOString().slice(0, 10); } catch {}
+                          }
+                          return (
+                            <tr key={`${group.title}-${idx}`} className="border-b border-zinc-200">
+                              <td className="bg-teal-50 border-r border-zinc-200 px-3 py-1.5 font-medium text-zinc-700 w-1/3">
+                                {label}
+                              </td>
+                              <td className="px-3 py-1.5">
+                                {v ? v : <span className="text-muted-foreground">—</span>}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Probe Details — repeatable Longitudinal Wave (0°) grid */}
+              {tutmProbes.length > 0 && (
+                <div>
+                  <h3 className="mb-2 text-xs font-bold uppercase text-teal-700 border-b border-teal-300 pb-1">
+                    Probe Details — Longitudinal Wave (0°)
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-teal-700 text-white">
+                          <th className="border border-teal-800 px-2 py-2 text-center">Probe</th>
+                          <th className="border border-teal-800 px-2 py-2 text-center">Probe Angle</th>
+                          <th className="border border-teal-800 px-2 py-2 text-center">Frequency</th>
+                          <th className="border border-teal-800 px-2 py-2 text-center">Size</th>
+                          <th className="border border-teal-800 px-2 py-2 text-center">S.No.</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tutmProbes.map((row, idx) => (
+                          <tr key={idx} className="hover:bg-muted/30">
+                            <td className="border border-zinc-300 px-2 py-1 font-medium">Longitudinal Wave Probe</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">0°</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.frequency || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.probeSize || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center font-mono">{row.serialNo || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* UT Thickness Measurement Readings — course/plate clock positions */}
+              <div>
+                <h3 className="mb-2 text-xs font-bold uppercase text-teal-700 border-b border-teal-300 pb-1">
+                  UT Thickness Measurement Readings — Course / Plate Measurements (Clock Positions)
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-teal-700 text-white">
+                        <th className="border border-teal-800 px-2 py-2 text-center">MOC</th>
+                        <th className="border border-teal-800 px-2 py-2 text-center">Course / Section</th>
+                        <th className="border border-teal-800 px-2 py-2 text-center">Plate / Location ID</th>
+                        <th className="border border-teal-800 px-2 py-2 text-center">Nominal Thickness (mm)</th>
+                        <th className="border border-teal-800 px-2 py-2 text-center">12 O&apos;clock (mm)</th>
+                        <th className="border border-teal-800 px-2 py-2 text-center">3 O&apos;clock (mm)</th>
+                        <th className="border border-teal-800 px-2 py-2 text-center">6 O&apos;clock (mm)</th>
+                        <th className="border border-teal-800 px-2 py-2 text-center">9 O&apos;clock (mm)</th>
+                        <th className="border border-teal-800 px-2 py-2 text-center">Minimum Measured Thickness (mm)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tutmRows.length === 0 && (
+                        <tr><td colSpan={9} className="text-center py-4 text-muted-foreground border border-zinc-300">No course / plate measurement rows recorded.</td></tr>
+                      )}
+                      {tutmRows.map((row, idx) => {
+                        const spot = (k: string): string[] => {
+                          const v = row[k];
+                          return Array.isArray(v) ? (v as unknown[]).map((s) => String(s ?? "")) : [];
+                        };
+                        const c12 = spot("c12");
+                        const c3 = spot("c3");
+                        const c6 = spot("c6");
+                        const c9 = spot("c9");
+                        const renderSpots = (spots: string[]) => {
+                          const filled = spots.filter((s) => s && String(s).trim());
+                          return filled.length > 0 ? (
+                            <span className="whitespace-pre-line">{filled.join("\n")}</span>
+                          ) : "—";
+                        };
+                        return (
+                          <tr key={idx} className="hover:bg-muted/30 align-top">
+                            <td className="border border-zinc-300 px-2 py-1">{String(row.moc ?? "") || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1">{String(row.componentType ?? "") || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1">{String(row.componentId ?? "") || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{String(row.nominalThickness ?? "") || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{renderSpots(c12)}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{renderSpots(c3)}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{renderSpots(c6)}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{renderSpots(c9)}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center font-mono font-semibold">
+                              {tutmCell(vutmMinOfSpots(c12, c3, c6, c9))}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>

@@ -40,7 +40,7 @@ import { toast } from "sonner";
 interface PipelineReportListItem {
   id: string;
   reportNumber: string;
-  reportType: "PIPELINE_THICKNESS" | "PIPELINE_VISUAL" | "PIPELINE_CONDITION" | "PIPELINE_DPT" | "PIPELINE_MPT" | "PIPELINE_WELD_SCAN" | "VESSEL_DPT" | "VESSEL_MPT" | "VESSEL_WELD_SCAN" | "VESSEL_UTM";
+  reportType: "PIPELINE_THICKNESS" | "PIPELINE_VISUAL" | "PIPELINE_CONDITION" | "PIPELINE_DPT" | "PIPELINE_MPT" | "PIPELINE_WELD_SCAN" | "VESSEL_DPT" | "VESSEL_MPT" | "VESSEL_WELD_SCAN" | "VESSEL_UTM" | "TANK_DPT" | "TANK_MPT" | "TANK_WELD_SCAN" | "TANK_UTM";
   inspectionDate: string;
   status: "Draft" | "Submitted" | "Approved" | "Rejected" | "Superseded";
   revisionNumber: number;
@@ -85,6 +85,10 @@ const REPORT_TYPE_LABEL: Record<string, { label: string; color: string }> = {
   VESSEL_MPT:         { label: "Vessel MPT", color: "border-orange-500 text-orange-700" },
   VESSEL_WELD_SCAN:   { label: "Vessel Weld Scan", color: "border-cyan-500 text-cyan-700" },
   VESSEL_UTM:         { label: "Vessel UT Thickness", color: "border-emerald-500 text-emerald-700" },
+  TANK_DPT:           { label: "Tank DPT", color: "border-fuchsia-500 text-fuchsia-700" },
+  TANK_MPT:           { label: "Tank MPT", color: "border-amber-500 text-amber-700" },
+  TANK_WELD_SCAN:     { label: "Tank Weld Scan", color: "border-sky-500 text-sky-700" },
+  TANK_UTM:           { label: "Tank UT Thickness", color: "border-teal-500 text-teal-700" },
 };
 
 export function PipelineReportsListView() {

@@ -1,0 +1,6 @@
+        // Tank (Storage Tank) testing-details / readings rows — parsed
+        // from the tank JSON columns (TANK_* reports only).
+        setTdptRows(parseTankDetailRows(r.tdptObservationRows));
+        setTmptRows(parseTankDetailRows(r.tmptRows));
+        setTwsRows(parseTankWeldScanRows(r.twsDetailRows));
+        setTutmRows(parseTankUtmRows(r.tutmPlateRows));

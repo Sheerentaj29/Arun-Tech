@@ -1,0 +1,486 @@
+      {/* ═══ STEP 2 (TANK UT THICKNESS MEASUREMENT) ═══
+          Shown only for TANK_UTM reports. Storage tanks are vertical
+          cylindrical equipment — every course / plate component is
+          measured at the 12 / 3 / 6 / 9 o'clock positions; each position
+          starts with ONE reading input and "+ Add Reading" appends more
+          slots (no limit) that can be removed again. Minimum Measured
+          Thickness is read-only and auto-calculated from ALL readings of
+          the row on every change.
+          Completely separate from the Vessel UT Thickness Measurement
+          Step 2 and from the Piping Thickness Measurement Step 2 — both
+          stay untouched. */}
+      {step === 2 && header.reportType === "TANK_UTM" && (
+      <>
+        {/* ═══ A. UT THICKNESS MEASUREMENT PARAMETERS ═══ */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Gauge className="h-4 w-4 text-teal-700" />
+              UT Thickness Measurement Parameters
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 space-y-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <tbody>
+                  {/* ─── General Information ─── */}
+                  <tr className="bg-teal-800 text-white">
+                    <td colSpan={2} className="border border-teal-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                      General Information
+                    </td>
+                  </tr>
+                  <tr className="border-b border-zinc-200">
+                    <td className="bg-teal-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/3">
+                      Date of Examination
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        type="date"
+                        className="h-8 text-sm"
+                        value={header.tutmDateOfExamination}
+                        onChange={(e) => updateHeader("tutmDateOfExamination", e.target.value)}
+                      />
+                    </td>
+                  </tr>
+                  {([
+                    ["Testing Standard", "tutmTestingStandard", "e.g. API 653 / ASME Section V 2023, Article 4"],
+                    ["Acceptance Criteria", "tutmAcceptanceCriteria", "e.g. API 653 minimum thickness tables"],
+                    ["UT Procedure", "tutmUtProcedure", "e.g. Procedure / document number"],
+                  ] as const).map(([label, fieldKey, placeholder]) => (
+                    <tr key={fieldKey} className="border-b border-zinc-200">
+                      <td className="bg-teal-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                        {label}
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <Input
+                          className="h-8 text-sm"
+                          value={header[fieldKey]}
+                          onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                          placeholder={placeholder}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+
+                  {/* ─── Equipment Details ─── */}
+                  <tr className="bg-teal-800 text-white">
+                    <td colSpan={2} className="border border-teal-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                      Equipment Details
+                    </td>
+                  </tr>
+                  {([
+                    ["Equipment Make", "tutmEquipmentMake", "e.g. Olympus / Krautkramer / Sonatest"],
+                    ["Equipment Model", "tutmEquipmentModel", "e.g. EPOCH 650 / USM Go"],
+                    ["Equipment Serial Number", "tutmEquipmentSerialNo", "Instrument serial number"],
+                  ] as const).map(([label, fieldKey, placeholder]) => (
+                    <tr key={fieldKey} className="border-b border-zinc-200">
+                      <td className="bg-teal-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                        {label}
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <Input
+                          className="h-8 text-sm"
+                          value={header[fieldKey]}
+                          onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                          placeholder={placeholder}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                  <tr className="border-b border-zinc-200">
+                    <td className="bg-teal-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      Calibration Due Date
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        type="date"
+                        className="h-8 text-sm"
+                        value={header.tutmCalibrationDueDate}
+                        onChange={(e) => updateHeader("tutmCalibrationDueDate", e.target.value)}
+                      />
+                    </td>
+                  </tr>
+
+                  {/* ─── Cable & Crystal Details ─── */}
+                  <tr className="bg-teal-800 text-white">
+                    <td colSpan={2} className="border border-teal-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                      Cable &amp; Crystal Details
+                    </td>
+                  </tr>
+                  <tr className="border-b border-zinc-200">
+                    <td className="bg-teal-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      Cable Length and Type
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header.tutmCableLengthAndType}
+                        onChange={(e) => updateHeader("tutmCableLengthAndType", e.target.value)}
+                        placeholder="e.g. 2.0 meters, Coaxial"
+                      />
+                    </td>
+                  </tr>
+                  <tr className="border-b border-zinc-200">
+                    <td className="bg-teal-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      Type of Crystal
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        list="tutm-crystal-suggestions"
+                        value={header.tutmTypeOfCrystal}
+                        onChange={(e) => updateHeader("tutmTypeOfCrystal", e.target.value)}
+                        placeholder="Select or type — e.g. Dual Element"
+                      />
+                      <datalist id="tutm-crystal-suggestions">
+                        {VUTM_CRYSTAL_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
+                      </datalist>
+                    </td>
+                  </tr>
+
+                  {/* ─── Calibration Details ─── */}
+                  <tr className="bg-teal-800 text-white">
+                    <td colSpan={2} className="border border-teal-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                      Calibration Details
+                    </td>
+                  </tr>
+                  <tr className="border-b border-zinc-200">
+                    <td className="bg-teal-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      Calibration Block Dimension / MOC
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header.tutmCalibrationBlock}
+                        onChange={(e) => updateHeader("tutmCalibrationBlock", e.target.value)}
+                        placeholder="e.g. 12.5 mm step wedge, Carbon Steel (V1 block)"
+                      />
+                    </td>
+                  </tr>
+
+                  {/* ─── Other Testing Parameters ─── */}
+                  <tr className="bg-teal-800 text-white">
+                    <td colSpan={2} className="border border-teal-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                      Other Testing Parameters
+                    </td>
+                  </tr>
+                  <tr className="border-b border-zinc-200">
+                    <td className="bg-teal-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      Surface Temperature
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <div className="flex items-center gap-2">
+                        <Input
+                          className="h-8 text-sm w-32"
+                          inputMode="decimal"
+                          value={header.tutmSurfaceTemperature}
+                          onChange={(e) => updateHeader("tutmSurfaceTemperature", e.target.value)}
+                          placeholder="e.g. 32"
+                        />
+                        <span className="text-sm text-zinc-500">°C</span>
+                      </div>
+                    </td>
+                  </tr>
+                  {([
+                    ["Method", "tutmMethod", "tutm-method-suggestions", VUTM_METHOD_SUGGESTIONS, "e.g. Contact Pulse Echo"],
+                    ["Couplant", "tutmCouplant", "tutm-couplant-suggestions", VUTM_COUPLANT_SUGGESTIONS, "e.g. Gel / oil / glycerine"],
+                  ] as const).map(([label, fieldKey, listId, suggestions, placeholder]) => (
+                    <tr key={fieldKey} className="border-b border-zinc-200">
+                      <td className="bg-teal-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                        {label}
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <Input
+                          className="h-8 text-sm"
+                          list={listId}
+                          value={header[fieldKey]}
+                          onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                          placeholder={placeholder}
+                        />
+                        <datalist id={listId}>
+                          {suggestions.map((s) => <option key={s} value={s} />)}
+                        </datalist>
+                      </td>
+                    </tr>
+                  ))}
+                  {([
+                    ["Surface Preparation", "tutmSurfacePreparation", "e.g. Grinding / wire brush"],
+                    ["Surface Finish", "tutmSurfaceFinish", "e.g. Smooth / machined / as welded"],
+                  ] as const).map(([label, fieldKey, placeholder]) => (
+                    <tr key={fieldKey} className="border-b border-zinc-200">
+                      <td className="bg-teal-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                        {label}
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <Input
+                          className="h-8 text-sm"
+                          value={header[fieldKey]}
+                          onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                          placeholder={placeholder}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* ─── Probe Details: repeatable Longitudinal Wave (0°) grid ─── */}
+            <div className="border-t border-zinc-200 p-4 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-zinc-700">
+                    Probe Details — Longitudinal Wave (0°)
+                  </div>
+                </div>
+                <Button onClick={addTutmLwProbe} size="sm" variant="outline">
+                  <Plus className="mr-1 h-4 w-4" /> Add Probe Row
+                </Button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs border-collapse">
+                  <thead className="bg-teal-800 text-white">
+                    <tr>
+                      <th className="border border-teal-900 px-2 py-2 text-center" style={{ minWidth: 190 }}>Probe</th>
+                      <th className="border border-teal-900 px-2 py-2 text-center" style={{ minWidth: 90 }}>Probe Angle</th>
+                      <th className="border border-teal-900 px-2 py-2 text-center" style={{ minWidth: 130 }}>Frequency</th>
+                      <th className="border border-teal-900 px-2 py-2 text-center" style={{ minWidth: 130 }}>Size</th>
+                      <th className="border border-teal-900 px-2 py-2 text-center" style={{ minWidth: 150 }}>S.No.</th>
+                      <th className="border border-teal-900 px-2 py-2 text-center" style={{ minWidth: 60 }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {parseVutmLwProbes(header.tutmLwProbeRows).map((probe, idx) => (
+                      <tr key={idx} className="hover:bg-muted/30">
+                        <td className="border border-zinc-300 px-2 py-1.5 font-medium text-zinc-700">
+                          Longitudinal Wave Probe
+                        </td>
+                        <td className="border border-zinc-300 px-2 py-1.5 text-center text-zinc-700">
+                          0°
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          <Input
+                            className="h-8 text-xs"
+                            value={probe.frequency}
+                            onChange={(e) => updateTutmLwProbe(idx, { frequency: e.target.value })}
+                            placeholder="e.g. 2 MHz / 4 MHz"
+                          />
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          <Input
+                            className="h-8 text-xs"
+                            value={probe.probeSize}
+                            onChange={(e) => updateTutmLwProbe(idx, { probeSize: e.target.value })}
+                            placeholder="e.g. 10 mm Ø"
+                          />
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          <Input
+                            className="h-8 text-xs"
+                            value={probe.serialNo}
+                            onChange={(e) => updateTutmLwProbe(idx, { serialNo: e.target.value })}
+                            placeholder="Probe serial number"
+                          />
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          <div className="flex justify-center">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+                              onClick={() => removeTutmLwProbe(idx)}
+                              title="Remove probe row"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ═══ B. UT THICKNESS MEASUREMENT READINGS ═══ */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  UT Thickness Measurement Readings
+                </CardTitle>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0 space-y-6">
+            {/* ─── B.1 COURSE / PLATE MEASUREMENTS (CLOCK POSITIONS) ─── */}
+            <div className="p-4 pb-0">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-sm font-semibold text-zinc-700">
+                  Course / Plate Measurements (Clock Positions)
+                </div>
+                <Button onClick={addTutmRow} size="sm">
+                  <Plus className="mr-1 h-4 w-4" /> Add Course / Plate Row
+                </Button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs border-collapse">
+                  <thead className="bg-teal-800 text-white">
+                    <tr>
+                      <th rowSpan={2} className="border border-teal-900 px-2 py-2 text-center align-middle" style={{ minWidth: 110 }}>MOC</th>
+                      <th rowSpan={2} className="border border-teal-900 px-2 py-2 text-center align-middle" style={{ minWidth: 130 }}>Course / Section</th>
+                      <th rowSpan={2} className="border border-teal-900 px-2 py-2 text-center align-middle" style={{ minWidth: 120 }}>Plate / Location ID</th>
+                      <th rowSpan={2} className="border border-teal-900 px-2 py-2 text-center align-middle" style={{ minWidth: 90 }}>Nominal Thickness (mm)</th>
+                      <th colSpan={4} className="border border-teal-900 px-2 py-2 text-center">Clock-Position Readings (mm)</th>
+                      <th rowSpan={2} className="border border-teal-900 px-2 py-2 text-center align-middle" style={{ minWidth: 80 }}>Minimum Measured Thickness (mm)</th>
+                      <th rowSpan={2} className="border border-teal-900 px-2 py-2 text-center align-middle" style={{ minWidth: 60 }}>Actions</th>
+                    </tr>
+                    <tr>
+                      <th className="border border-teal-900 px-2 py-1.5 text-center font-normal" style={{ minWidth: 160 }}>12 O&apos;clock</th>
+                      <th className="border border-teal-900 px-2 py-1.5 text-center font-normal" style={{ minWidth: 160 }}>3 O&apos;clock</th>
+                      <th className="border border-teal-900 px-2 py-1.5 text-center font-normal" style={{ minWidth: 160 }}>6 O&apos;clock</th>
+                      <th className="border border-teal-900 px-2 py-1.5 text-center font-normal" style={{ minWidth: 160 }}>9 O&apos;clock</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tutmRows.length === 0 && (
+                      <tr>
+                        <td colSpan={9} className="text-center py-6 text-muted-foreground border border-zinc-300">
+                          No rows yet.
+                        </td>
+                      </tr>
+                    )}
+                    {tutmRows.map((row, idx) => (
+                      <tr key={idx} className="hover:bg-muted/30 align-top">
+                        <td className="border border-zinc-300 p-1">
+                          <Input
+                            className="h-8 text-xs"
+                            list={`tutm-moc-suggestions-${idx}`}
+                            value={row.moc}
+                            onChange={(e) => updateTutmRow(idx, { moc: e.target.value })}
+                            placeholder="e.g. Carbon Steel"
+                          />
+                          <datalist id={`tutm-moc-suggestions-${idx}`}>
+                            {VUTM_MOC_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
+                          </datalist>
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          <Input
+                            className="h-8 text-xs"
+                            list={`tutm-comp-type-${idx}`}
+                            value={row.componentType}
+                            onChange={(e) => updateTutmRow(idx, { componentType: e.target.value })}
+                            placeholder="e.g. Course-1 / Roof Plate"
+                          />
+                          <datalist id={`tutm-comp-type-${idx}`}>
+                            {TUTM_COMPONENT_TYPES.map((s) => <option key={s} value={s} />)}
+                          </datalist>
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          <Input
+                            className="h-8 text-xs"
+                            list={`tutm-plate-id-${idx}`}
+                            value={row.componentId}
+                            onChange={(e) => updateTutmRow(idx, { componentId: e.target.value })}
+                            placeholder="e.g. Plate-3 / Location A"
+                          />
+                          <datalist id={`tutm-plate-id-${idx}`}>
+                            {TUTM_PLATE_ID_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
+                          </datalist>
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          <Input
+                            className="h-8 text-xs"
+                            inputMode="decimal"
+                            value={row.nominalThickness}
+                            onChange={(e) => updateTutmRow(idx, { nominalThickness: e.target.value })}
+                            placeholder="mm"
+                          />
+                        </td>
+                        {(["c12", "c3", "c6", "c9"] as const).map((clock) => (
+                          <td key={clock} className="border border-zinc-300 p-1 align-top">
+                            <div className="space-y-1">
+                              {row[clock].map((reading, ri) => (
+                                <div key={ri} className="flex items-center gap-1">
+                                  <span className="w-8 shrink-0 text-[10px] leading-8 text-muted-foreground">
+                                    R{ri + 1}
+                                  </span>
+                                  <Input
+                                    className="h-8 flex-1 text-xs px-1 text-center"
+                                    inputMode="decimal"
+                                    value={reading}
+                                    onChange={(e) => updateTutmClockSpot(idx, clock, ri, e.target.value)}
+                                    placeholder="—"
+                                    aria-label={`${VUTM_CLOCK_LABELS[clock]} — reading ${ri + 1}`}
+                                  />
+                                  {row[clock].length > 1 && (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-6 w-6 p-0 text-red-600 hover:text-red-700 shrink-0"
+                                      onClick={() => removeTutmReading(idx, clock, ri)}
+                                      title="Remove this reading"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </Button>
+                                  )}
+                                </div>
+                              ))}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 w-full px-1 text-[10px]"
+                                onClick={() => addTutmReading(idx, clock)}
+                                title={`Add another reading at ${VUTM_CLOCK_LABELS[clock]}`}
+                              >
+                                <Plus className="mr-0.5 h-3 w-3" /> Add Reading
+                              </Button>
+                            </div>
+                          </td>
+                        ))}
+                        <td className="border border-zinc-300 p-1 text-center bg-zinc-50 font-mono tabular-nums font-semibold">
+                          {vutmMinOfSpots(row.c12, row.c3, row.c6, row.c9) || "—"}
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          <div className="flex justify-center">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+                              onClick={() => removeTutmRow(idx)}
+                              title="Remove row"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </CardContent>
+        </Card>
+
+
+        {/* Step 2 navigation */}
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" onClick={goPrevious}>
+            <ArrowLeft className="mr-2 h-4 w-4" /> Previous
+          </Button>
+          <Button variant="ghost" onClick={saveDraft} disabled={saving}>
+            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            Save Draft
+          </Button>
+          <Button onClick={proceedToNext} disabled={saving}>
+            Proceed to Next <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
+        </div>
+        </>
+      )} {/* end step 2 — TANK UT THICKNESS MEASUREMENT */}
+

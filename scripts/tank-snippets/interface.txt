@@ -1,0 +1,123 @@
+  // ─── TANK (STORAGE TANK) FIELDS ───
+  // Populated when reportType = TANK_DPT / TANK_MPT / TANK_WELD_SCAN /
+  // TANK_UTM (the Tank equipment category — Storage Tank). Completely
+  // separate from the Vessel vws*/vutm* and Piping dpt*/mpt*/ws* fields
+  // above — storage-tank reports never read or write Vessel/Piping
+  // fields. Dates are strings in "YYYY-MM-DD" form in the header
+  // (converted to DateTime by the API, like the other report types).
+  // TANK DPT (TANK_DPT)
+  tdptDateOfExamination: string;
+  tdptTestingStandard: string;
+  tdptAcceptanceCriteria: string;
+  tdptSurfacePreparation: string;
+  tdptSurfaceTemperature: string;
+  tdptPenetrantType: string;
+  tdptPenetrantProcess: string;
+  tdptMethodOfPreCleaning: string;
+  tdptDryingTimeAfterPreCleaning: string;
+  tdptMethodOfApplyingPenetrant: string;
+  tdptPenetratingTime: string;
+  tdptMethodOfRemovingExcessPenetrant: string;
+  tdptMethodOfApplyingDeveloper: string;
+  tdptDevelopmentTime: string;
+  tdptInterpretationTime: string;
+  tdptLightingEquipment: string;
+  tdptPostCleaning: string;
+  tdptSolventMake: string;
+  tdptSolventProduct: string;
+  tdptSolventBatchNo: string;
+  tdptSolventExpiry: string;
+  tdptPenetrantMake: string;
+  tdptPenetrantProduct: string;
+  tdptPenetrantBatchNo: string;
+  tdptPenetrantExpiry: string;
+  tdptDeveloperMake: string;
+  tdptDeveloperProduct: string;
+  tdptDeveloperBatchNo: string;
+  tdptDeveloperExpiry: string;
+  // Testing-details rows JSON — written from the local tdptRows state
+  // on save.
+  tdptObservationRows: string;
+  // TANK MPT (TANK_MPT)
+  tmptDateOfExamination: string;
+  tmptTestingStandard: string;
+  tmptAcceptanceCriteria: string;
+  tmptSurfacePreparation: string;
+  tmptSurfaceTemperature: string;
+  tmptInstrumentSerialNo: string;
+  tmptMethod: string;
+  tmptTypeOfCurrent: string;
+  tmptAcYokeLiftingCapacity: string;
+  tmptContrastMedium: string;
+  tmptMethodOfPreCleaning: string;
+  tmptMethodOfApplyingWhiteContrast: string;
+  tmptAcYokePoleSpacing: string;
+  tmptMagneticMedium: string;
+  tmptMethodOfApplyingMagneticMedium: string;
+  tmptDevelopmentTime: string;
+  tmptInterpretationTime: string;
+  tmptLightingEquipment: string;
+  tmptPostCleaning: string;
+  tmptWhiteContrastMake: string;
+  tmptWhiteContrastProduct: string;
+  tmptWhiteContrastLotNo: string;
+  tmptWhiteContrastExpiry: string;
+  tmptInkMake: string;
+  tmptInkProduct: string;
+  tmptInkLotNo: string;
+  tmptInkExpiry: string;
+  // Testing-details rows JSON — written from the local tmptRows state
+  // on save.
+  tmptRows: string;
+  // TANK WELD SCAN (TANK_WELD_SCAN)
+  twsDateOfExamination: string;
+  twsTestingStandard: string;
+  twsAcceptanceCriteria: string;
+  twsUtProcedure: string;
+  twsEquipmentMake: string;
+  twsEquipmentModel: string;
+  twsEquipmentSerialNo: string;
+  twsCalibrationDueDate: string;
+  twsCableLength: string;
+  twsCableType: string;
+  // Probe Details — fixed 4-probe grid JSON (Longitudinal Wave 0°,
+  // Shear Wave 45° / 60° / 70°). The user types the actual inspection
+  // values for each probe.
+  twsProbeDetails: string;
+  twsCalibrationBlock: string;
+  twsCalibrationBlockMoc: string;
+  twsReferenceReflector: string;
+  twsReferenceLevel: string;
+  twsFlawSizingTechnique: string;
+  twsSurfaceTemperature: string;
+  twsTestingMethod: string;
+  twsCouplant: string;
+  twsSurfacePreparation: string;
+  twsSurfaceFinish: string;
+  twsExtentOfScanning: string;
+  // Testing-details rows JSON — written from the local twsRows state
+  // on save.
+  twsDetailRows: string;
+  // TANK UT THICKNESS MEASUREMENT (TANK_UTM)
+  tutmDateOfExamination: string;
+  tutmTestingStandard: string;
+  tutmAcceptanceCriteria: string;
+  tutmUtProcedure: string;
+  tutmEquipmentMake: string;
+  tutmEquipmentModel: string;
+  tutmEquipmentSerialNo: string;
+  tutmCalibrationDueDate: string;
+  tutmCableLengthAndType: string;
+  // Longitudinal Wave (0°) probe rows JSON — repeatable rows of
+  // { frequency, probeSize, serialNo }.
+  tutmLwProbeRows: string;
+  tutmTypeOfCrystal: string;
+  tutmCalibrationBlock: string;
+  tutmSurfaceTemperature: string;
+  tutmMethod: string;
+  tutmCouplant: string;
+  tutmSurfacePreparation: string;
+  tutmSurfaceFinish: string;
+  // Course/plate readings rows JSON (clock positions) — written from
+  // the local tutmRows state on save.
+  tutmPlateRows: string;

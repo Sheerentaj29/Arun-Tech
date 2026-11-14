@@ -1,0 +1,168 @@
+        {/* ─── TANK DPT: PARAMETERS + CONSUMABLE DETAILS ───
+            Shown only for TANK_DPT reports (Tank equipment — Storage
+            Tank). Completely separate from the Vessel DPT and Piping DPT
+            blocks above — the testing-details rows are stored in the
+            tank's own tdptObservationRows JSON column and rendered here. */}
+        {report.reportType === "TANK_DPT" && (() => {
+          let tdptRows: Array<Record<string, string>> = [];
+          try {
+            const parsed = JSON.parse(report.tdptObservationRows ?? "[]");
+            if (Array.isArray(parsed)) tdptRows = parsed;
+          } catch {}
+          const tdptParamGroups: Array<{ title: string; rows: Array<[string, string | null | undefined, boolean?]> }> = [
+            {
+              title: "General Information",
+              rows: [
+                ["Date of Examination", report.tdptDateOfExamination, true],
+                ["Testing Standard", report.tdptTestingStandard],
+                ["Acceptance Criteria", report.tdptAcceptanceCriteria],
+              ],
+            },
+            {
+              title: "Surface & Preparation",
+              rows: [
+                ["Surface Preparation", report.tdptSurfacePreparation],
+                ["Surface Temperature", report.tdptSurfaceTemperature],
+                ["Method of Pre-cleaning", report.tdptMethodOfPreCleaning],
+                ["Drying Time After Pre-cleaning", report.tdptDryingTimeAfterPreCleaning],
+                ["Post Cleaning", report.tdptPostCleaning],
+              ],
+            },
+            {
+              title: "Testing Materials / Consumables",
+              rows: [
+                ["Penetrant Type", report.tdptPenetrantType],
+                ["Penetrant Process", report.tdptPenetrantProcess],
+                ["Method of Applying Penetrant", report.tdptMethodOfApplyingPenetrant],
+                ["Method of Removing Excess Penetrant", report.tdptMethodOfRemovingExcessPenetrant],
+                ["Method of Applying Developer", report.tdptMethodOfApplyingDeveloper],
+              ],
+            },
+            {
+              title: "Testing Timing & Interpretation",
+              rows: [
+                ["Penetrating Time", report.tdptPenetratingTime],
+                ["Development Time", report.tdptDevelopmentTime],
+                ["Interpretation Time", report.tdptInterpretationTime],
+                ["Lighting Equipment", report.tdptLightingEquipment],
+              ],
+            },
+          ];
+          return (
+            <div className="mt-6 space-y-6">
+              {/* Equipment type badge */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="outline" className="border-fuchsia-400 text-fuchsia-700">
+                  Equipment: Tank
+                </Badge>
+              </div>
+
+              {/* 3. Dye Penetrant Testing Parameters — grouped two-column table */}
+              <div>
+                <h3 className="mb-2 text-xs font-bold uppercase text-fuchsia-700 border-b border-fuchsia-300 pb-1">
+                  3. Dye Penetrant Testing Parameters
+                </h3>
+                <table className="w-full border-collapse text-xs">
+                  <tbody>
+                    {tdptParamGroups.map((group) => (
+                      <Fragment key={group.title}>
+                        <tr className="bg-fuchsia-100">
+                          <td colSpan={2} className="border border-zinc-300 px-3 py-1.5 font-semibold text-fuchsia-800">
+                            {group.title}
+                          </td>
+                        </tr>
+                        {group.rows.map(([label, value, isDate], idx) => {
+                          let v = value && String(value).trim() ? String(value).trim() : null;
+                          if (v && isDate) {
+                            try { v = new Date(v).toISOString().slice(0, 10); } catch {}
+                          }
+                          return (
+                            <tr key={`${group.title}-${idx}`} className="border-b border-zinc-200">
+                              <td className="bg-fuchsia-50 border-r border-zinc-200 px-3 py-1.5 font-medium text-zinc-700 w-1/3">
+                                {label}
+                              </td>
+                              <td className="px-3 py-1.5">
+                                {v ? v : <span className="text-muted-foreground">—</span>}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Consumable Details — Make / Product / Batch / Expiry per consumable */}
+              <div>
+                <h3 className="mb-2 text-xs font-bold uppercase text-fuchsia-700 border-b border-fuchsia-300 pb-1">
+                  Consumable Details
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-fuchsia-800 text-white">
+                        <th className="border border-fuchsia-900 px-2 py-2 text-center">Consumable</th>
+                        <th className="border border-fuchsia-900 px-2 py-2 text-center">Make</th>
+                        <th className="border border-fuchsia-900 px-2 py-2 text-center">Product / Description</th>
+                        <th className="border border-fuchsia-900 px-2 py-2 text-center">Batch Number</th>
+                        <th className="border border-fuchsia-900 px-2 py-2 text-center">Expiry Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {([
+                        ["Solvent", report.tdptSolventMake, report.tdptSolventProduct, report.tdptSolventBatchNo, report.tdptSolventExpiry],
+                        ["Penetrant", report.tdptPenetrantMake, report.tdptPenetrantProduct, report.tdptPenetrantBatchNo, report.tdptPenetrantExpiry],
+                        ["Developer", report.tdptDeveloperMake, report.tdptDeveloperProduct, report.tdptDeveloperBatchNo, report.tdptDeveloperExpiry],
+                      ] as Array<[string, string | null | undefined, string | null | undefined, string | null | undefined, string | null | undefined]>).map(([label, make, product, batchNo, expiry], idx) => (
+                        <tr key={idx} className="hover:bg-muted/30">
+                          <td className="bg-fuchsia-50 border border-zinc-300 px-3 py-1.5 font-medium text-zinc-700">{label}</td>
+                          <td className="border border-zinc-300 px-3 py-1.5">{make && make.trim() ? make : <span className="text-muted-foreground">—</span>}</td>
+                          <td className="border border-zinc-300 px-3 py-1.5">{product && product.trim() ? product : <span className="text-muted-foreground">—</span>}</td>
+                          <td className="border border-zinc-300 px-3 py-1.5">{batchNo && batchNo.trim() ? batchNo : <span className="text-muted-foreground">—</span>}</td>
+                          <td className="border border-zinc-300 px-3 py-1.5">{expiry && expiry.trim() ? expiry : <span className="text-muted-foreground">—</span>}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Dye Penetrant Testing Details — rows from the tank JSON column */}
+              {tdptRows.length > 0 && (
+                <div>
+                  <h3 className="mb-2 text-xs font-bold uppercase text-fuchsia-700 border-b border-fuchsia-300 pb-1">
+                    Dye Penetrant Testing Details ({tdptRows.length})
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-fuchsia-800 text-white">
+                          <th className="border border-fuchsia-900 px-2 py-2 text-center">Sl. No</th>
+                          <th className="border border-fuchsia-900 px-2 py-2 text-center">Part Details</th>
+                          <th className="border border-fuchsia-900 px-2 py-2 text-center">ID</th>
+                          <th className="border border-fuchsia-900 px-2 py-2 text-center">Weld Dimension</th>
+                          <th className="border border-fuchsia-900 px-2 py-2 text-center">Size of Indication Approx. (mm)</th>
+                          <th className="border border-fuchsia-900 px-2 py-2 text-center">Observation &amp; Result</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tdptRows.map((row, idx) => (
+                          <tr key={idx} className="hover:bg-muted/30">
+                            <td className="border border-zinc-300 px-2 py-1 text-center font-mono">{idx + 1}</td>
+                            <td className="border border-zinc-300 px-2 py-1">{row.partDetails || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1">{row.idNo || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1">{row.weldDimension || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1 text-center">{row.indicationSize || "—"}</td>
+                            <td className="border border-zinc-300 px-2 py-1">{row.observationResult || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+

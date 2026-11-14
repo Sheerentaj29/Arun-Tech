@@ -1,0 +1,330 @@
+  } else if (reportType === "TANK_UTM") {
+    // ─── TANK UT THICKNESS MEASUREMENT REPORT BODY (Tank equipment —
+    // Storage Tank) ─── Completely separate from the Vessel UT Thickness
+    // Measurement branch above — renders the same section ORDER but from
+    // the tank's own tutm* fields:
+    //   1. Equipment Type / Inspection lines ("Equipment Type: Tank",
+    //      "Inspection: UT Thickness Measurement").
+    //   2. "UT Thickness Measurement Parameters" — grouped two-column
+    //      table (General Information / Equipment Details / Cable &
+    //      Crystal Details / Calibration Details / Other Testing
+    //      Parameters).
+    //   3. "Probe Details — Longitudinal Wave (0°)" — repeatable probe
+    //      grid (Frequency / Size / S.No. per row).
+    //   4. "UT Thickness Measurement Readings" — course/plate clock-
+    //      position table (12 / 3 / 6 / 9 o'clock readings + auto-
+    //      calculated Minimum Measured Thickness, recomputed from the
+    //      stored readings).
+    //   5. Photographs are handled by the shared photo-gallery section.
+    startBodyOnFreshPage(240);
+
+    const tutmReport = report as any;
+    const tutmUsableW = pageW - 2 * MARGIN;
+    const tutmAccent = "#115e59"; // teal-800 — matches the Tank UT Thickness UI accent
+
+    const tutmRowH = 18;
+    const tutmLabelW = tutmUsableW * 0.38;
+    const tutmValueW = tutmUsableW - tutmLabelW;
+    const drawTutmGroupHeader = (title: string) => {
+      if (y + tutmRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      doc.rect(MARGIN, y, tutmUsableW, tutmRowH).fill("#f0fdfa");
+      doc.rect(MARGIN, y, tutmUsableW, tutmRowH).stroke(TABLE_OUTER_BORDER);
+      doc.font(FONT_BOLD).fontSize(8.5).fillColor(tutmAccent);
+      doc.text(title, MARGIN + 4, y + 5, { width: tutmUsableW - 8 });
+      doc.fillColor("#000");
+      y += tutmRowH;
+    };
+    const drawTutmParamRow = (label: string, value: string | null | undefined, isDate = false) => {
+      if (y + tutmRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      doc.rect(MARGIN, y, tutmLabelW, tutmRowH).fill("#f8fafc");
+      doc.rect(MARGIN + tutmLabelW, y, tutmValueW, tutmRowH).fill("#ffffff");
+      doc.rect(MARGIN, y, tutmUsableW, tutmRowH).stroke(TABLE_OUTER_BORDER);
+      doc.moveTo(MARGIN + tutmLabelW, y).lineTo(MARGIN + tutmLabelW, y + tutmRowH).stroke(TABLE_INNER_BORDER);
+      doc.font(FONT_BOLD).fontSize(8.5).fillColor("#000");
+      doc.text(label, MARGIN + 4, y + 5, { width: tutmLabelW - 8 });
+      doc.font(FONT_REGULAR).fontSize(8.5).fillColor("#000");
+      let displayText = value && String(value).trim() ? String(value).trim() : "";
+      if (isDate && displayText) {
+        try { displayText = new Date(displayText).toISOString().slice(0, 10); } catch {}
+      }
+      const maxW = tutmValueW - 8;
+      if (doc.widthOfString(displayText) > maxW) {
+        const charsToKeep = Math.floor((maxW / Math.max(1, doc.widthOfString(displayText))) * displayText.length);
+        displayText = displayText.slice(0, Math.max(1, charsToKeep - 1)) + "…";
+      }
+      doc.text(displayText, MARGIN + tutmLabelW + 4, y + 5, { width: maxW });
+      y += tutmRowH;
+    };
+
+    // ─── 1. EQUIPMENT TYPE / INSPECTION LINE ───
+    {
+      const lines = [
+        "Equipment Type: Tank (Storage Tank)",
+        "Inspection: UT Thickness Measurement",
+      ];
+      for (const line of lines) {
+        if (y + 14 > pageMaxY) { addNewPage(); y = MARGIN; }
+        doc.font(FONT_BOLD).fontSize(9).fillColor(tutmAccent);
+        doc.text(line, MARGIN, y);
+        doc.fillColor("#000");
+        y += 13;
+      }
+    }
+
+    // ─── 2. UT THICKNESS MEASUREMENT PARAMETERS ───
+    {
+      if (y + 24 + tutmRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 6;
+      doc.font(FONT_BOLD).fontSize(11).fillColor(tutmAccent);
+      doc.text("UT Thickness Measurement Parameters", MARGIN, y);
+      doc.fillColor("#000");
+      y += 18;
+
+      drawTutmGroupHeader("General Information");
+      drawTutmParamRow("Date of Examination", tutmReport.tutmDateOfExamination, true);
+      drawTutmParamRow("Testing Standard", tutmReport.tutmTestingStandard);
+      drawTutmParamRow("Acceptance Criteria", tutmReport.tutmAcceptanceCriteria);
+      drawTutmParamRow("UT Procedure", tutmReport.tutmUtProcedure);
+
+      drawTutmGroupHeader("Equipment Details");
+      drawTutmParamRow("Equipment Make", tutmReport.tutmEquipmentMake);
+      drawTutmParamRow("Equipment Model", tutmReport.tutmEquipmentModel);
+      drawTutmParamRow("Equipment Serial Number", tutmReport.tutmEquipmentSerialNo);
+      drawTutmParamRow("Calibration Due Date", tutmReport.tutmCalibrationDueDate, true);
+
+      drawTutmGroupHeader("Cable & Crystal Details");
+      drawTutmParamRow("Cable Length and Type", tutmReport.tutmCableLengthAndType);
+      drawTutmParamRow("Type of Crystal", tutmReport.tutmTypeOfCrystal);
+
+      drawTutmGroupHeader("Calibration Details");
+      drawTutmParamRow("Calibration Block Dimension / MOC", tutmReport.tutmCalibrationBlock);
+
+      drawTutmGroupHeader("Other Testing Parameters");
+      drawTutmParamRow("Surface Temperature", tutmReport.tutmSurfaceTemperature);
+      drawTutmParamRow("Method", tutmReport.tutmMethod);
+      drawTutmParamRow("Couplant", tutmReport.tutmCouplant);
+      drawTutmParamRow("Surface Preparation", tutmReport.tutmSurfacePreparation);
+      drawTutmParamRow("Surface Finish", tutmReport.tutmSurfaceFinish);
+      y += 8;
+    }
+
+    // ─── 3. PROBE DETAILS (repeatable Longitudinal Wave 0° grid) ───
+    {
+      let tutmProbes: Array<Record<string, unknown>> = [];
+      try {
+        const parsed = JSON.parse(tutmReport.tutmLwProbeRows ?? "[]");
+        if (Array.isArray(parsed) && parsed.length > 0) tutmProbes = parsed;
+      } catch {}
+      const pHeaderH = 20;
+      const pRowH = 20;
+      const pUsable = tutmUsableW;
+      const pColWidths = orientation === "landscape"
+        ? [170, 80, 130, 120, Math.max(120, pUsable - 170 - 80 - 130 - 120)]
+        : [120, 55, 90, 85, Math.max(85, pUsable - 120 - 55 - 90 - 85)];
+      const pHeaders = ["Probe", "Probe Angle", "Frequency", "Size", "S.No."];
+
+      if (y + 24 + pHeaderH + pRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 4;
+      doc.font(FONT_BOLD).fontSize(11).fillColor(tutmAccent);
+      doc.text("Probe Details — Longitudinal Wave (0°)", MARGIN, y);
+      doc.fillColor("#000");
+      y += 16;
+
+      const drawTutmProbeHeader = (headerY: number) => {
+        doc.rect(MARGIN, headerY, pUsable, pHeaderH).fill(TABLE_HEADER_BG);
+        doc.rect(MARGIN, headerY, pUsable, pHeaderH).stroke(TABLE_OUTER_BORDER);
+        let x = MARGIN;
+        doc.font(FONT_BOLD).fontSize(7.5).fillColor(TABLE_HEADER_FG);
+        for (let i = 0; i < pHeaders.length; i++) {
+          if (i > 0) doc.moveTo(x, headerY).lineTo(x, headerY + pHeaderH).stroke(TABLE_INNER_BORDER);
+          doc.text(pHeaders[i], x + 2, headerY + 7, { width: pColWidths[i] - 4, align: "center" });
+          x += pColWidths[i];
+        }
+        doc.fillColor("#000");
+      };
+      drawTutmProbeHeader(y);
+      y += pHeaderH;
+
+      for (const probe of tutmProbes) {
+        if (y + pRowH > pageMaxY) {
+          addNewPage();
+          drawTutmProbeHeader(MARGIN);
+          y = MARGIN + pHeaderH;
+        }
+        doc.rect(MARGIN, y, pUsable, pRowH).stroke(TABLE_OUTER_BORDER);
+        const cells = [
+          "Longitudinal Wave Probe",
+          "0°",
+          String(probe.frequency ?? ""),
+          String(probe.probeSize ?? ""),
+          String(probe.serialNo ?? ""),
+        ];
+        let cx = MARGIN;
+        for (let i = 0; i < pHeaders.length; i++) {
+          if (i > 0) doc.moveTo(cx, y).lineTo(cx, y + pRowH).stroke(TABLE_INNER_BORDER);
+          doc.font(i === 0 ? FONT_BOLD : FONT_REGULAR).fontSize(7.5).fillColor("#000");
+          let disp = String(cells[i] ?? "");
+          const maxW = pColWidths[i] - 8;
+          if (doc.widthOfString(disp) > maxW) {
+            const c = Math.floor((maxW / Math.max(1, doc.widthOfString(disp))) * disp.length);
+            disp = disp.slice(0, Math.max(1, c - 1)) + "…";
+          }
+          doc.text(disp, cx + 4, y + 6, { width: maxW, align: i === 0 ? "left" : "center" });
+          cx += pColWidths[i];
+        }
+        doc.fillColor("#000");
+        y += pRowH;
+      }
+      y += 10;
+    }
+
+    // ─── 4. UT THICKNESS MEASUREMENT READINGS (course/plate clock
+    //     positions) ───
+    {
+      let tutmRows: Array<Record<string, unknown>> = [];
+      try {
+        const parsed = JSON.parse(tutmReport.tutmPlateRows ?? "[]");
+        if (Array.isArray(parsed)) tutmRows = parsed;
+      } catch {}
+
+      if (y + 24 + 30 > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 4;
+      doc.font(FONT_BOLD).fontSize(11).fillColor(tutmAccent);
+      doc.text("UT Thickness Measurement Readings", MARGIN, y);
+      doc.fillColor("#000");
+      y += 16;
+
+      // Generic spot-value renderer: trims, truncates, centres.
+      const drawTutmCell = (
+        text: string,
+        x: number,
+        rowY: number,
+        w: number,
+        rowH: number,
+        align: "left" | "center" = "center",
+        bold = false,
+        fontSize = 7,
+      ) => {
+        doc.font(bold ? FONT_BOLD : FONT_REGULAR).fontSize(fontSize).fillColor("#000");
+        let disp = String(text ?? "").trim();
+        const maxW = w - 6;
+        if (doc.widthOfString(disp) > maxW) {
+          const c = Math.floor((maxW / Math.max(1, doc.widthOfString(disp))) * disp.length);
+          disp = disp.slice(0, Math.max(1, c - 1)) + "…";
+        }
+        doc.text(disp, x + 3, rowY + (rowH - fontSize - 1) / 2 + 1, { width: maxW, align });
+        doc.fillColor("#000");
+      };
+
+      const tInfoW = orientation === "landscape"
+        ? { moc: 62, comp: 80, id: 60, nom: 46, min: 48 }
+        : { moc: 46, comp: 58, id: 44, nom: 34, min: 38 };
+      const tInfoSum = tInfoW.moc + tInfoW.comp + tInfoW.id + tInfoW.nom + tInfoW.min;
+      const tClockW = Math.max(34, (tutmUsableW - tInfoSum) / 4);
+      const tClockKeys = ["c12", "c3", "c6", "c9"] as const;
+      const tHeaderH = 26;
+      const tLineH = 8;
+      const tMinRowH = 18;
+      const tPad = 5;
+      const tCellText = (v: unknown): string => String(v ?? "").trim();
+
+      const drawTutmRowsHeader = (headerY: number) => {
+        doc.rect(MARGIN, headerY, tutmUsableW, tHeaderH).fill(TABLE_HEADER_BG);
+        doc.rect(MARGIN, headerY, tutmUsableW, tHeaderH).stroke(TABLE_OUTER_BORDER);
+        let x = MARGIN;
+        doc.font(FONT_BOLD).fontSize(6.5).fillColor(TABLE_HEADER_FG);
+        const headers: Array<[string, number]> = [
+          ["MOC", tInfoW.moc],
+          ["Course / Section", tInfoW.comp],
+          ["Plate / Location ID", tInfoW.id],
+          ["Nominal\nThickness\n(mm)", tInfoW.nom],
+          ["12 O'clock", tClockW],
+          ["3 O'clock", tClockW],
+          ["6 O'clock", tClockW],
+          ["9 O'clock", tClockW],
+          ["Minimum\nMeasured\n(mm)", tInfoW.min],
+        ];
+        for (let i = 0; i < headers.length; i++) {
+          const [label, w] = headers[i];
+          if (i > 0) doc.moveTo(x, headerY).lineTo(x, headerY + tHeaderH).stroke(TABLE_INNER_BORDER);
+          doc.text(label, x + 2, headerY + 3, { width: w - 4, align: "center", lineGap: 0 });
+          x += w;
+        }
+        doc.fillColor("#000");
+      };
+
+      if (y + 24 + tHeaderH + tMinRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 6;
+      doc.font(FONT_BOLD).fontSize(9.5).fillColor(tutmAccent);
+      doc.text("Course / Plate Measurements (Clock Positions)", MARGIN, y);
+      doc.fillColor("#000");
+      y += 14;
+      drawTutmRowsHeader(y);
+      y += tHeaderH;
+
+      for (const row of tutmRows) {
+        // Readings per clock position — every entered reading, blank
+        // slots excluded (never rendered).
+        const spotGroups = tClockKeys.map((k) => {
+          const v = row[k];
+          const arr = Array.isArray(v) ? (v as Array<unknown>).map((s) => tCellText(s)) : [];
+          return arr;
+        });
+        const cells = spotGroups.map((g) => g.filter((s) => s !== ""));
+        const maxLines = Math.max(1, ...cells.map((c) => c.length));
+        const rowH = Math.max(tMinRowH, tPad * 2 + maxLines * tLineH);
+        if (y + rowH > pageMaxY) {
+          addNewPage();
+          drawTutmRowsHeader(MARGIN);
+          y = MARGIN + tHeaderH;
+        }
+        doc.rect(MARGIN, y, tutmUsableW, rowH).stroke(TABLE_OUTER_BORDER);
+        const infoCells: Array<[string, number, "left" | "center", boolean]> = [
+          [tCellText(row.moc), tInfoW.moc, "left", false],
+          [tCellText(row.componentType), tInfoW.comp, "left", false],
+          [tCellText(row.componentId), tInfoW.id, "left", false],
+          [tCellText(row.nominalThickness), tInfoW.nom, "center", false],
+        ];
+        let cx = MARGIN;
+        for (const [text, w, align, bold] of infoCells) {
+          doc.moveTo(cx, y).lineTo(cx, y + rowH).stroke(TABLE_INNER_BORDER);
+          drawTutmCell(text, cx, y, w, rowH, align, bold, 6.5);
+          cx += w;
+        }
+        for (const lines of cells) {
+          doc.moveTo(cx, y).lineTo(cx, y + rowH).stroke(TABLE_INNER_BORDER);
+          if (lines.length === 0) {
+            drawTutmCell("—", cx, y, tClockW, rowH, "center", false, 6.5);
+          } else {
+            // One reading per line, vertically centred in the cell.
+            doc.font(FONT_REGULAR).fontSize(6.5).fillColor("#000");
+            const blockH = lines.length * tLineH;
+            let ly = y + Math.max(2, (rowH - blockH) / 2);
+            const maxW = tClockW - 6;
+            for (const line of lines) {
+              let disp = line;
+              if (doc.widthOfString(disp) > maxW) {
+                const c = Math.floor((maxW / Math.max(1, doc.widthOfString(disp))) * disp.length);
+                disp = disp.slice(0, Math.max(1, c - 1)) + "…";
+              }
+              doc.text(disp, cx + 3, ly, { width: maxW, align: "center" });
+              ly += tLineH;
+            }
+            doc.fillColor("#000");
+          }
+          cx += tClockW;
+        }
+        doc.moveTo(cx, y).lineTo(cx, y + rowH).stroke(TABLE_INNER_BORDER);
+        const minVal = vutmMinOfSpots(spotGroups[0], spotGroups[1], spotGroups[2], spotGroups[3]);
+        drawTutmCell(minVal || "—", cx, y, tInfoW.min, rowH, "center", true, 7);
+        doc.fillColor("#000");
+        y += rowH;
+      }
+      if (tutmRows.length === 0) {
+        doc.font(FONT_REGULAR).fontSize(8).fillColor("#6b7280");
+        doc.text("No course / plate measurement rows recorded.", MARGIN, y + 4);
+        doc.fillColor("#000");
+        y += 18;
+      }
+      y += 8;
+    }

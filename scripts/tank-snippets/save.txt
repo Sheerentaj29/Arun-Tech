@@ -1,0 +1,28 @@
+      } else if (header.reportType === "TANK_DPT") {
+        // Tank DPT: the testing-details rows are stored as the
+        // tdptObservationRows JSON column (the local tdptRows state is
+        // the source of truth). The DPT parameters and consumable fields
+        // (tdpt*) pass through verbatim from the header spread.
+        payload.tdptObservationRows = JSON.stringify(tdptRows);
+      } else if (header.reportType === "TANK_MPT") {
+        // Tank MPT: the testing-details rows are stored as the tmptRows
+        // JSON column (the local tmptRows state is the source of truth).
+        // The consumable fields (tmpt*) and the MPT parameters (tmpt*)
+        // pass through verbatim from the header spread.
+        payload.tmptRows = JSON.stringify(tmptRows);
+      } else if (header.reportType === "TANK_WELD_SCAN") {
+        // Tank Weld Scan: the testing-details rows are stored as the
+        // twsDetailRows JSON column (the local twsRows state is the
+        // source of truth). The Weld Scan Testing Parameters (tws*
+        // fields incl. the fixed 4-probe twsProbeDetails grid) pass
+        // through verbatim from the header spread.
+        payload.twsDetailRows = JSON.stringify(twsRows);
+      } else if (header.reportType === "TANK_UTM") {
+        // Tank UT Thickness Measurement: the course/plate clock-position
+        // readings rows are stored as the tutmPlateRows JSON column (the
+        // local tutmRows state is the source of truth). The UT Thickness
+        // Measurement Parameters (tutm* fields incl. the repeatable
+        // tutmLwProbeRows grid) pass through verbatim from the header
+        // spread. The API recomputes Minimum Measured Thickness from the
+        // readings server-side.
+        payload.tutmPlateRows = JSON.stringify(tutmRows);

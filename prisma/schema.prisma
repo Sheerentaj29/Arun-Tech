@@ -459,7 +459,7 @@ model PipelineInspection {
   // the only module that asks for one; it decides the readings-table
   // structure). Other report types store null; old Vessel DPT/MPT rows
   // keep their legacy value but no longer display it.
-  equipmentType             String?  // PIPING | VESSEL
+  equipmentType             String?  // PIPING | VESSEL | TANK
   vesselOrientation         String?  // HORIZONTAL | VERTICAL (VESSEL_UTM only)
 
   // ─── VESSEL DPT CONSUMABLE DETAILS ───
@@ -602,6 +602,139 @@ model PipelineInspection {
   //      "schedule": "...", "moc": "...", "spot1": "...", "spot2": "...",
   //      "spot3": "...", "spot4": "..." }]
   vutmNozzleRows            String?
+
+  // ─── TANK (STORAGE TANK) FIELDS ───
+  // Populated when reportType = TANK_DPT / TANK_MPT / TANK_WELD_SCAN /
+  // TANK_UTM (the Tank equipment category — Storage Tank). Completely
+  // separate from the Vessel (vdpt*/vmpt*/vws*/vutm*) and Piping
+  // (dpt*/mpt*/ws*, ThicknessMeasurement) field groups above — storage-
+  // tank reports never read or write Vessel/Piping columns. Dates are
+  // DateTime columns; JSON row columns store arrays of row objects.
+
+  // ─── TANK DPT (reportType = TANK_DPT) ───
+  // 17 DPT procedure parameters + consumables (Solvent / Penetrant /
+  // Developer × Make / Product / Batch No. / Expiry) + testing-details
+  // rows [{partDetails, idNo, weldDimension, indicationSize,
+  // observationResult}].
+  tdptDateOfExamination      DateTime?
+  tdptTestingStandard        String?
+  tdptAcceptanceCriteria     String?
+  tdptSurfacePreparation     String?
+  tdptSurfaceTemperature     String?
+  tdptPenetrantType          String?
+  tdptPenetrantProcess       String?
+  tdptMethodOfPreCleaning    String?
+  tdptDryingTimeAfterPreCleaning String?
+  tdptMethodOfApplyingPenetrant String?
+  tdptPenetratingTime        String?
+  tdptMethodOfRemovingExcessPenetrant String?
+  tdptMethodOfApplyingDeveloper String?
+  tdptDevelopmentTime        String?
+  tdptInterpretationTime     String?
+  tdptLightingEquipment      String?
+  tdptPostCleaning           String?
+  tdptSolventMake            String?
+  tdptSolventProduct         String?
+  tdptSolventBatchNo         String?
+  tdptSolventExpiry          String?
+  tdptPenetrantMake          String?
+  tdptPenetrantProduct       String?
+  tdptPenetrantBatchNo       String?
+  tdptPenetrantExpiry        String?
+  tdptDeveloperMake          String?
+  tdptDeveloperProduct       String?
+  tdptDeveloperBatchNo       String?
+  tdptDeveloperExpiry        String?
+  tdptObservationRows        String?
+
+  // ─── TANK MPT (reportType = TANK_MPT) ───
+  // 19 MPT procedure parameters + consumables (White Contrast / Wet
+  // Particle Iron Ink × Make / Product / Lot No. / Expiry) + testing-
+  // details rows [{partDetails, idNo, weldDimension, indicationSize,
+  // observationResult}].
+  tmptDateOfExamination      DateTime?
+  tmptTestingStandard        String?
+  tmptAcceptanceCriteria     String?
+  tmptSurfacePreparation     String?
+  tmptSurfaceTemperature     String?
+  tmptInstrumentSerialNo     String?
+  tmptMethod                 String?
+  tmptTypeOfCurrent          String?
+  tmptAcYokeLiftingCapacity  String?
+  tmptContrastMedium         String?
+  tmptMethodOfPreCleaning    String?
+  tmptMethodOfApplyingWhiteContrast String?
+  tmptAcYokePoleSpacing      String?
+  tmptMagneticMedium         String?
+  tmptMethodOfApplyingMagneticMedium String?
+  tmptDevelopmentTime        String?
+  tmptInterpretationTime     String?
+  tmptLightingEquipment      String?
+  tmptPostCleaning           String?
+  tmptWhiteContrastMake      String?
+  tmptWhiteContrastProduct   String?
+  tmptWhiteContrastLotNo     String?
+  tmptWhiteContrastExpiry    String?
+  tmptInkMake                String?
+  tmptInkProduct             String?
+  tmptInkLotNo               String?
+  tmptInkExpiry              String?
+  tmptRows                   String?
+
+  // ─── TANK WELD SCAN (reportType = TANK_WELD_SCAN) ───
+  // Weld Scan Testing Parameters (grouped) + fixed 4-probe grid
+  // [{probeType, probeAngle, frequency, probeSize, serialNo}] + testing
+  // details rows [{component, plateWeldId, weldDimension, probeAngle,
+  // probeFrequency, observationResult}].
+  twsDateOfExamination       DateTime?
+  twsTestingStandard         String?
+  twsAcceptanceCriteria      String?
+  twsUtProcedure             String?
+  twsEquipmentMake           String?
+  twsEquipmentModel          String?
+  twsEquipmentSerialNo       String?
+  twsCalibrationDueDate      DateTime?
+  twsCableLength             String?
+  twsCableType               String?
+  twsProbeDetails            String?
+  twsCalibrationBlock        String?
+  twsCalibrationBlockMoc     String?
+  twsReferenceReflector      String?
+  twsReferenceLevel          String?
+  twsFlawSizingTechnique     String?
+  twsSurfaceTemperature      String?
+  twsTestingMethod           String?
+  twsCouplant                String?
+  twsSurfacePreparation      String?
+  twsSurfaceFinish           String?
+  twsExtentOfScanning        String?
+  twsDetailRows              String?
+
+  // ─── TANK UT THICKNESS MEASUREMENT (reportType = TANK_UTM) ───
+  // UT Thickness Measurement Parameters + repeatable Longitudinal Wave
+  // (0°) probe rows [{frequency, probeSize, serialNo}] + course/plate
+  // readings rows (12 / 3 / 6 / 9 o'clock clock positions, same row
+  // shape as the vessel clock rows):
+  //   [{moc, componentType, componentId, nominalThickness,
+  //     c12: [...], c3: [...], c6: [...], c9: [...]}]
+  tutmDateOfExamination      DateTime?
+  tutmTestingStandard        String?
+  tutmAcceptanceCriteria     String?
+  tutmUtProcedure            String?
+  tutmEquipmentMake          String?
+  tutmEquipmentModel         String?
+  tutmEquipmentSerialNo      String?
+  tutmCalibrationDueDate     DateTime?
+  tutmCableLengthAndType     String?
+  tutmLwProbeRows            String?
+  tutmTypeOfCrystal          String?
+  tutmCalibrationBlock       String?
+  tutmSurfaceTemperature     String?
+  tutmMethod                 String?
+  tutmCouplant               String?
+  tutmSurfacePreparation     String?
+  tutmSurfaceFinish          String?
+  tutmPlateRows              String?
 
   isDemo                   Boolean  @default(false)
   createdAt                DateTime @default(now())

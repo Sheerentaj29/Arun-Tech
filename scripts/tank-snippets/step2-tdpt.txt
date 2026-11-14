@@ -1,0 +1,334 @@
+      {/* ═══ STEP 2 (TANK DPT): STORAGE TANK DYE PENETRANT TESTING ═══ */}
+      {step === 2 && header.reportType === "TANK_DPT" && (
+      <>
+      {/* ═══ A. DYE PENETRANT TESTING PARAMETERS ═══ */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Droplet className="h-4 w-4 text-fuchsia-700" />
+            Dye Penetrant Testing Parameters
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <tbody>
+                {/* ─── General Information ─── */}
+                <tr className="bg-fuchsia-800 text-white">
+                  <td colSpan={2} className="border border-fuchsia-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    General Information
+                  </td>
+                </tr>
+                {/* Date of Examination — editable date field */}
+                <tr className="border-b border-zinc-200">
+                  <td className="bg-fuchsia-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/3">
+                    Date of Examination
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <Input
+                      type="date"
+                      className="h-8 text-sm"
+                      value={header.tdptDateOfExamination}
+                      onChange={(e) => updateHeader("tdptDateOfExamination", e.target.value)}
+                    />
+                  </td>
+                </tr>
+                {([
+                  ["Testing Standard", "tdptTestingStandard", "e.g. ASME Section V 2023, Article 6"],
+                  ["Acceptance Criteria", "tdptAcceptanceCriteria", "e.g. ASME Section VIII Div. 1, Appx. 8, Clause 8.4"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-fuchsia-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+                {/* ─── Surface & Preparation ─── */}
+                <tr className="bg-fuchsia-800 text-white">
+                  <td colSpan={2} className="border border-fuchsia-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    Surface &amp; Preparation
+                  </td>
+                </tr>
+                {([
+                  ["Surface Preparation", "tdptSurfacePreparation", "e.g. Grinding and wire brush"],
+                  ["Surface Temperature", "tdptSurfaceTemperature", "e.g. 32 °C"],
+                  ["Method of Pre-cleaning", "tdptMethodOfPreCleaning", "e.g. Solvent cleaning"],
+                  ["Drying Time After Pre-cleaning", "tdptDryingTimeAfterPreCleaning", "e.g. 5 minutes"],
+                  ["Post Cleaning", "tdptPostCleaning", "e.g. Solvent wipe / Water wash"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-fuchsia-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+                {/* ─── Testing Materials / Consumables ─── */}
+                <tr className="bg-fuchsia-800 text-white">
+                  <td colSpan={2} className="border border-fuchsia-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    Testing Materials / Consumables
+                  </td>
+                </tr>
+                {([
+                  ["Penetrant Type", "tdptPenetrantType", "e.g. Colour contrast (visible), solvent removable"],
+                  ["Penetrant Process", "tdptPenetrantProcess", "e.g. Solvent removable / Water washable"],
+                  ["Method of Applying Penetrant", "tdptMethodOfApplyingPenetrant", "e.g. Spray"],
+                  ["Method of Removing Excess Penetrant", "tdptMethodOfRemovingExcessPenetrant", "e.g. Solvent wipe"],
+                  ["Method of Applying Developer", "tdptMethodOfApplyingDeveloper", "e.g. Spray"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-fuchsia-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+                {/* ─── Testing Timing & Interpretation ─── */}
+                <tr className="bg-fuchsia-800 text-white">
+                  <td colSpan={2} className="border border-fuchsia-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    Testing Timing &amp; Interpretation
+                  </td>
+                </tr>
+                {([
+                  ["Penetrating Time", "tdptPenetratingTime", "e.g. 10 minutes"],
+                  ["Development Time", "tdptDevelopmentTime", "e.g. 10 minutes"],
+                  ["Interpretation Time", "tdptInterpretationTime", "e.g. 10 minutes"],
+                  ["Lighting Equipment", "tdptLightingEquipment", "e.g. LED torch ≥ 1000 lux"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-fuchsia-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ═══ B. CONSUMABLE DETAILS ═══
+          Separate Make / Product / Batch Number / Expiry Date entry for
+          each of the three consumables. All values are typeable — nothing
+          is hardcoded from any sample report. */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Droplet className="h-4 w-4 text-fuchsia-700" />
+            Consumable Details
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="bg-fuchsia-800 text-white">
+                  <th className="border border-fuchsia-900 px-2 py-2 text-center w-1/5">Consumable</th>
+                  <th className="border border-fuchsia-900 px-2 py-2 text-center">Make</th>
+                  <th className="border border-fuchsia-900 px-2 py-2 text-center">Product / Description</th>
+                  <th className="border border-fuchsia-900 px-2 py-2 text-center">Batch Number</th>
+                  <th className="border border-fuchsia-900 px-2 py-2 text-center">Expiry Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {([
+                  ["Solvent", "tdptSolvent"],
+                  ["Penetrant", "tdptPenetrant"],
+                  ["Developer", "tdptDeveloper"],
+                ] as const).map(([label, prefix]) => (
+                  <tr key={prefix} className="border-b border-zinc-200">
+                    <td className="bg-fuchsia-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[`${prefix}Make` as keyof ReportHeader] as string}
+                        onChange={(e) => updateHeader(`${prefix}Make` as keyof ReportHeader, e.target.value as never)}
+                        placeholder="e.g. Magnaflux"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[`${prefix}Product` as keyof ReportHeader] as string}
+                        onChange={(e) => updateHeader(`${prefix}Product` as keyof ReportHeader, e.target.value as never)}
+                        placeholder="e.g. SKC-01 cleaner"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[`${prefix}BatchNo` as keyof ReportHeader] as string}
+                        onChange={(e) => updateHeader(`${prefix}BatchNo` as keyof ReportHeader, e.target.value as never)}
+                        placeholder="Batch number"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[`${prefix}Expiry` as keyof ReportHeader] as string}
+                        onChange={(e) => updateHeader(`${prefix}Expiry` as keyof ReportHeader, e.target.value as never)}
+                        placeholder="e.g. Nov-2027"
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ═══ C. DYE PENETRANT TESTING DETAILS ═══
+          Editable table: Part Details | ID | Weld Dimension | Size of
+          Indication Approx. (mm) | Observation & Result. Rows are stored
+          as the tdptObservationRows JSON column on the report itself.
+          Rows can be added / removed and every cell is editable. Serial
+          numbers are auto-generated. */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base">Dye Penetrant Testing Details</CardTitle>
+            </div>
+            <Button onClick={addTdptRow} size="sm">
+              <Plus className="mr-1 h-4 w-4" /> Add Row
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-fuchsia-800 text-white">
+                <tr>
+                  <th className="border border-fuchsia-900 px-2 py-2 text-center" style={{ minWidth: 40 }}>Sl. No</th>
+                  <th className="border border-fuchsia-900 px-2 py-2 text-center" style={{ minWidth: 160 }}>Part Details</th>
+                  <th className="border border-fuchsia-900 px-2 py-2 text-center" style={{ minWidth: 90 }}>ID</th>
+                  <th className="border border-fuchsia-900 px-2 py-2 text-center" style={{ minWidth: 120 }}>Weld Dimension</th>
+                  <th className="border border-fuchsia-900 px-2 py-2 text-center" style={{ minWidth: 110 }}>Size of Indication Approx. (mm)</th>
+                  <th className="border border-fuchsia-900 px-2 py-2 text-center" style={{ minWidth: 200 }}>Observation &amp; Result</th>
+                  <th className="border border-fuchsia-900 px-2 py-2 text-center" style={{ minWidth: 70 }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tdptRows.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="text-center py-6 text-muted-foreground border border-zinc-300">
+                      No rows yet.
+                    </td>
+                  </tr>
+                )}
+                {tdptRows.map((row, idx) => (
+                  <tr key={idx} className="hover:bg-muted/30">
+                    <td className="border border-zinc-300 p-1 text-center font-mono tabular-nums">{idx + 1}</td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input
+                        className="h-8 text-xs"
+                        value={row.partDetails}
+                        onChange={(e) => updateTdptRow(idx, { partDetails: e.target.value })}
+                        placeholder="e.g. Course-1 vertical seam weld"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input
+                        className="h-8 text-xs"
+                        value={row.idNo}
+                        onChange={(e) => updateTdptRow(idx, { idNo: e.target.value })}
+                        placeholder="ID"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input
+                        className="h-8 text-xs"
+                        value={row.weldDimension}
+                        onChange={(e) => updateTdptRow(idx, { weldDimension: e.target.value })}
+                        placeholder="e.g. 12 mm thk"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input
+                        type="text"
+                        className="h-8 text-xs text-center"
+                        value={row.indicationSize}
+                        onChange={(e) => updateTdptRow(idx, { indicationSize: e.target.value })}
+                        placeholder="e.g. Nil"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Textarea
+                        rows={1}
+                        className="text-xs min-h-[32px] py-1"
+                        value={row.observationResult}
+                        onChange={(e) => updateTdptRow(idx, { observationResult: e.target.value })}
+                        placeholder="e.g. No relevant indication"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <div className="flex justify-center">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+                          onClick={() => removeTdptRow(idx)}
+                          title="Remove row"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+
+      {/* Step 2 navigation */}
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" onClick={goPrevious}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> Previous
+        </Button>
+        <Button variant="ghost" onClick={saveDraft} disabled={saving}>
+          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+          Save Draft
+        </Button>
+        <Button onClick={proceedToNext} disabled={saving}>
+          Proceed to Next <ArrowRight className="ml-2 h-4 w-4" />
+        </Button>
+      </div>
+      </>
+      )} {/* end step 2 — TANK DPT */}
+

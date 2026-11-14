@@ -10,6 +10,7 @@ import {
   ChevronRight,
   Workflow,
   Cylinder,
+  Database,
   MoveHorizontal,
   MoveVertical,
   Eye,
@@ -102,6 +103,40 @@ const VESSEL_OPTIONS: TypeOption[] = [
   },
 ];
 
+// Tank (Storage Tank) test-type options. Storage tanks are vertical
+// cylindrical equipment; the modules mirror the Vessel module layouts
+// but store their data in completely separate TANK_* columns.
+const TANK_OPTIONS: TypeOption[] = [
+  {
+    type: "TANK_DPT",
+    title: "Dye Penetrant Testing (DPT)",
+    subtitle: "Dye penetrant inspection for storage tank shells and welds",
+    icon: Droplet,
+    accent: "border-fuchsia-500 bg-fuchsia-50 hover:bg-fuchsia-100",
+  },
+  {
+    type: "TANK_MPT",
+    title: "Magnetic Particle Testing (MPT)",
+    subtitle: "Magnetic particle inspection for storage tank shells and welds",
+    icon: Magnet,
+    accent: "border-amber-500 bg-amber-50 hover:bg-amber-100",
+  },
+  {
+    type: "TANK_WELD_SCAN",
+    title: "Weld Scan",
+    subtitle: "Weld scan inspection for storage tank shell seams and welds",
+    icon: Zap,
+    accent: "border-sky-500 bg-sky-50 hover:bg-sky-100",
+  },
+  {
+    type: "TANK_UTM",
+    title: "UT Thickness Measurement",
+    subtitle: "UT thickness measurement for tank courses and plates",
+    icon: Gauge,
+    accent: "border-teal-500 bg-teal-50 hover:bg-teal-100",
+  },
+];
+
 // Vessel UT Thickness Measurement is the ONLY module that requires a
 // vessel orientation (Horizontal / Vertical) before the form opens:
 // horizontal vessels measure at the 12 / 3 / 6 / 9 o'clock positions,
@@ -123,15 +158,20 @@ export function PipelineReportTypeSelectorView() {
   // Stage 3: Vessel Orientation → form. Every other test type opens its
   // form directly after Stage 2.
   const [stage, setStage] = useState<Stage>("equipment");
-  const [equipmentType, setEquipmentType] = useState<"PIPING" | "VESSEL" | null>(null);
+  const [equipmentType, setEquipmentType] = useState<"PIPING" | "VESSEL" | "TANK" | null>(null);
   // Test type picked in Stage 2. Kept so the orientation stage knows
   // which test the orientation is being selected for.
   const [selectedTestType, setSelectedTestType] = useState<PipelineReportType | null>(null);
 
-  const options = equipmentType === "VESSEL" ? VESSEL_OPTIONS : PIPING_OPTIONS;
+  const options =
+    equipmentType === "VESSEL"
+      ? VESSEL_OPTIONS
+      : equipmentType === "TANK"
+        ? TANK_OPTIONS
+        : PIPING_OPTIONS;
   const stepNumber = stage === "equipment" ? 1 : stage === "test" ? 2 : 3;
 
-  function pickEquipment(t: "PIPING" | "VESSEL") {
+  function pickEquipment(t: "PIPING" | "VESSEL" | "TANK") {
     setEquipmentType(t);
     setStage("test");
   }
@@ -194,7 +234,9 @@ export function PipelineReportTypeSelectorView() {
               ? "Equipment / Component Type"
               : equipmentType === "VESSEL"
                 ? "Vessel"
-                : "Piping"}
+                : equipmentType === "TANK"
+                  ? "Tank"
+                  : "Piping"}
           </span>
           {stage === "orientation" && selectedTestType && (
             <>
@@ -222,6 +264,12 @@ export function PipelineReportTypeSelectorView() {
               title: "Vessel",
               icon: Cylinder,
               accent: "border-blue-500 bg-blue-50 hover:bg-blue-100",
+            },
+            {
+              key: "TANK",
+              title: "Tank",
+              icon: Database,
+              accent: "border-teal-500 bg-teal-50 hover:bg-teal-100",
             },
           ] as const).map((opt) => {
             const Icon = opt.icon;

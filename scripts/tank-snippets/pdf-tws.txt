@@ -1,0 +1,250 @@
+  } else if (reportType === "TANK_WELD_SCAN") {
+    // ─── TANK WELD SCAN REPORT BODY (Tank equipment — Storage Tank) ───
+    // Completely separate from the Vessel Weld Scan branch above —
+    // renders the same section ORDER but from the tank's own tws* fields:
+    //   1. "Weld Scan Testing Parameters" — grouped two-column table
+    //      (General Information / Equipment Details / Cable Details /
+    //      Calibration Details / Other Testing Parameters).
+    //   2. "Probe Details" — fixed 4-probe grid.
+    //   3. "Weld Scan Testing Details" — Tank column set: Sl. No |
+    //      Course / Plate | Weld Seam ID | Weld Dimension | Probe Angle |
+    //      Probe Frequency | Observation & Result (twsDetailRows JSON).
+    //   4. Photographs are handled by the shared photo-gallery section.
+    startBodyOnFreshPage(200);
+
+    const twsReport = report as any;
+    const twsUsableW = pageW - 2 * MARGIN;
+    const twsAccent = "#0369a1"; // sky-700 — matches the Tank Weld Scan UI accent
+
+    // Helper: draw one two-column label/value row. Group header rows are
+    // drawn as full-width tinted rows.
+    const twsRowH = 18;
+    const twsLabelW = twsUsableW * 0.38;
+    const twsValueW = twsUsableW - twsLabelW;
+    const drawTwsGroupHeader = (title: string) => {
+      if (y + twsRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      doc.rect(MARGIN, y, twsUsableW, twsRowH).fill("#f0f9ff");
+      doc.rect(MARGIN, y, twsUsableW, twsRowH).stroke(TABLE_OUTER_BORDER);
+      doc.font(FONT_BOLD).fontSize(8.5).fillColor(twsAccent);
+      doc.text(title, MARGIN + 4, y + 5, { width: twsUsableW - 8 });
+      doc.fillColor("#000");
+      y += twsRowH;
+    };
+    const drawTwsParamRow = (label: string, value: string | null | undefined, isDate = false) => {
+      if (y + twsRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      doc.rect(MARGIN, y, twsLabelW, twsRowH).fill("#f8fafc");
+      doc.rect(MARGIN + twsLabelW, y, twsValueW, twsRowH).fill("#ffffff");
+      doc.rect(MARGIN, y, twsUsableW, twsRowH).stroke(TABLE_OUTER_BORDER);
+      doc.moveTo(MARGIN + twsLabelW, y).lineTo(MARGIN + twsLabelW, y + twsRowH).stroke(TABLE_INNER_BORDER);
+      doc.font(FONT_BOLD).fontSize(8.5).fillColor("#000");
+      doc.text(label, MARGIN + 4, y + 5, { width: twsLabelW - 8 });
+      doc.font(FONT_REGULAR).fontSize(8.5).fillColor("#000");
+      let displayText = value && String(value).trim() ? String(value).trim() : "";
+      if (isDate && displayText) {
+        try { displayText = new Date(displayText).toISOString().slice(0, 10); } catch {}
+      }
+      if (!displayText) displayText = "";
+      const maxW = twsValueW - 8;
+      if (doc.widthOfString(displayText) > maxW) {
+        const charsToKeep = Math.floor((maxW / Math.max(1, doc.widthOfString(displayText))) * displayText.length);
+        displayText = displayText.slice(0, Math.max(1, charsToKeep - 1)) + "…";
+      }
+      doc.text(displayText, MARGIN + twsLabelW + 4, y + 5, { width: maxW });
+      y += twsRowH;
+    };
+
+    // ─── 1. WELD SCAN TESTING PARAMETERS ───
+    {
+      if (y + 24 + twsRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 6;
+      doc.font(FONT_BOLD).fontSize(11).fillColor(twsAccent);
+      doc.text("Weld Scan Testing Parameters", MARGIN, y);
+      doc.fillColor("#000");
+      y += 18;
+
+      drawTwsGroupHeader("General Information");
+      drawTwsParamRow("Date of Examination", twsReport.twsDateOfExamination, true);
+      drawTwsParamRow("Testing Standard", twsReport.twsTestingStandard);
+      drawTwsParamRow("Acceptance Criteria", twsReport.twsAcceptanceCriteria);
+      drawTwsParamRow("UT Procedure", twsReport.twsUtProcedure);
+
+      drawTwsGroupHeader("Equipment Details");
+      drawTwsParamRow("Equipment Make", twsReport.twsEquipmentMake);
+      drawTwsParamRow("Equipment Model", twsReport.twsEquipmentModel);
+      drawTwsParamRow("Equipment Serial Number", twsReport.twsEquipmentSerialNo);
+      drawTwsParamRow("Calibration Due Date", twsReport.twsCalibrationDueDate, true);
+
+      drawTwsGroupHeader("Cable Details");
+      drawTwsParamRow("Cable Length", twsReport.twsCableLength);
+      drawTwsParamRow("Cable Type", twsReport.twsCableType);
+
+      drawTwsGroupHeader("Calibration Details");
+      drawTwsParamRow("Calibration Block", twsReport.twsCalibrationBlock);
+      drawTwsParamRow("Calibration Block Material / MOC", twsReport.twsCalibrationBlockMoc);
+      drawTwsParamRow("Reference Reflector", twsReport.twsReferenceReflector);
+      drawTwsParamRow("Reference Level", twsReport.twsReferenceLevel);
+
+      drawTwsGroupHeader("Other Testing Parameters");
+      drawTwsParamRow("Flaw Sizing Technique", twsReport.twsFlawSizingTechnique);
+      drawTwsParamRow("Surface Temperature", twsReport.twsSurfaceTemperature);
+      drawTwsParamRow("Method", twsReport.twsTestingMethod);
+      drawTwsParamRow("Couplant", twsReport.twsCouplant);
+      drawTwsParamRow("Surface Preparation", twsReport.twsSurfacePreparation);
+      drawTwsParamRow("Surface Finish", twsReport.twsSurfaceFinish);
+      drawTwsParamRow("Extent of Scanning", twsReport.twsExtentOfScanning);
+      y += 8;
+    }
+
+    // ─── 2. PROBE DETAILS (fixed 4-probe grid) ───
+    {
+      let twsProbes: Array<Record<string, string>> = [];
+      try {
+        const parsed = JSON.parse(twsReport.twsProbeDetails ?? "[]");
+        if (Array.isArray(parsed)) twsProbes = parsed;
+      } catch {}
+      const pHeaderH = 22;
+      const pRowH = 20;
+      const pUsable = pageW - 2 * MARGIN;
+      const pColWidths = orientation === "landscape"
+        ? [170, 80, 130, 130, Math.max(120, pUsable - 170 - 80 - 130 - 130)]
+        : [130, 65, 95, 95, Math.max(90, pUsable - 130 - 65 - 95 - 95)];
+      const pHeaders = ["Probe", "Probe Angle", "Frequency", "Probe Size", "Serial Number"];
+
+      if (y + 24 + pHeaderH + pRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 4;
+      doc.font(FONT_BOLD).fontSize(11).fillColor(twsAccent);
+      doc.text("Probe Details", MARGIN, y);
+      doc.fillColor("#000");
+      y += 16;
+
+      const drawTwsProbeHeader = (headerY: number) => {
+        doc.rect(MARGIN, headerY, pUsable, pHeaderH).fill(TABLE_HEADER_BG);
+        doc.rect(MARGIN, headerY, pUsable, pHeaderH).stroke(TABLE_OUTER_BORDER);
+        let x = MARGIN;
+        doc.font(FONT_BOLD).fontSize(7.5).fillColor(TABLE_HEADER_FG);
+        for (let i = 0; i < pHeaders.length; i++) {
+          if (i > 0) doc.moveTo(x, headerY).lineTo(x, headerY + pHeaderH).stroke(TABLE_INNER_BORDER);
+          doc.text(pHeaders[i], x + 2, headerY + 8, { width: pColWidths[i] - 4, align: "center" });
+          x += pColWidths[i];
+        }
+        doc.fillColor("#000");
+      };
+      drawTwsProbeHeader(y);
+      y += pHeaderH;
+
+      for (const probe of twsProbes) {
+        if (y + pRowH > pageMaxY) {
+          addNewPage();
+          drawTwsProbeHeader(MARGIN);
+          y = MARGIN + pHeaderH;
+        }
+        doc.rect(MARGIN, y, pUsable, pRowH).stroke(TABLE_OUTER_BORDER);
+        const cells = [
+          probe.probeType === "Longitudinal Wave" ? "Longitudinal Wave Probe" : "Shear Wave Probe",
+          probe.probeAngle ?? "",
+          probe.frequency ?? "",
+          probe.probeSize ?? "",
+          probe.serialNo ?? "",
+        ];
+        let cx = MARGIN;
+        for (let i = 0; i < pHeaders.length; i++) {
+          if (i > 0) doc.moveTo(cx, y).lineTo(cx, y + pRowH).stroke(TABLE_INNER_BORDER);
+          doc.font(i === 0 ? FONT_BOLD : FONT_REGULAR).fontSize(7.5).fillColor("#000");
+          let disp = String(cells[i] ?? "");
+          const maxW = pColWidths[i] - 8;
+          if (doc.widthOfString(disp) > maxW) {
+            const c = Math.floor((maxW / Math.max(1, doc.widthOfString(disp))) * disp.length);
+            disp = disp.slice(0, Math.max(1, c - 1)) + "…";
+          }
+          doc.text(disp, cx + 4, y + 6, { width: maxW, align: i === 0 ? "left" : "center" });
+          cx += pColWidths[i];
+        }
+        doc.fillColor("#000");
+        y += pRowH;
+      }
+      y += 10;
+    }
+
+    // ─── 3. WELD SCAN TESTING DETAILS (Tank column set) ───
+    {
+      let twsObs: Array<Record<string, string>> = [];
+      try {
+        const parsed = JSON.parse(twsReport.twsDetailRows ?? "[]");
+        if (Array.isArray(parsed)) twsObs = parsed;
+      } catch {}
+      const dHeaderH = 30;
+      const dRowH = 30;
+      const dUsable = pageW - 2 * MARGIN;
+      const dSlW = 30;
+      const dCompW = orientation === "landscape" ? 110 : 85;
+      const dWeldW = orientation === "landscape" ? 130 : 100;
+      const dDimW = orientation === "landscape" ? 110 : 85;
+      const dAngleW = 55;
+      const dFreqW = orientation === "landscape" ? 80 : 65;
+      const dObsW = Math.max(110, dUsable - dSlW - dCompW - dWeldW - dDimW - dAngleW - dFreqW);
+      const dColWidths = [dSlW, dCompW, dWeldW, dDimW, dAngleW, dFreqW, dObsW];
+      const dHeaders = ["Sl.\nNo", "Course / Plate", "Weld Seam ID", "Weld Dimension", "Probe\nAngle", "Probe Frequency", "Observation & Result"];
+
+      if (y + 24 + dHeaderH + dRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 4;
+      doc.font(FONT_BOLD).fontSize(11).fillColor(twsAccent);
+      doc.text("Weld Scan Testing Details", MARGIN, y);
+      doc.fillColor("#000");
+      y += 16;
+
+      const drawTwsDetailsHeader = (headerY: number) => {
+        doc.rect(MARGIN, headerY, dUsable, dHeaderH).fill(TABLE_HEADER_BG);
+        doc.rect(MARGIN, headerY, dUsable, dHeaderH).stroke(TABLE_OUTER_BORDER);
+        let x = MARGIN;
+        doc.font(FONT_BOLD).fontSize(7).fillColor(TABLE_HEADER_FG);
+        for (let i = 0; i < dHeaders.length; i++) {
+          if (i > 0) doc.moveTo(x, headerY).lineTo(x, headerY + dHeaderH).stroke(TABLE_INNER_BORDER);
+          doc.text(dHeaders[i], x + 2, headerY + 8, { width: dColWidths[i] - 4, align: "center" });
+          x += dColWidths[i];
+        }
+        doc.fillColor("#000");
+      };
+      drawTwsDetailsHeader(y);
+      y += dHeaderH;
+
+      for (let ri = 0; ri < twsObs.length; ri++) {
+        const obs = twsObs[ri];
+        if (y + dRowH > pageMaxY) {
+          addNewPage();
+          drawTwsDetailsHeader(MARGIN);
+          y = MARGIN + dHeaderH;
+        }
+        doc.rect(MARGIN, y, dUsable, dRowH).stroke(TABLE_OUTER_BORDER);
+        const cells: string[] = [
+          String(ri + 1),
+          obs.component ?? "",
+          obs.plateWeldId ?? "",
+          obs.weldDimension ?? "",
+          obs.probeAngle ?? "",
+          obs.probeFrequency ?? "",
+          obs.observationResult ?? "",
+        ];
+        let cx = MARGIN;
+        for (let i = 0; i < dHeaders.length; i++) {
+          if (i > 0) doc.moveTo(cx, y).lineTo(cx, y + dRowH).stroke(TABLE_INNER_BORDER);
+          doc.font(i === 0 ? FONT_BOLD : FONT_REGULAR).fontSize(7).fillColor("#000");
+          let disp = String(cells[i] ?? "");
+          const maxW = dColWidths[i] - 8;
+          if (doc.widthOfString(disp) > maxW) {
+            const c = Math.floor((maxW / Math.max(1, doc.widthOfString(disp))) * disp.length);
+            disp = disp.slice(0, Math.max(1, c - 1)) + "…";
+          }
+          doc.text(disp, cx + 4, y + 5, { width: maxW, align: i === 0 ? "center" : "left" });
+          cx += dColWidths[i];
+        }
+        doc.fillColor("#000");
+        y += dRowH;
+      }
+      if (twsObs.length === 0) {
+        doc.font(FONT_REGULAR).fontSize(8.5).fillColor("#6b7280");
+        doc.text("No weld scan testing details recorded.", MARGIN, y + 4);
+        doc.fillColor("#000");
+        y += 20;
+      }
+      y += 6;
+    }

@@ -96,7 +96,11 @@ type ReportType =
   | "VESSEL_DPT"
   | "VESSEL_MPT"
   | "VESSEL_WELD_SCAN"
-  | "VESSEL_UTM";
+  | "VESSEL_UTM"
+  | "TANK_DPT"
+  | "TANK_MPT"
+  | "TANK_WELD_SCAN"
+  | "TANK_UTM";
 
 const REPORT_TYPE_TITLE: Record<ReportType, string> = {
   PIPELINE_THICKNESS: "PIPELINE THICKNESS MEASUREMENT REPORT",
@@ -109,6 +113,10 @@ const REPORT_TYPE_TITLE: Record<ReportType, string> = {
   VESSEL_MPT:         "VESSEL MAGNETIC PARTICLE TESTING REPORT",
   VESSEL_WELD_SCAN:   "VESSEL WELD SCAN REPORT",
   VESSEL_UTM:         "VESSEL UT THICKNESS MEASUREMENT REPORT",
+  TANK_DPT:           "STORAGE TANK DYE PENETRANT TESTING REPORT",
+  TANK_MPT:           "STORAGE TANK MAGNETIC PARTICLE TESTING REPORT",
+  TANK_WELD_SCAN:     "STORAGE TANK WELD SCAN REPORT",
+  TANK_UTM:           "STORAGE TANK UT THICKNESS MEASUREMENT REPORT",
 };
 
 function getReportType(raw: any): ReportType {
@@ -122,7 +130,11 @@ function getReportType(raw: any): ReportType {
     v === "VESSEL_DPT" ||
     v === "VESSEL_MPT" ||
     v === "VESSEL_WELD_SCAN" ||
-    v === "VESSEL_UTM"
+    v === "VESSEL_UTM" ||
+    v === "TANK_DPT" ||
+    v === "TANK_MPT" ||
+    v === "TANK_WELD_SCAN" ||
+    v === "TANK_UTM"
   ) return v;
   return "PIPELINE_THICKNESS";
 }
@@ -139,6 +151,10 @@ const NO_DRAWINGS_REPORT_TYPES: ReportType[] = [
   "VESSEL_MPT",
   "VESSEL_WELD_SCAN",
   "VESSEL_UTM",
+  "TANK_DPT",
+  "TANK_MPT",
+  "TANK_WELD_SCAN",
+  "TANK_UTM",
 ];
 
 export interface LinkedDrawing {
@@ -652,11 +668,18 @@ export async function generatePipelineReportPdf(
           ["Equipment / Vessel Description", report.pipelineDescription],
           ["Equipment Identification No.", report.pipelineIdentificationNumber],
           ["Isometric Drawing No.", report.isometricDrawingNumber],
+          // (Tank wording handled in the tank branch below)
           ...(reportType === "VESSEL_UTM"
             ? [["Vessel Orientation",
                 (report as any).vesselOrientation === "VERTICAL" ? "Vertical Vessel"
                 : "Horizontal Vessel"]] as Array<[string, string | null | undefined]>
             : []),
+        ] as Array<[string, string | null | undefined]>
+      : reportType === "TANK_DPT" || reportType === "TANK_MPT" || reportType === "TANK_WELD_SCAN" || reportType === "TANK_UTM"
+      ? [
+          ["Equipment / Tank Description", report.pipelineDescription],
+          ["Equipment Identification No.", report.pipelineIdentificationNumber],
+          ["Isometric Drawing No.", report.isometricDrawingNumber],
         ] as Array<[string, string | null | undefined]>
       : [
             ["Pipeline Description", report.pipelineDescription],
@@ -3033,6 +3056,1002 @@ export async function generatePipelineReportPdf(
       }
 
       y += 6;
+    }
+  } else if (reportType === "TANK_DPT") {
+    // ─── TANK DPT REPORT BODY (Tank equipment — Storage Tank) ───
+    // Completely separate from the Vessel DPT branch above — renders the
+    // same section ORDER but from the tank's own tdpt* fields:
+    //   1. "Dye Penetrant Testing Parameters" — two-column table with
+    //      Date of Examination + 16 typeable fields.
+    //   2. "Consumable Details" — 3-row grid (Solvent / Penetrant /
+    //      Developer) × Make / Product / Batch Number / Expiry Date.
+    //   3. "Dye Penetrant Testing Details" — rows from the tank's own
+    //      tdptObservationRows JSON column.
+    //   4. Photographs are handled by the shared photo-gallery section.
+    startBodyOnFreshPage(160);
+
+    const tdptReport = report as any;
+    const tdptAccent = "#86198f"; // fuchsia-800 — matches the Tank DPT UI accent
+
+    // ─── 1. DYE PENETRANT TESTING PARAMETERS ───
+    {
+      const procRowH = 18;
+      if (y + 24 + procRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 6;
+      doc.font(FONT_BOLD).fontSize(11).fillColor(tdptAccent);
+      doc.text("Dye Penetrant Testing Parameters", MARGIN, y);
+      doc.fillColor("#000");
+      y += 18;
+
+      const procedureRows: Array<[string, string | null]> = [
+        ["Date of Examination", tdptReport.tdptDateOfExamination
+          ? new Date(tdptReport.tdptDateOfExamination).toISOString().slice(0, 10)
+          : null],
+        ["Testing Standard", tdptReport.tdptTestingStandard],
+        ["Acceptance Criteria", tdptReport.tdptAcceptanceCriteria],
+        ["Surface Preparation", tdptReport.tdptSurfacePreparation],
+        ["Surface Temperature", tdptReport.tdptSurfaceTemperature],
+        ["Penetrant Type", tdptReport.tdptPenetrantType],
+        ["Penetrant Process", tdptReport.tdptPenetrantProcess],
+        ["Method of Pre-cleaning", tdptReport.tdptMethodOfPreCleaning],
+        ["Drying Time After Pre-cleaning", tdptReport.tdptDryingTimeAfterPreCleaning],
+        ["Method of Applying Penetrant", tdptReport.tdptMethodOfApplyingPenetrant],
+        ["Penetrating Time", tdptReport.tdptPenetratingTime],
+        ["Method of Removing Excess Penetrant", tdptReport.tdptMethodOfRemovingExcessPenetrant],
+        ["Method of Applying Developer", tdptReport.tdptMethodOfApplyingDeveloper],
+        ["Development Time", tdptReport.tdptDevelopmentTime],
+        ["Interpretation Time", tdptReport.tdptInterpretationTime],
+        ["Lighting Equipment", tdptReport.tdptLightingEquipment],
+        ["Post Cleaning", tdptReport.tdptPostCleaning],
+      ];
+
+      const procLabelW = (pageW - 2 * MARGIN) * 0.38;
+      const procValueW = (pageW - 2 * MARGIN) - procLabelW;
+      const procUsableW = pageW - 2 * MARGIN;
+
+      for (const [label, value] of procedureRows) {
+        if (y + procRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+        doc.rect(MARGIN, y, procLabelW, procRowH).fill("#fdf4ff");
+        doc.rect(MARGIN + procLabelW, y, procValueW, procRowH).fill("#ffffff");
+        doc.rect(MARGIN, y, procUsableW, procRowH).stroke(TABLE_OUTER_BORDER);
+        doc.moveTo(MARGIN + procLabelW, y).lineTo(MARGIN + procLabelW, y + procRowH).stroke(TABLE_INNER_BORDER);
+        doc.font(FONT_BOLD).fontSize(8.5).fillColor("#000");
+        doc.text(label, MARGIN + 4, y + 5, { width: procLabelW - 8 });
+        doc.font(FONT_REGULAR).fontSize(8.5).fillColor("#000");
+        const valueText = value && value.trim() ? value.trim() : "—";
+        const maxW = procValueW - 8;
+        let displayText = valueText;
+        if (doc.widthOfString(displayText) > maxW) {
+          const charsToKeep = Math.floor((maxW / Math.max(1, doc.widthOfString(displayText))) * displayText.length);
+          displayText = displayText.slice(0, Math.max(1, charsToKeep - 1)) + "…";
+        }
+        doc.text(displayText, MARGIN + procLabelW + 4, y + 5, { width: maxW });
+        y += procRowH;
+      }
+      y += 8;
+    }
+
+    // ─── 2. CONSUMABLE DETAILS ───
+    // 3 rows (Solvent / Penetrant / Developer) × 5 columns.
+    {
+      const consHeaderH = 36;
+      const consRowH = 18;
+      if (y + 24 + consHeaderH + consRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 4;
+      doc.font(FONT_BOLD).fontSize(11).fillColor(tdptAccent);
+      doc.text("Consumable Details", MARGIN, y);
+      doc.fillColor("#000");
+      y += 18;
+
+      const consUsable = pageW - 2 * MARGIN;
+      const consColWidths = orientation === "landscape"
+        ? [70, 130, 210, 130, Math.max(100, consUsable - 70 - 130 - 210 - 130)]
+        : [55, 90, 150, 90, Math.max(80, consUsable - 55 - 90 - 150 - 90)];
+      const consHeaders = ["Consumable", "Make", "Product / Description", "Batch Number", "Expiry Date"];
+
+      drawDptTableHeader(doc, consHeaders, consColWidths, y, pageW);
+      y += consHeaderH;
+
+      const consumableRows: Array<[string, string | null, string | null, string | null, string | null]> = [
+        ["Solvent", tdptReport.tdptSolventMake, tdptReport.tdptSolventProduct, tdptReport.tdptSolventBatchNo, tdptReport.tdptSolventExpiry],
+        ["Penetrant", tdptReport.tdptPenetrantMake, tdptReport.tdptPenetrantProduct, tdptReport.tdptPenetrantBatchNo, tdptReport.tdptPenetrantExpiry],
+        ["Developer", tdptReport.tdptDeveloperMake, tdptReport.tdptDeveloperProduct, tdptReport.tdptDeveloperBatchNo, tdptReport.tdptDeveloperExpiry],
+      ];
+
+      for (const row of consumableRows) {
+        if (y + consRowH > pageMaxY) {
+          addNewPage();
+          drawDptTableHeader(doc, consHeaders, consColWidths, MARGIN, pageW);
+          y = MARGIN + consHeaderH;
+        }
+        doc.rect(MARGIN, y, consUsable, consRowH).stroke(TABLE_OUTER_BORDER);
+        let cx = MARGIN;
+        for (let i = 0; i < consHeaders.length; i++) {
+          const w = consColWidths[i];
+          if (i > 0) {
+            doc.moveTo(cx, y).lineTo(cx, y + consRowH).stroke(TABLE_INNER_BORDER);
+          }
+          doc.font(i === 0 ? FONT_BOLD : FONT_REGULAR).fontSize(8).fillColor("#000");
+          const cellText = (row[i] && String(row[i]).trim()) ? String(row[i]).trim() : (i === 0 ? "" : "—");
+          const maxW = w - 8;
+          let displayText = cellText;
+          if (doc.widthOfString(displayText) > maxW) {
+            const charsToKeep = Math.floor((maxW / Math.max(1, doc.widthOfString(displayText))) * displayText.length);
+            displayText = displayText.slice(0, Math.max(1, charsToKeep - 1)) + "…";
+          }
+          doc.text(displayText, cx + 4, y + 5, { width: maxW, align: "left" });
+          cx += w;
+        }
+        doc.fillColor("#000");
+        y += consRowH;
+      }
+      y += 10;
+    }
+
+    // ─── 3. DYE PENETRANT TESTING DETAILS ───
+    // Table: Sl. No | Part Details | ID | Weld Dimension | Size of
+    // Indication Approx. (mm) | Observation & Result. Rows come from the
+    // tank's own tdptObservationRows JSON column.
+    {
+      let tdptObs: Array<Record<string, string>> = [];
+      try {
+        const parsed = JSON.parse(tdptReport.tdptObservationRows ?? "[]");
+        if (Array.isArray(parsed)) tdptObs = parsed;
+      } catch {}
+      const vHeaderH = 36;
+      const vRowH = 28;
+      const vUsable = pageW - 2 * MARGIN;
+      const vSlW = 36;
+      const vPartW = orientation === "landscape" ? 150 : 110;
+      const vIdW = orientation === "landscape" ? 70 : 55;
+      const vDimW = orientation === "landscape" ? 100 : 80;
+      const vSizeW = orientation === "landscape" ? 85 : 75;
+      const vObsW = Math.max(100, vUsable - vSlW - vPartW - vIdW - vDimW - vSizeW);
+      const vColWidths = [vSlW, vPartW, vIdW, vDimW, vSizeW, vObsW];
+      const vHeaders = ["Sl.\nNo", "Part Details", "ID", "Weld\nDimension", "Size of Indication\nApprox. (mm)", "Observation & Result"];
+
+      if (y + 24 + vHeaderH + vRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 4;
+      doc.font(FONT_BOLD).fontSize(11).fillColor(tdptAccent);
+      doc.text("Dye Penetrant Testing Details", MARGIN, y);
+      doc.fillColor("#000");
+      y += 16;
+
+      if (y + vHeaderH + vRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      drawDptTableHeader(doc, vHeaders, vColWidths, y, pageW);
+      y += vHeaderH;
+
+      for (let ri = 0; ri < tdptObs.length; ri++) {
+        const obs = tdptObs[ri];
+        if (y + vRowH > pageMaxY) {
+          addNewPage();
+          drawDptTableHeader(doc, vHeaders, vColWidths, MARGIN, pageW);
+          y = MARGIN + vHeaderH;
+        }
+        doc.rect(MARGIN, y, vUsable, vRowH).stroke(TABLE_OUTER_BORDER);
+        const cells: string[] = [
+          String(ri + 1),
+          obs.partDetails ?? "—",
+          obs.idNo ?? "—",
+          obs.weldDimension ?? "—",
+          obs.indicationSize ?? "—",
+          obs.observationResult ?? "—",
+        ];
+        let cx = MARGIN;
+        for (let i = 0; i < cells.length; i++) {
+          const w = vColWidths[i];
+          if (i > 0) {
+            doc.moveTo(cx, y).lineTo(cx, y + vRowH).stroke(TABLE_INNER_BORDER);
+          }
+          doc.font(FONT_REGULAR).fontSize(8).fillColor("#000");
+          const maxW = w - 8;
+          let displayText = cells[i] ?? "—";
+          if (doc.widthOfString(displayText) > maxW) {
+            const charsToKeep = Math.floor((maxW / Math.max(1, doc.widthOfString(displayText))) * displayText.length);
+            displayText = displayText.slice(0, Math.max(1, charsToKeep - 1)) + "…";
+          }
+          doc.text(displayText, cx + 4, y + 5, { width: maxW, align: i === 0 ? "center" : "left" });
+          cx += w;
+        }
+        doc.fillColor("#000");
+        y += vRowH;
+      }
+
+      if (tdptObs.length === 0) {
+        doc.font(FONT_REGULAR).fontSize(8).fillColor("#666");
+        doc.rect(MARGIN, y, vUsable, vRowH).stroke("#bbb");
+        doc.text("No DPT details recorded.", MARGIN + 4, y + 9, { width: vUsable - 8, align: "center" });
+        doc.fillColor("#000");
+        y += vRowH;
+      }
+    }
+  } else if (reportType === "TANK_MPT") {
+    // ─── TANK MPT REPORT BODY (Tank equipment — Storage Tank) ───
+    // Completely separate from the Vessel MPT branch above — renders the
+    // same section ORDER but from the tank's own tmpt* fields:
+    //   1. "Magnetic Particle Testing Parameters" — two-column table.
+    //   2. "Consumable Details" — 2-row grid (White Contrast / Wet
+    //      Particle Iron Ink) × Make / Product / Lot Number / Expiry.
+    //   3. "Magnetic Particle Testing Details" — rows from the tank's
+    //      own tmptRows JSON column.
+    //   4. Photographs are handled by the shared photo-gallery section.
+    startBodyOnFreshPage(160);
+
+    const tmptReport = report as any;
+    const tmptAccent = "#92400e"; // amber-800 — matches the Tank MPT UI accent
+
+    // ─── 1. MAGNETIC PARTICLE TESTING PARAMETERS ───
+    {
+      const procRowH = 18;
+      if (y + 24 + procRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 6;
+      doc.font(FONT_BOLD).fontSize(11).fillColor(tmptAccent);
+      doc.text("Magnetic Particle Testing Parameters", MARGIN, y);
+      doc.fillColor("#000");
+      y += 18;
+
+      const procedureRows: Array<[string, string | null]> = [
+        ["Date of Examination", tmptReport.tmptDateOfExamination
+          ? new Date(tmptReport.tmptDateOfExamination).toISOString().slice(0, 10)
+          : null],
+        ["Testing Standard", tmptReport.tmptTestingStandard],
+        ["Acceptance Criteria", tmptReport.tmptAcceptanceCriteria],
+        ["Surface Preparation", tmptReport.tmptSurfacePreparation],
+        ["Surface Temperature", tmptReport.tmptSurfaceTemperature],
+        ["Type of Instrument / Sl. No.", tmptReport.tmptInstrumentSerialNo],
+        ["MPT Method", tmptReport.tmptMethod],
+        ["Type of Current", tmptReport.tmptTypeOfCurrent],
+        ["AC Yoke Lifting Capacity", tmptReport.tmptAcYokeLiftingCapacity],
+        ["Contrast Medium", tmptReport.tmptContrastMedium],
+        ["Method of Pre-cleaning", tmptReport.tmptMethodOfPreCleaning],
+        ["Method of Applying White Contrast", tmptReport.tmptMethodOfApplyingWhiteContrast],
+        ["AC Yoke Pole Spacing", tmptReport.tmptAcYokePoleSpacing],
+        ["Magnetic Medium", tmptReport.tmptMagneticMedium],
+        ["Method of Applying Magnetic Medium", tmptReport.tmptMethodOfApplyingMagneticMedium],
+        ["Development Time", tmptReport.tmptDevelopmentTime],
+        ["Interpretation Time", tmptReport.tmptInterpretationTime],
+        ["Lighting Equipment", tmptReport.tmptLightingEquipment],
+        ["Post Cleaning", tmptReport.tmptPostCleaning],
+      ];
+
+      const procLabelW = (pageW - 2 * MARGIN) * 0.38;
+      const procValueW = (pageW - 2 * MARGIN) - procLabelW;
+      const procUsableW = pageW - 2 * MARGIN;
+
+      for (const [label, value] of procedureRows) {
+        if (y + procRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+        doc.rect(MARGIN, y, procLabelW, procRowH).fill("#fffbeb");
+        doc.rect(MARGIN + procLabelW, y, procValueW, procRowH).fill("#ffffff");
+        doc.rect(MARGIN, y, procUsableW, procRowH).stroke(TABLE_OUTER_BORDER);
+        doc.moveTo(MARGIN + procLabelW, y).lineTo(MARGIN + procLabelW, y + procRowH).stroke(TABLE_INNER_BORDER);
+        doc.font(FONT_BOLD).fontSize(8.5).fillColor("#000");
+        doc.text(label, MARGIN + 4, y + 5, { width: procLabelW - 8 });
+        doc.font(FONT_REGULAR).fontSize(8.5).fillColor("#000");
+        const valueText = value && value.trim() ? value.trim() : "—";
+        const maxW = procValueW - 8;
+        let displayText = valueText;
+        if (doc.widthOfString(displayText) > maxW) {
+          const charsToKeep = Math.floor((maxW / Math.max(1, doc.widthOfString(displayText))) * displayText.length);
+          displayText = displayText.slice(0, Math.max(1, charsToKeep - 1)) + "…";
+        }
+        doc.text(displayText, MARGIN + procLabelW + 4, y + 5, { width: maxW });
+        y += procRowH;
+      }
+      y += 8;
+    }
+
+    // ─── 2. CONSUMABLE DETAILS ───
+    // 2 rows (White Contrast / Wet Particle Iron Ink) × 5 columns.
+    {
+      const consHeaderH = 36;
+      const consRowH = 18;
+      if (y + 24 + consHeaderH + consRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 4;
+      doc.font(FONT_BOLD).fontSize(11).fillColor(tmptAccent);
+      doc.text("Consumable Details", MARGIN, y);
+      doc.fillColor("#000");
+      y += 18;
+
+      const consUsable = pageW - 2 * MARGIN;
+      const consColWidths = orientation === "landscape"
+        ? [100, 120, 200, 120, Math.max(100, consUsable - 100 - 120 - 200 - 120)]
+        : [75, 85, 140, 85, Math.max(80, consUsable - 75 - 85 - 140 - 85)];
+      const consHeaders = ["Consumable", "Make", "Product / Description", "Lot Number", "Expiry Date"];
+
+      drawDptTableHeader(doc, consHeaders, consColWidths, y, pageW);
+      y += consHeaderH;
+
+      const consumableRows: Array<[string, string | null, string | null, string | null, string | null]> = [
+        ["White Contrast", tmptReport.tmptWhiteContrastMake, tmptReport.tmptWhiteContrastProduct, tmptReport.tmptWhiteContrastLotNo, tmptReport.tmptWhiteContrastExpiry],
+        ["Wet Particle Iron Ink", tmptReport.tmptInkMake, tmptReport.tmptInkProduct, tmptReport.tmptInkLotNo, tmptReport.tmptInkExpiry],
+      ];
+
+      for (const row of consumableRows) {
+        if (y + consRowH > pageMaxY) {
+          addNewPage();
+          drawDptTableHeader(doc, consHeaders, consColWidths, MARGIN, pageW);
+          y = MARGIN + consHeaderH;
+        }
+        doc.rect(MARGIN, y, consUsable, consRowH).stroke(TABLE_OUTER_BORDER);
+        let cx = MARGIN;
+        for (let i = 0; i < consHeaders.length; i++) {
+          const w = consColWidths[i];
+          if (i > 0) {
+            doc.moveTo(cx, y).lineTo(cx, y + consRowH).stroke(TABLE_INNER_BORDER);
+          }
+          doc.font(i === 0 ? FONT_BOLD : FONT_REGULAR).fontSize(8).fillColor("#000");
+          const cellText = (row[i] && String(row[i]).trim()) ? String(row[i]).trim() : (i === 0 ? "" : "—");
+          const maxW = w - 8;
+          let displayText = cellText;
+          if (doc.widthOfString(displayText) > maxW) {
+            const charsToKeep = Math.floor((maxW / Math.max(1, doc.widthOfString(displayText))) * displayText.length);
+            displayText = displayText.slice(0, Math.max(1, charsToKeep - 1)) + "…";
+          }
+          doc.text(displayText, cx + 4, y + 5, { width: maxW, align: "left" });
+          cx += w;
+        }
+        doc.fillColor("#000");
+        y += consRowH;
+      }
+      y += 10;
+    }
+
+    // ─── 3. MAGNETIC PARTICLE TESTING DETAILS ───
+    // Table: Sl. No | Part Details | ID | Weld Dimension | Size of
+    // Indication Approx. (mm) | Observation & Result. Rows come from the
+    // tank's own tmptRows JSON column.
+    {
+      let tmptObs: Array<Record<string, string>> = [];
+      try {
+        const parsed = JSON.parse(tmptReport.tmptRows ?? "[]");
+        if (Array.isArray(parsed)) tmptObs = parsed;
+      } catch {}
+      const vHeaderH = 36;
+      const vRowH = 28;
+      const vUsable = pageW - 2 * MARGIN;
+      const vSlW = 36;
+      const vPartW = orientation === "landscape" ? 150 : 110;
+      const vIdW = orientation === "landscape" ? 70 : 55;
+      const vDimW = orientation === "landscape" ? 100 : 80;
+      const vSizeW = orientation === "landscape" ? 85 : 75;
+      const vObsW = Math.max(100, vUsable - vSlW - vPartW - vIdW - vDimW - vSizeW);
+      const vColWidths = [vSlW, vPartW, vIdW, vDimW, vSizeW, vObsW];
+      const vHeaders = ["Sl.\nNo", "Part Details", "ID", "Weld\nDimension", "Size of Indication\nApprox. (mm)", "Observation & Result"];
+
+      if (y + 24 + vHeaderH + vRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 4;
+      doc.font(FONT_BOLD).fontSize(11).fillColor(tmptAccent);
+      doc.text("Magnetic Particle Testing Details", MARGIN, y);
+      doc.fillColor("#000");
+      y += 16;
+
+      if (y + vHeaderH + vRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      drawDptTableHeader(doc, vHeaders, vColWidths, y, pageW);
+      y += vHeaderH;
+
+      for (let ri = 0; ri < tmptObs.length; ri++) {
+        const obs = tmptObs[ri];
+        if (y + vRowH > pageMaxY) {
+          addNewPage();
+          drawDptTableHeader(doc, vHeaders, vColWidths, MARGIN, pageW);
+          y = MARGIN + vHeaderH;
+        }
+        doc.rect(MARGIN, y, vUsable, vRowH).stroke(TABLE_OUTER_BORDER);
+        const cells: string[] = [
+          String(ri + 1),
+          obs.partDetails ?? "—",
+          obs.idNo ?? "—",
+          obs.weldDimension ?? "—",
+          obs.indicationSize ?? "—",
+          obs.observationResult ?? "—",
+        ];
+        let cx = MARGIN;
+        for (let i = 0; i < cells.length; i++) {
+          const w = vColWidths[i];
+          if (i > 0) {
+            doc.moveTo(cx, y).lineTo(cx, y + vRowH).stroke(TABLE_INNER_BORDER);
+          }
+          doc.font(FONT_REGULAR).fontSize(8).fillColor("#000");
+          const maxW = w - 8;
+          let displayText = cells[i] ?? "—";
+          if (doc.widthOfString(displayText) > maxW) {
+            const charsToKeep = Math.floor((maxW / Math.max(1, doc.widthOfString(displayText))) * displayText.length);
+            displayText = displayText.slice(0, Math.max(1, charsToKeep - 1)) + "…";
+          }
+          doc.text(displayText, cx + 4, y + 5, { width: maxW, align: i === 0 ? "center" : "left" });
+          cx += w;
+        }
+        doc.fillColor("#000");
+        y += vRowH;
+      }
+
+      if (tmptObs.length === 0) {
+        doc.font(FONT_REGULAR).fontSize(8).fillColor("#666");
+        doc.rect(MARGIN, y, vUsable, vRowH).stroke("#bbb");
+        doc.text("No MPT details recorded.", MARGIN + 4, y + 9, { width: vUsable - 8, align: "center" });
+        doc.fillColor("#000");
+        y += vRowH;
+      }
+    }
+  } else if (reportType === "TANK_WELD_SCAN") {
+    // ─── TANK WELD SCAN REPORT BODY (Tank equipment — Storage Tank) ───
+    // Completely separate from the Vessel Weld Scan branch above —
+    // renders the same section ORDER but from the tank's own tws* fields:
+    //   1. "Weld Scan Testing Parameters" — grouped two-column table
+    //      (General Information / Equipment Details / Cable Details /
+    //      Calibration Details / Other Testing Parameters).
+    //   2. "Probe Details" — fixed 4-probe grid.
+    //   3. "Weld Scan Testing Details" — Tank column set: Sl. No |
+    //      Course / Plate | Weld Seam ID | Weld Dimension | Probe Angle |
+    //      Probe Frequency | Observation & Result (twsDetailRows JSON).
+    //   4. Photographs are handled by the shared photo-gallery section.
+    startBodyOnFreshPage(200);
+
+    const twsReport = report as any;
+    const twsUsableW = pageW - 2 * MARGIN;
+    const twsAccent = "#0369a1"; // sky-700 — matches the Tank Weld Scan UI accent
+
+    // Helper: draw one two-column label/value row. Group header rows are
+    // drawn as full-width tinted rows.
+    const twsRowH = 18;
+    const twsLabelW = twsUsableW * 0.38;
+    const twsValueW = twsUsableW - twsLabelW;
+    const drawTwsGroupHeader = (title: string) => {
+      if (y + twsRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      doc.rect(MARGIN, y, twsUsableW, twsRowH).fill("#f0f9ff");
+      doc.rect(MARGIN, y, twsUsableW, twsRowH).stroke(TABLE_OUTER_BORDER);
+      doc.font(FONT_BOLD).fontSize(8.5).fillColor(twsAccent);
+      doc.text(title, MARGIN + 4, y + 5, { width: twsUsableW - 8 });
+      doc.fillColor("#000");
+      y += twsRowH;
+    };
+    const drawTwsParamRow = (label: string, value: string | null | undefined, isDate = false) => {
+      if (y + twsRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      doc.rect(MARGIN, y, twsLabelW, twsRowH).fill("#f8fafc");
+      doc.rect(MARGIN + twsLabelW, y, twsValueW, twsRowH).fill("#ffffff");
+      doc.rect(MARGIN, y, twsUsableW, twsRowH).stroke(TABLE_OUTER_BORDER);
+      doc.moveTo(MARGIN + twsLabelW, y).lineTo(MARGIN + twsLabelW, y + twsRowH).stroke(TABLE_INNER_BORDER);
+      doc.font(FONT_BOLD).fontSize(8.5).fillColor("#000");
+      doc.text(label, MARGIN + 4, y + 5, { width: twsLabelW - 8 });
+      doc.font(FONT_REGULAR).fontSize(8.5).fillColor("#000");
+      let displayText = value && String(value).trim() ? String(value).trim() : "";
+      if (isDate && displayText) {
+        try { displayText = new Date(displayText).toISOString().slice(0, 10); } catch {}
+      }
+      if (!displayText) displayText = "";
+      const maxW = twsValueW - 8;
+      if (doc.widthOfString(displayText) > maxW) {
+        const charsToKeep = Math.floor((maxW / Math.max(1, doc.widthOfString(displayText))) * displayText.length);
+        displayText = displayText.slice(0, Math.max(1, charsToKeep - 1)) + "…";
+      }
+      doc.text(displayText, MARGIN + twsLabelW + 4, y + 5, { width: maxW });
+      y += twsRowH;
+    };
+
+    // ─── 1. WELD SCAN TESTING PARAMETERS ───
+    {
+      if (y + 24 + twsRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 6;
+      doc.font(FONT_BOLD).fontSize(11).fillColor(twsAccent);
+      doc.text("Weld Scan Testing Parameters", MARGIN, y);
+      doc.fillColor("#000");
+      y += 18;
+
+      drawTwsGroupHeader("General Information");
+      drawTwsParamRow("Date of Examination", twsReport.twsDateOfExamination, true);
+      drawTwsParamRow("Testing Standard", twsReport.twsTestingStandard);
+      drawTwsParamRow("Acceptance Criteria", twsReport.twsAcceptanceCriteria);
+      drawTwsParamRow("UT Procedure", twsReport.twsUtProcedure);
+
+      drawTwsGroupHeader("Equipment Details");
+      drawTwsParamRow("Equipment Make", twsReport.twsEquipmentMake);
+      drawTwsParamRow("Equipment Model", twsReport.twsEquipmentModel);
+      drawTwsParamRow("Equipment Serial Number", twsReport.twsEquipmentSerialNo);
+      drawTwsParamRow("Calibration Due Date", twsReport.twsCalibrationDueDate, true);
+
+      drawTwsGroupHeader("Cable Details");
+      drawTwsParamRow("Cable Length", twsReport.twsCableLength);
+      drawTwsParamRow("Cable Type", twsReport.twsCableType);
+
+      drawTwsGroupHeader("Calibration Details");
+      drawTwsParamRow("Calibration Block", twsReport.twsCalibrationBlock);
+      drawTwsParamRow("Calibration Block Material / MOC", twsReport.twsCalibrationBlockMoc);
+      drawTwsParamRow("Reference Reflector", twsReport.twsReferenceReflector);
+      drawTwsParamRow("Reference Level", twsReport.twsReferenceLevel);
+
+      drawTwsGroupHeader("Other Testing Parameters");
+      drawTwsParamRow("Flaw Sizing Technique", twsReport.twsFlawSizingTechnique);
+      drawTwsParamRow("Surface Temperature", twsReport.twsSurfaceTemperature);
+      drawTwsParamRow("Method", twsReport.twsTestingMethod);
+      drawTwsParamRow("Couplant", twsReport.twsCouplant);
+      drawTwsParamRow("Surface Preparation", twsReport.twsSurfacePreparation);
+      drawTwsParamRow("Surface Finish", twsReport.twsSurfaceFinish);
+      drawTwsParamRow("Extent of Scanning", twsReport.twsExtentOfScanning);
+      y += 8;
+    }
+
+    // ─── 2. PROBE DETAILS (fixed 4-probe grid) ───
+    {
+      let twsProbes: Array<Record<string, string>> = [];
+      try {
+        const parsed = JSON.parse(twsReport.twsProbeDetails ?? "[]");
+        if (Array.isArray(parsed)) twsProbes = parsed;
+      } catch {}
+      const pHeaderH = 22;
+      const pRowH = 20;
+      const pUsable = pageW - 2 * MARGIN;
+      const pColWidths = orientation === "landscape"
+        ? [170, 80, 130, 130, Math.max(120, pUsable - 170 - 80 - 130 - 130)]
+        : [130, 65, 95, 95, Math.max(90, pUsable - 130 - 65 - 95 - 95)];
+      const pHeaders = ["Probe", "Probe Angle", "Frequency", "Probe Size", "Serial Number"];
+
+      if (y + 24 + pHeaderH + pRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 4;
+      doc.font(FONT_BOLD).fontSize(11).fillColor(twsAccent);
+      doc.text("Probe Details", MARGIN, y);
+      doc.fillColor("#000");
+      y += 16;
+
+      const drawTwsProbeHeader = (headerY: number) => {
+        doc.rect(MARGIN, headerY, pUsable, pHeaderH).fill(TABLE_HEADER_BG);
+        doc.rect(MARGIN, headerY, pUsable, pHeaderH).stroke(TABLE_OUTER_BORDER);
+        let x = MARGIN;
+        doc.font(FONT_BOLD).fontSize(7.5).fillColor(TABLE_HEADER_FG);
+        for (let i = 0; i < pHeaders.length; i++) {
+          if (i > 0) doc.moveTo(x, headerY).lineTo(x, headerY + pHeaderH).stroke(TABLE_INNER_BORDER);
+          doc.text(pHeaders[i], x + 2, headerY + 8, { width: pColWidths[i] - 4, align: "center" });
+          x += pColWidths[i];
+        }
+        doc.fillColor("#000");
+      };
+      drawTwsProbeHeader(y);
+      y += pHeaderH;
+
+      for (const probe of twsProbes) {
+        if (y + pRowH > pageMaxY) {
+          addNewPage();
+          drawTwsProbeHeader(MARGIN);
+          y = MARGIN + pHeaderH;
+        }
+        doc.rect(MARGIN, y, pUsable, pRowH).stroke(TABLE_OUTER_BORDER);
+        const cells = [
+          probe.probeType === "Longitudinal Wave" ? "Longitudinal Wave Probe" : "Shear Wave Probe",
+          probe.probeAngle ?? "",
+          probe.frequency ?? "",
+          probe.probeSize ?? "",
+          probe.serialNo ?? "",
+        ];
+        let cx = MARGIN;
+        for (let i = 0; i < pHeaders.length; i++) {
+          if (i > 0) doc.moveTo(cx, y).lineTo(cx, y + pRowH).stroke(TABLE_INNER_BORDER);
+          doc.font(i === 0 ? FONT_BOLD : FONT_REGULAR).fontSize(7.5).fillColor("#000");
+          let disp = String(cells[i] ?? "");
+          const maxW = pColWidths[i] - 8;
+          if (doc.widthOfString(disp) > maxW) {
+            const c = Math.floor((maxW / Math.max(1, doc.widthOfString(disp))) * disp.length);
+            disp = disp.slice(0, Math.max(1, c - 1)) + "…";
+          }
+          doc.text(disp, cx + 4, y + 6, { width: maxW, align: i === 0 ? "left" : "center" });
+          cx += pColWidths[i];
+        }
+        doc.fillColor("#000");
+        y += pRowH;
+      }
+      y += 10;
+    }
+
+    // ─── 3. WELD SCAN TESTING DETAILS (Tank column set) ───
+    {
+      let twsObs: Array<Record<string, string>> = [];
+      try {
+        const parsed = JSON.parse(twsReport.twsDetailRows ?? "[]");
+        if (Array.isArray(parsed)) twsObs = parsed;
+      } catch {}
+      const dHeaderH = 30;
+      const dRowH = 30;
+      const dUsable = pageW - 2 * MARGIN;
+      const dSlW = 30;
+      const dCompW = orientation === "landscape" ? 110 : 85;
+      const dWeldW = orientation === "landscape" ? 130 : 100;
+      const dDimW = orientation === "landscape" ? 110 : 85;
+      const dAngleW = 55;
+      const dFreqW = orientation === "landscape" ? 80 : 65;
+      const dObsW = Math.max(110, dUsable - dSlW - dCompW - dWeldW - dDimW - dAngleW - dFreqW);
+      const dColWidths = [dSlW, dCompW, dWeldW, dDimW, dAngleW, dFreqW, dObsW];
+      const dHeaders = ["Sl.\nNo", "Course / Plate", "Weld Seam ID", "Weld Dimension", "Probe\nAngle", "Probe Frequency", "Observation & Result"];
+
+      if (y + 24 + dHeaderH + dRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 4;
+      doc.font(FONT_BOLD).fontSize(11).fillColor(twsAccent);
+      doc.text("Weld Scan Testing Details", MARGIN, y);
+      doc.fillColor("#000");
+      y += 16;
+
+      const drawTwsDetailsHeader = (headerY: number) => {
+        doc.rect(MARGIN, headerY, dUsable, dHeaderH).fill(TABLE_HEADER_BG);
+        doc.rect(MARGIN, headerY, dUsable, dHeaderH).stroke(TABLE_OUTER_BORDER);
+        let x = MARGIN;
+        doc.font(FONT_BOLD).fontSize(7).fillColor(TABLE_HEADER_FG);
+        for (let i = 0; i < dHeaders.length; i++) {
+          if (i > 0) doc.moveTo(x, headerY).lineTo(x, headerY + dHeaderH).stroke(TABLE_INNER_BORDER);
+          doc.text(dHeaders[i], x + 2, headerY + 8, { width: dColWidths[i] - 4, align: "center" });
+          x += dColWidths[i];
+        }
+        doc.fillColor("#000");
+      };
+      drawTwsDetailsHeader(y);
+      y += dHeaderH;
+
+      for (let ri = 0; ri < twsObs.length; ri++) {
+        const obs = twsObs[ri];
+        if (y + dRowH > pageMaxY) {
+          addNewPage();
+          drawTwsDetailsHeader(MARGIN);
+          y = MARGIN + dHeaderH;
+        }
+        doc.rect(MARGIN, y, dUsable, dRowH).stroke(TABLE_OUTER_BORDER);
+        const cells: string[] = [
+          String(ri + 1),
+          obs.component ?? "",
+          obs.plateWeldId ?? "",
+          obs.weldDimension ?? "",
+          obs.probeAngle ?? "",
+          obs.probeFrequency ?? "",
+          obs.observationResult ?? "",
+        ];
+        let cx = MARGIN;
+        for (let i = 0; i < dHeaders.length; i++) {
+          if (i > 0) doc.moveTo(cx, y).lineTo(cx, y + dRowH).stroke(TABLE_INNER_BORDER);
+          doc.font(i === 0 ? FONT_BOLD : FONT_REGULAR).fontSize(7).fillColor("#000");
+          let disp = String(cells[i] ?? "");
+          const maxW = dColWidths[i] - 8;
+          if (doc.widthOfString(disp) > maxW) {
+            const c = Math.floor((maxW / Math.max(1, doc.widthOfString(disp))) * disp.length);
+            disp = disp.slice(0, Math.max(1, c - 1)) + "…";
+          }
+          doc.text(disp, cx + 4, y + 5, { width: maxW, align: i === 0 ? "center" : "left" });
+          cx += dColWidths[i];
+        }
+        doc.fillColor("#000");
+        y += dRowH;
+      }
+      if (twsObs.length === 0) {
+        doc.font(FONT_REGULAR).fontSize(8.5).fillColor("#6b7280");
+        doc.text("No weld scan testing details recorded.", MARGIN, y + 4);
+        doc.fillColor("#000");
+        y += 20;
+      }
+      y += 6;
+    }
+  } else if (reportType === "TANK_UTM") {
+    // ─── TANK UT THICKNESS MEASUREMENT REPORT BODY (Tank equipment —
+    // Storage Tank) ─── Completely separate from the Vessel UT Thickness
+    // Measurement branch above — renders the same section ORDER but from
+    // the tank's own tutm* fields:
+    //   1. Equipment Type / Inspection lines ("Equipment Type: Tank",
+    //      "Inspection: UT Thickness Measurement").
+    //   2. "UT Thickness Measurement Parameters" — grouped two-column
+    //      table (General Information / Equipment Details / Cable &
+    //      Crystal Details / Calibration Details / Other Testing
+    //      Parameters).
+    //   3. "Probe Details — Longitudinal Wave (0°)" — repeatable probe
+    //      grid (Frequency / Size / S.No. per row).
+    //   4. "UT Thickness Measurement Readings" — course/plate clock-
+    //      position table (12 / 3 / 6 / 9 o'clock readings + auto-
+    //      calculated Minimum Measured Thickness, recomputed from the
+    //      stored readings).
+    //   5. Photographs are handled by the shared photo-gallery section.
+    startBodyOnFreshPage(240);
+
+    const tutmReport = report as any;
+    const tutmUsableW = pageW - 2 * MARGIN;
+    const tutmAccent = "#115e59"; // teal-800 — matches the Tank UT Thickness UI accent
+
+    const tutmRowH = 18;
+    const tutmLabelW = tutmUsableW * 0.38;
+    const tutmValueW = tutmUsableW - tutmLabelW;
+    const drawTutmGroupHeader = (title: string) => {
+      if (y + tutmRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      doc.rect(MARGIN, y, tutmUsableW, tutmRowH).fill("#f0fdfa");
+      doc.rect(MARGIN, y, tutmUsableW, tutmRowH).stroke(TABLE_OUTER_BORDER);
+      doc.font(FONT_BOLD).fontSize(8.5).fillColor(tutmAccent);
+      doc.text(title, MARGIN + 4, y + 5, { width: tutmUsableW - 8 });
+      doc.fillColor("#000");
+      y += tutmRowH;
+    };
+    const drawTutmParamRow = (label: string, value: string | null | undefined, isDate = false) => {
+      if (y + tutmRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      doc.rect(MARGIN, y, tutmLabelW, tutmRowH).fill("#f8fafc");
+      doc.rect(MARGIN + tutmLabelW, y, tutmValueW, tutmRowH).fill("#ffffff");
+      doc.rect(MARGIN, y, tutmUsableW, tutmRowH).stroke(TABLE_OUTER_BORDER);
+      doc.moveTo(MARGIN + tutmLabelW, y).lineTo(MARGIN + tutmLabelW, y + tutmRowH).stroke(TABLE_INNER_BORDER);
+      doc.font(FONT_BOLD).fontSize(8.5).fillColor("#000");
+      doc.text(label, MARGIN + 4, y + 5, { width: tutmLabelW - 8 });
+      doc.font(FONT_REGULAR).fontSize(8.5).fillColor("#000");
+      let displayText = value && String(value).trim() ? String(value).trim() : "";
+      if (isDate && displayText) {
+        try { displayText = new Date(displayText).toISOString().slice(0, 10); } catch {}
+      }
+      const maxW = tutmValueW - 8;
+      if (doc.widthOfString(displayText) > maxW) {
+        const charsToKeep = Math.floor((maxW / Math.max(1, doc.widthOfString(displayText))) * displayText.length);
+        displayText = displayText.slice(0, Math.max(1, charsToKeep - 1)) + "…";
+      }
+      doc.text(displayText, MARGIN + tutmLabelW + 4, y + 5, { width: maxW });
+      y += tutmRowH;
+    };
+
+    // ─── 1. EQUIPMENT TYPE / INSPECTION LINE ───
+    {
+      const lines = [
+        "Equipment Type: Tank (Storage Tank)",
+        "Inspection: UT Thickness Measurement",
+      ];
+      for (const line of lines) {
+        if (y + 14 > pageMaxY) { addNewPage(); y = MARGIN; }
+        doc.font(FONT_BOLD).fontSize(9).fillColor(tutmAccent);
+        doc.text(line, MARGIN, y);
+        doc.fillColor("#000");
+        y += 13;
+      }
+    }
+
+    // ─── 2. UT THICKNESS MEASUREMENT PARAMETERS ───
+    {
+      if (y + 24 + tutmRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 6;
+      doc.font(FONT_BOLD).fontSize(11).fillColor(tutmAccent);
+      doc.text("UT Thickness Measurement Parameters", MARGIN, y);
+      doc.fillColor("#000");
+      y += 18;
+
+      drawTutmGroupHeader("General Information");
+      drawTutmParamRow("Date of Examination", tutmReport.tutmDateOfExamination, true);
+      drawTutmParamRow("Testing Standard", tutmReport.tutmTestingStandard);
+      drawTutmParamRow("Acceptance Criteria", tutmReport.tutmAcceptanceCriteria);
+      drawTutmParamRow("UT Procedure", tutmReport.tutmUtProcedure);
+
+      drawTutmGroupHeader("Equipment Details");
+      drawTutmParamRow("Equipment Make", tutmReport.tutmEquipmentMake);
+      drawTutmParamRow("Equipment Model", tutmReport.tutmEquipmentModel);
+      drawTutmParamRow("Equipment Serial Number", tutmReport.tutmEquipmentSerialNo);
+      drawTutmParamRow("Calibration Due Date", tutmReport.tutmCalibrationDueDate, true);
+
+      drawTutmGroupHeader("Cable & Crystal Details");
+      drawTutmParamRow("Cable Length and Type", tutmReport.tutmCableLengthAndType);
+      drawTutmParamRow("Type of Crystal", tutmReport.tutmTypeOfCrystal);
+
+      drawTutmGroupHeader("Calibration Details");
+      drawTutmParamRow("Calibration Block Dimension / MOC", tutmReport.tutmCalibrationBlock);
+
+      drawTutmGroupHeader("Other Testing Parameters");
+      drawTutmParamRow("Surface Temperature", tutmReport.tutmSurfaceTemperature);
+      drawTutmParamRow("Method", tutmReport.tutmMethod);
+      drawTutmParamRow("Couplant", tutmReport.tutmCouplant);
+      drawTutmParamRow("Surface Preparation", tutmReport.tutmSurfacePreparation);
+      drawTutmParamRow("Surface Finish", tutmReport.tutmSurfaceFinish);
+      y += 8;
+    }
+
+    // ─── 3. PROBE DETAILS (repeatable Longitudinal Wave 0° grid) ───
+    {
+      let tutmProbes: Array<Record<string, unknown>> = [];
+      try {
+        const parsed = JSON.parse(tutmReport.tutmLwProbeRows ?? "[]");
+        if (Array.isArray(parsed) && parsed.length > 0) tutmProbes = parsed;
+      } catch {}
+      const pHeaderH = 20;
+      const pRowH = 20;
+      const pUsable = tutmUsableW;
+      const pColWidths = orientation === "landscape"
+        ? [170, 80, 130, 120, Math.max(120, pUsable - 170 - 80 - 130 - 120)]
+        : [120, 55, 90, 85, Math.max(85, pUsable - 120 - 55 - 90 - 85)];
+      const pHeaders = ["Probe", "Probe Angle", "Frequency", "Size", "S.No."];
+
+      if (y + 24 + pHeaderH + pRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 4;
+      doc.font(FONT_BOLD).fontSize(11).fillColor(tutmAccent);
+      doc.text("Probe Details — Longitudinal Wave (0°)", MARGIN, y);
+      doc.fillColor("#000");
+      y += 16;
+
+      const drawTutmProbeHeader = (headerY: number) => {
+        doc.rect(MARGIN, headerY, pUsable, pHeaderH).fill(TABLE_HEADER_BG);
+        doc.rect(MARGIN, headerY, pUsable, pHeaderH).stroke(TABLE_OUTER_BORDER);
+        let x = MARGIN;
+        doc.font(FONT_BOLD).fontSize(7.5).fillColor(TABLE_HEADER_FG);
+        for (let i = 0; i < pHeaders.length; i++) {
+          if (i > 0) doc.moveTo(x, headerY).lineTo(x, headerY + pHeaderH).stroke(TABLE_INNER_BORDER);
+          doc.text(pHeaders[i], x + 2, headerY + 7, { width: pColWidths[i] - 4, align: "center" });
+          x += pColWidths[i];
+        }
+        doc.fillColor("#000");
+      };
+      drawTutmProbeHeader(y);
+      y += pHeaderH;
+
+      for (const probe of tutmProbes) {
+        if (y + pRowH > pageMaxY) {
+          addNewPage();
+          drawTutmProbeHeader(MARGIN);
+          y = MARGIN + pHeaderH;
+        }
+        doc.rect(MARGIN, y, pUsable, pRowH).stroke(TABLE_OUTER_BORDER);
+        const cells = [
+          "Longitudinal Wave Probe",
+          "0°",
+          String(probe.frequency ?? ""),
+          String(probe.probeSize ?? ""),
+          String(probe.serialNo ?? ""),
+        ];
+        let cx = MARGIN;
+        for (let i = 0; i < pHeaders.length; i++) {
+          if (i > 0) doc.moveTo(cx, y).lineTo(cx, y + pRowH).stroke(TABLE_INNER_BORDER);
+          doc.font(i === 0 ? FONT_BOLD : FONT_REGULAR).fontSize(7.5).fillColor("#000");
+          let disp = String(cells[i] ?? "");
+          const maxW = pColWidths[i] - 8;
+          if (doc.widthOfString(disp) > maxW) {
+            const c = Math.floor((maxW / Math.max(1, doc.widthOfString(disp))) * disp.length);
+            disp = disp.slice(0, Math.max(1, c - 1)) + "…";
+          }
+          doc.text(disp, cx + 4, y + 6, { width: maxW, align: i === 0 ? "left" : "center" });
+          cx += pColWidths[i];
+        }
+        doc.fillColor("#000");
+        y += pRowH;
+      }
+      y += 10;
+    }
+
+    // ─── 4. UT THICKNESS MEASUREMENT READINGS (course/plate clock
+    //     positions) ───
+    {
+      let tutmRows: Array<Record<string, unknown>> = [];
+      try {
+        const parsed = JSON.parse(tutmReport.tutmPlateRows ?? "[]");
+        if (Array.isArray(parsed)) tutmRows = parsed;
+      } catch {}
+
+      if (y + 24 + 30 > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 4;
+      doc.font(FONT_BOLD).fontSize(11).fillColor(tutmAccent);
+      doc.text("UT Thickness Measurement Readings", MARGIN, y);
+      doc.fillColor("#000");
+      y += 16;
+
+      // Generic spot-value renderer: trims, truncates, centres.
+      const drawTutmCell = (
+        text: string,
+        x: number,
+        rowY: number,
+        w: number,
+        rowH: number,
+        align: "left" | "center" = "center",
+        bold = false,
+        fontSize = 7,
+      ) => {
+        doc.font(bold ? FONT_BOLD : FONT_REGULAR).fontSize(fontSize).fillColor("#000");
+        let disp = String(text ?? "").trim();
+        const maxW = w - 6;
+        if (doc.widthOfString(disp) > maxW) {
+          const c = Math.floor((maxW / Math.max(1, doc.widthOfString(disp))) * disp.length);
+          disp = disp.slice(0, Math.max(1, c - 1)) + "…";
+        }
+        doc.text(disp, x + 3, rowY + (rowH - fontSize - 1) / 2 + 1, { width: maxW, align });
+        doc.fillColor("#000");
+      };
+
+      const tInfoW = orientation === "landscape"
+        ? { moc: 62, comp: 80, id: 60, nom: 46, min: 48 }
+        : { moc: 46, comp: 58, id: 44, nom: 34, min: 38 };
+      const tInfoSum = tInfoW.moc + tInfoW.comp + tInfoW.id + tInfoW.nom + tInfoW.min;
+      const tClockW = Math.max(34, (tutmUsableW - tInfoSum) / 4);
+      const tClockKeys = ["c12", "c3", "c6", "c9"] as const;
+      const tHeaderH = 26;
+      const tLineH = 8;
+      const tMinRowH = 18;
+      const tPad = 5;
+      const tCellText = (v: unknown): string => String(v ?? "").trim();
+
+      const drawTutmRowsHeader = (headerY: number) => {
+        doc.rect(MARGIN, headerY, tutmUsableW, tHeaderH).fill(TABLE_HEADER_BG);
+        doc.rect(MARGIN, headerY, tutmUsableW, tHeaderH).stroke(TABLE_OUTER_BORDER);
+        let x = MARGIN;
+        doc.font(FONT_BOLD).fontSize(6.5).fillColor(TABLE_HEADER_FG);
+        const headers: Array<[string, number]> = [
+          ["MOC", tInfoW.moc],
+          ["Course / Section", tInfoW.comp],
+          ["Plate / Location ID", tInfoW.id],
+          ["Nominal\nThickness\n(mm)", tInfoW.nom],
+          ["12 O'clock", tClockW],
+          ["3 O'clock", tClockW],
+          ["6 O'clock", tClockW],
+          ["9 O'clock", tClockW],
+          ["Minimum\nMeasured\n(mm)", tInfoW.min],
+        ];
+        for (let i = 0; i < headers.length; i++) {
+          const [label, w] = headers[i];
+          if (i > 0) doc.moveTo(x, headerY).lineTo(x, headerY + tHeaderH).stroke(TABLE_INNER_BORDER);
+          doc.text(label, x + 2, headerY + 3, { width: w - 4, align: "center", lineGap: 0 });
+          x += w;
+        }
+        doc.fillColor("#000");
+      };
+
+      if (y + 24 + tHeaderH + tMinRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      y += 6;
+      doc.font(FONT_BOLD).fontSize(9.5).fillColor(tutmAccent);
+      doc.text("Course / Plate Measurements (Clock Positions)", MARGIN, y);
+      doc.fillColor("#000");
+      y += 14;
+      drawTutmRowsHeader(y);
+      y += tHeaderH;
+
+      for (const row of tutmRows) {
+        // Readings per clock position — every entered reading, blank
+        // slots excluded (never rendered).
+        const spotGroups = tClockKeys.map((k) => {
+          const v = row[k];
+          const arr = Array.isArray(v) ? (v as Array<unknown>).map((s) => tCellText(s)) : [];
+          return arr;
+        });
+        const cells = spotGroups.map((g) => g.filter((s) => s !== ""));
+        const maxLines = Math.max(1, ...cells.map((c) => c.length));
+        const rowH = Math.max(tMinRowH, tPad * 2 + maxLines * tLineH);
+        if (y + rowH > pageMaxY) {
+          addNewPage();
+          drawTutmRowsHeader(MARGIN);
+          y = MARGIN + tHeaderH;
+        }
+        doc.rect(MARGIN, y, tutmUsableW, rowH).stroke(TABLE_OUTER_BORDER);
+        const infoCells: Array<[string, number, "left" | "center", boolean]> = [
+          [tCellText(row.moc), tInfoW.moc, "left", false],
+          [tCellText(row.componentType), tInfoW.comp, "left", false],
+          [tCellText(row.componentId), tInfoW.id, "left", false],
+          [tCellText(row.nominalThickness), tInfoW.nom, "center", false],
+        ];
+        let cx = MARGIN;
+        for (const [text, w, align, bold] of infoCells) {
+          doc.moveTo(cx, y).lineTo(cx, y + rowH).stroke(TABLE_INNER_BORDER);
+          drawTutmCell(text, cx, y, w, rowH, align, bold, 6.5);
+          cx += w;
+        }
+        for (const lines of cells) {
+          doc.moveTo(cx, y).lineTo(cx, y + rowH).stroke(TABLE_INNER_BORDER);
+          if (lines.length === 0) {
+            drawTutmCell("—", cx, y, tClockW, rowH, "center", false, 6.5);
+          } else {
+            // One reading per line, vertically centred in the cell.
+            doc.font(FONT_REGULAR).fontSize(6.5).fillColor("#000");
+            const blockH = lines.length * tLineH;
+            let ly = y + Math.max(2, (rowH - blockH) / 2);
+            const maxW = tClockW - 6;
+            for (const line of lines) {
+              let disp = line;
+              if (doc.widthOfString(disp) > maxW) {
+                const c = Math.floor((maxW / Math.max(1, doc.widthOfString(disp))) * disp.length);
+                disp = disp.slice(0, Math.max(1, c - 1)) + "…";
+              }
+              doc.text(disp, cx + 3, ly, { width: maxW, align: "center" });
+              ly += tLineH;
+            }
+            doc.fillColor("#000");
+          }
+          cx += tClockW;
+        }
+        doc.moveTo(cx, y).lineTo(cx, y + rowH).stroke(TABLE_INNER_BORDER);
+        const minVal = vutmMinOfSpots(spotGroups[0], spotGroups[1], spotGroups[2], spotGroups[3]);
+        drawTutmCell(minVal || "—", cx, y, tInfoW.min, rowH, "center", true, 7);
+        doc.fillColor("#000");
+        y += rowH;
+      }
+      if (tutmRows.length === 0) {
+        doc.font(FONT_REGULAR).fontSize(8).fillColor("#6b7280");
+        doc.text("No course / plate measurement rows recorded.", MARGIN, y + 4);
+        doc.fillColor("#000");
+        y += 18;
+      }
+      y += 8;
     }
   }
 

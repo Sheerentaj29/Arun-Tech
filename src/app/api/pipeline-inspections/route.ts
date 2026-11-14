@@ -150,6 +150,10 @@ export async function POST(req: NextRequest) {
         "VESSEL_MPT",
         "VESSEL_WELD_SCAN",
         "VESSEL_UTM",
+        "TANK_DPT",
+        "TANK_MPT",
+        "TANK_WELD_SCAN",
+        "TANK_UTM",
         "PIPELINE_VISUAL",
         "PIPELINE_CONDITION",
       ].includes(body.reportType)
@@ -161,9 +165,12 @@ export async function POST(req: NextRequest) {
       // VESSEL_UTM (Vessel UT Thickness Measurement), the only module
       // that asks for an orientation. Every other report type stores
       // null (legacy rows keep their stored value).
-      equipmentType: body.equipmentType === "PIPING" || body.equipmentType === "VESSEL"
-        ? body.equipmentType
-        : null,
+      equipmentType:
+        body.equipmentType === "PIPING" ||
+        body.equipmentType === "VESSEL" ||
+        body.equipmentType === "TANK"
+          ? body.equipmentType
+          : null,
       vesselOrientation:
         body.reportType === "VESSEL_UTM" &&
         (body.vesselOrientation === "HORIZONTAL" || body.vesselOrientation === "VERTICAL")
@@ -388,6 +395,116 @@ export async function POST(req: NextRequest) {
         body.vutmNozzleRows,
         body.vesselOrientation === "VERTICAL" ? "VERTICAL" : "HORIZONTAL",
       ),
+      // ─── TANK (STORAGE TANK) FIELDS (reportType = TANK_*) ───
+      // Completely separate from the Vessel (vdpt*/vmpt*/vws*/vutm*) and
+      // Piping field groups above — storage-tank reports never read or
+      // write Vessel/Piping columns. The Tank UT course/plate readings
+      // reuse the generic clock-row normalizer (HORIZONTAL shape).
+      // ─── TANK DPT (reportType = TANK_DPT) ───
+      tdptDateOfExamination: body.tdptDateOfExamination ? new Date(body.tdptDateOfExamination) : null,
+      tdptTestingStandard: body.tdptTestingStandard?.trim() || null,
+      tdptAcceptanceCriteria: body.tdptAcceptanceCriteria?.trim() || null,
+      tdptSurfacePreparation: body.tdptSurfacePreparation?.trim() || null,
+      tdptSurfaceTemperature: body.tdptSurfaceTemperature?.trim() || null,
+      tdptPenetrantType: body.tdptPenetrantType?.trim() || null,
+      tdptPenetrantProcess: body.tdptPenetrantProcess?.trim() || null,
+      tdptMethodOfPreCleaning: body.tdptMethodOfPreCleaning?.trim() || null,
+      tdptDryingTimeAfterPreCleaning: body.tdptDryingTimeAfterPreCleaning?.trim() || null,
+      tdptMethodOfApplyingPenetrant: body.tdptMethodOfApplyingPenetrant?.trim() || null,
+      tdptPenetratingTime: body.tdptPenetratingTime?.trim() || null,
+      tdptMethodOfRemovingExcessPenetrant: body.tdptMethodOfRemovingExcessPenetrant?.trim() || null,
+      tdptMethodOfApplyingDeveloper: body.tdptMethodOfApplyingDeveloper?.trim() || null,
+      tdptDevelopmentTime: body.tdptDevelopmentTime?.trim() || null,
+      tdptInterpretationTime: body.tdptInterpretationTime?.trim() || null,
+      tdptLightingEquipment: body.tdptLightingEquipment?.trim() || null,
+      tdptPostCleaning: body.tdptPostCleaning?.trim() || null,
+      tdptSolventMake: body.tdptSolventMake?.trim() || null,
+      tdptSolventProduct: body.tdptSolventProduct?.trim() || null,
+      tdptSolventBatchNo: body.tdptSolventBatchNo?.trim() || null,
+      tdptSolventExpiry: body.tdptSolventExpiry?.trim() || null,
+      tdptPenetrantMake: body.tdptPenetrantMake?.trim() || null,
+      tdptPenetrantProduct: body.tdptPenetrantProduct?.trim() || null,
+      tdptPenetrantBatchNo: body.tdptPenetrantBatchNo?.trim() || null,
+      tdptPenetrantExpiry: body.tdptPenetrantExpiry?.trim() || null,
+      tdptDeveloperMake: body.tdptDeveloperMake?.trim() || null,
+      tdptDeveloperProduct: body.tdptDeveloperProduct?.trim() || null,
+      tdptDeveloperBatchNo: body.tdptDeveloperBatchNo?.trim() || null,
+      tdptDeveloperExpiry: body.tdptDeveloperExpiry?.trim() || null,
+      tdptObservationRows: typeof body.tdptObservationRows === "string" ? body.tdptObservationRows : null,
+      // ─── TANK MPT (reportType = TANK_MPT) ───
+      tmptDateOfExamination: body.tmptDateOfExamination ? new Date(body.tmptDateOfExamination) : null,
+      tmptTestingStandard: body.tmptTestingStandard?.trim() || null,
+      tmptAcceptanceCriteria: body.tmptAcceptanceCriteria?.trim() || null,
+      tmptSurfacePreparation: body.tmptSurfacePreparation?.trim() || null,
+      tmptSurfaceTemperature: body.tmptSurfaceTemperature?.trim() || null,
+      tmptInstrumentSerialNo: body.tmptInstrumentSerialNo?.trim() || null,
+      tmptMethod: body.tmptMethod?.trim() || null,
+      tmptTypeOfCurrent: body.tmptTypeOfCurrent?.trim() || null,
+      tmptAcYokeLiftingCapacity: body.tmptAcYokeLiftingCapacity?.trim() || null,
+      tmptContrastMedium: body.tmptContrastMedium?.trim() || null,
+      tmptMethodOfPreCleaning: body.tmptMethodOfPreCleaning?.trim() || null,
+      tmptMethodOfApplyingWhiteContrast: body.tmptMethodOfApplyingWhiteContrast?.trim() || null,
+      tmptAcYokePoleSpacing: body.tmptAcYokePoleSpacing?.trim() || null,
+      tmptMagneticMedium: body.tmptMagneticMedium?.trim() || null,
+      tmptMethodOfApplyingMagneticMedium: body.tmptMethodOfApplyingMagneticMedium?.trim() || null,
+      tmptDevelopmentTime: body.tmptDevelopmentTime?.trim() || null,
+      tmptInterpretationTime: body.tmptInterpretationTime?.trim() || null,
+      tmptLightingEquipment: body.tmptLightingEquipment?.trim() || null,
+      tmptPostCleaning: body.tmptPostCleaning?.trim() || null,
+      tmptWhiteContrastMake: body.tmptWhiteContrastMake?.trim() || null,
+      tmptWhiteContrastProduct: body.tmptWhiteContrastProduct?.trim() || null,
+      tmptWhiteContrastLotNo: body.tmptWhiteContrastLotNo?.trim() || null,
+      tmptWhiteContrastExpiry: body.tmptWhiteContrastExpiry?.trim() || null,
+      tmptInkMake: body.tmptInkMake?.trim() || null,
+      tmptInkProduct: body.tmptInkProduct?.trim() || null,
+      tmptInkLotNo: body.tmptInkLotNo?.trim() || null,
+      tmptInkExpiry: body.tmptInkExpiry?.trim() || null,
+      tmptRows: typeof body.tmptRows === "string" ? body.tmptRows : null,
+      // ─── TANK WELD SCAN (reportType = TANK_WELD_SCAN) ───
+      twsDateOfExamination: body.twsDateOfExamination ? new Date(body.twsDateOfExamination) : null,
+      twsTestingStandard: body.twsTestingStandard?.trim() || null,
+      twsAcceptanceCriteria: body.twsAcceptanceCriteria?.trim() || null,
+      twsUtProcedure: body.twsUtProcedure?.trim() || null,
+      twsEquipmentMake: body.twsEquipmentMake?.trim() || null,
+      twsEquipmentModel: body.twsEquipmentModel?.trim() || null,
+      twsEquipmentSerialNo: body.twsEquipmentSerialNo?.trim() || null,
+      twsCalibrationDueDate: body.twsCalibrationDueDate ? new Date(body.twsCalibrationDueDate) : null,
+      twsCableLength: body.twsCableLength?.trim() || null,
+      twsCableType: body.twsCableType?.trim() || null,
+      twsProbeDetails: typeof body.twsProbeDetails === "string" ? body.twsProbeDetails : null,
+      twsCalibrationBlock: body.twsCalibrationBlock?.trim() || null,
+      twsCalibrationBlockMoc: body.twsCalibrationBlockMoc?.trim() || null,
+      twsReferenceReflector: body.twsReferenceReflector?.trim() || null,
+      twsReferenceLevel: body.twsReferenceLevel?.trim() || null,
+      twsFlawSizingTechnique: body.twsFlawSizingTechnique?.trim() || null,
+      twsSurfaceTemperature: body.twsSurfaceTemperature?.trim() || null,
+      twsTestingMethod: body.twsTestingMethod?.trim() || null,
+      twsCouplant: body.twsCouplant?.trim() || null,
+      twsSurfacePreparation: body.twsSurfacePreparation?.trim() || null,
+      twsSurfaceFinish: body.twsSurfaceFinish?.trim() || null,
+      twsExtentOfScanning: body.twsExtentOfScanning?.trim() || null,
+      twsDetailRows: typeof body.twsDetailRows === "string" ? body.twsDetailRows : null,
+      // ─── TANK UT THICKNESS MEASUREMENT (reportType = TANK_UTM) ───
+      tutmDateOfExamination: body.tutmDateOfExamination ? new Date(body.tutmDateOfExamination) : null,
+      tutmTestingStandard: body.tutmTestingStandard?.trim() || null,
+      tutmAcceptanceCriteria: body.tutmAcceptanceCriteria?.trim() || null,
+      tutmUtProcedure: body.tutmUtProcedure?.trim() || null,
+      tutmEquipmentMake: body.tutmEquipmentMake?.trim() || null,
+      tutmEquipmentModel: body.tutmEquipmentModel?.trim() || null,
+      tutmEquipmentSerialNo: body.tutmEquipmentSerialNo?.trim() || null,
+      tutmCalibrationDueDate: body.tutmCalibrationDueDate ? new Date(body.tutmCalibrationDueDate) : null,
+      tutmCableLengthAndType: body.tutmCableLengthAndType?.trim() || null,
+      tutmLwProbeRows: typeof body.tutmLwProbeRows === "string" ? body.tutmLwProbeRows : null,
+      tutmTypeOfCrystal: body.tutmTypeOfCrystal?.trim() || null,
+      tutmCalibrationBlock: body.tutmCalibrationBlock?.trim() || null,
+      tutmSurfaceTemperature: body.tutmSurfaceTemperature?.trim() || null,
+      tutmMethod: body.tutmMethod?.trim() || null,
+      tutmCouplant: body.tutmCouplant?.trim() || null,
+      tutmSurfacePreparation: body.tutmSurfacePreparation?.trim() || null,
+      tutmSurfaceFinish: body.tutmSurfaceFinish?.trim() || null,
+      // Course/plate readings are clock-position rows (same generic
+      // normalizer as the vessel clock rows — HORIZONTAL shape).
+      tutmPlateRows: normalizeVutmRows(body.tutmPlateRows, "HORIZONTAL"),
       isDemo: false,
     },
     include: {

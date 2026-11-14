@@ -1,0 +1,407 @@
+      {/* ═══ STEP 2 (TANK WELD SCAN): STORAGE TANK WELD SCAN ═══ */}
+      {step === 2 && header.reportType === "TANK_WELD_SCAN" && (
+      <>
+      {/* ═══ A. WELD SCAN TESTING PARAMETERS ═══
+          Clean two-column table layout grouped into General Information /
+          Equipment Details / Cable Details / Calibration Details / Other
+          Testing Parameters, plus the fixed 4-probe grid. Every value is
+          typed by the user — nothing is prefilled from any sample. */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Zap className="h-4 w-4 text-sky-700" />
+            Weld Scan Testing Parameters
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0 space-y-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <tbody>
+                {/* ─── General Information ─── */}
+                <tr className="bg-sky-800 text-white">
+                  <td colSpan={2} className="border border-sky-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    General Information
+                  </td>
+                </tr>
+                <tr className="border-b border-zinc-200">
+                  <td className="bg-sky-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/3">
+                    Date of Examination
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <Input
+                      type="date"
+                      className="h-8 text-sm"
+                      value={header.twsDateOfExamination}
+                      onChange={(e) => updateHeader("twsDateOfExamination", e.target.value)}
+                    />
+                  </td>
+                </tr>
+                {([
+                  ["Testing Standard", "twsTestingStandard", "e.g. ASME Section V 2023, Article 4"],
+                  ["Acceptance Criteria", "twsAcceptanceCriteria", "e.g. ASME Section VIII Div. 1, Appx. 12"],
+                  ["UT Procedure", "twsUtProcedure", "e.g. Procedure / document number"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-sky-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+
+                {/* ─── Equipment Details ─── */}
+                <tr className="bg-sky-800 text-white">
+                  <td colSpan={2} className="border border-sky-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    Equipment Details
+                  </td>
+                </tr>
+                {([
+                  ["Equipment Make", "twsEquipmentMake", "e.g. Olympus / Krautkramer / Sonatest"],
+                  ["Equipment Model", "twsEquipmentModel", "e.g. EPOCH 650 / USM Go"],
+                  ["Equipment Serial Number", "twsEquipmentSerialNo", "Instrument serial number"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-sky-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+                <tr className="border-b border-zinc-200">
+                  <td className="bg-sky-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                    Calibration Due Date
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <Input
+                      type="date"
+                      className="h-8 text-sm"
+                      value={header.twsCalibrationDueDate}
+                      onChange={(e) => updateHeader("twsCalibrationDueDate", e.target.value)}
+                    />
+                  </td>
+                </tr>
+
+                {/* ─── Cable Details ─── */}
+                <tr className="bg-sky-800 text-white">
+                  <td colSpan={2} className="border border-sky-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    Cable Details
+                  </td>
+                </tr>
+                {([
+                  ["Cable Length", "twsCableLength", "e.g. 2.0 meters"],
+                  ["Cable Type", "twsCableType", "e.g. Coaxial"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-sky-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+
+                {/* ─── Calibration Details ─── */}
+                <tr className="bg-sky-800 text-white">
+                  <td colSpan={2} className="border border-sky-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    Calibration Details
+                  </td>
+                </tr>
+                {([
+                  ["Calibration Block", "twsCalibrationBlock", "e.g. V1 / V2 / ASME basic calibration block"],
+                  ["Calibration Block Material / MOC", "twsCalibrationBlockMoc", "Material of the calibration block"],
+                  ["Reference Reflector", "twsReferenceReflector", "e.g. Side drilled hole / flat bottom hole"],
+                  ["Reference Level", "twsReferenceLevel", "e.g. 100% DAC / 50% DAC"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-sky-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+
+                {/* ─── Other Testing Parameters ─── */}
+                <tr className="bg-sky-800 text-white">
+                  <td colSpan={2} className="border border-sky-900 px-3 py-2 font-semibold text-xs tracking-wide">
+                    Other Testing Parameters
+                  </td>
+                </tr>
+                {([
+                  ["Flaw Sizing Technique", "twsFlawSizingTechnique", "e.g. DAC / dB drop / AWS"],
+                  ["Surface Temperature", "twsSurfaceTemperature", "e.g. 32 °C"],
+                  ["Method", "twsTestingMethod", "e.g. Contact pulse echo"],
+                  ["Couplant", "twsCouplant", "e.g. Gel / oil / glycerine"],
+                  ["Surface Preparation", "twsSurfacePreparation", "e.g. Grinding / wire brush"],
+                  ["Surface Finish", "twsSurfaceFinish", "e.g. Smooth / machined / as welded"],
+                  ["Extent of Scanning", "twsExtentOfScanning", "e.g. 100% of weld length, 150 mm beam spread"],
+                ] as const).map(([label, fieldKey, placeholder]) => (
+                  <tr key={fieldKey} className="border-b border-zinc-200">
+                    <td className="bg-sky-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700">
+                      {label}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header[fieldKey]}
+                        onChange={(e) => updateHeader(fieldKey, e.target.value)}
+                        placeholder={placeholder}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* ─── Probe Details: fixed 4-probe grid ─── */}
+          <div className="border-t border-zinc-200 p-4 space-y-3">
+            <div>
+              <div className="text-sm font-semibold text-zinc-700">Probe Details</div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs border-collapse">
+                <thead className="bg-sky-800 text-white">
+                  <tr>
+                    <th className="border border-sky-900 px-2 py-2 text-center" style={{ minWidth: 170 }}>Probe</th>
+                    <th className="border border-sky-900 px-2 py-2 text-center" style={{ minWidth: 90 }}>Probe Angle</th>
+                    <th className="border border-sky-900 px-2 py-2 text-center" style={{ minWidth: 130 }}>Frequency</th>
+                    <th className="border border-sky-900 px-2 py-2 text-center" style={{ minWidth: 130 }}>Probe Size</th>
+                    <th className="border border-sky-900 px-2 py-2 text-center" style={{ minWidth: 150 }}>Serial Number</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {parseVwsProbes(header.twsProbeDetails).map((probe, idx) => (
+                    <tr key={idx} className="hover:bg-muted/30">
+                      <td className="border border-zinc-300 px-2 py-1.5 font-medium text-zinc-700">
+                        {probe.probeType === "Longitudinal Wave" ? "Longitudinal Wave Probe" : "Shear Wave Probe"}
+                      </td>
+                      <td className="border border-zinc-300 px-2 py-1.5 text-center text-zinc-700">
+                        {probe.probeAngle}
+                      </td>
+                      <td className="border border-zinc-300 p-1">
+                        <Input
+                          className="h-8 text-xs"
+                          value={probe.frequency}
+                          onChange={(e) => updateTwsProbe(idx, { frequency: e.target.value })}
+                          placeholder="e.g. 4 MHz"
+                        />
+                      </td>
+                      <td className="border border-zinc-300 p-1">
+                        <Input
+                          className="h-8 text-xs"
+                          value={probe.probeSize}
+                          onChange={(e) => updateTwsProbe(idx, { probeSize: e.target.value })}
+                          placeholder="e.g. 10 mm × 10 mm"
+                        />
+                      </td>
+                      <td className="border border-zinc-300 p-1">
+                        <Input
+                          className="h-8 text-xs"
+                          value={probe.serialNo}
+                          onChange={(e) => updateTwsProbe(idx, { serialNo: e.target.value })}
+                          placeholder="Probe serial number"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ═══ B. WELD SCAN TESTING DETAILS ═══
+          Dynamic table — Tank column set: Sl. No | Course / Plate |
+          Weld Seam ID | Weld Dimension | Probe Angle | Probe Frequency |
+          Observation & Result. Rows are stored as the twsDetailRows JSON
+          column on the report itself. Rows can be added / removed, every
+          cell is editable, serial numbers are auto-generated. Course /
+          Plate and Weld Seam ID offer suggestions but accept any custom
+          value. */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base">Weld Scan Testing Details</CardTitle>
+            </div>
+            <Button onClick={addTwsRow} size="sm">
+              <Plus className="mr-1 h-4 w-4" /> Add Row
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-sky-800 text-white">
+                <tr>
+                  <th className="border border-sky-900 px-2 py-2 text-center" style={{ minWidth: 40 }}>Sl. No</th>
+                  <th className="border border-sky-900 px-2 py-2 text-center" style={{ minWidth: 140 }}>Course / Plate</th>
+                  <th className="border border-sky-900 px-2 py-2 text-center" style={{ minWidth: 170 }}>Weld Seam ID</th>
+                  <th className="border border-sky-900 px-2 py-2 text-center" style={{ minWidth: 140 }}>Weld Dimension</th>
+                  <th className="border border-sky-900 px-2 py-2 text-center" style={{ minWidth: 110 }}>Probe Angle</th>
+                  <th className="border border-sky-900 px-2 py-2 text-center" style={{ minWidth: 130 }}>Probe Frequency</th>
+                  <th className="border border-sky-900 px-2 py-2 text-center" style={{ minWidth: 220 }}>Observation &amp; Result</th>
+                  <th className="border border-sky-900 px-2 py-2 text-center" style={{ minWidth: 70 }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {twsRows.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="text-center py-6 text-muted-foreground border border-zinc-300">
+                      No rows yet.
+                    </td>
+                  </tr>
+                )}
+                {twsRows.map((row, idx) => (
+                  <tr key={idx} className="hover:bg-muted/30">
+                    <td className="border border-zinc-300 p-1 text-center font-mono tabular-nums">{idx + 1}</td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input
+                        className="h-8 text-xs"
+                        list={`tws-component-suggestions-${idx}`}
+                        value={row.component}
+                        onChange={(e) => updateTwsRow(idx, { component: e.target.value })}
+                        placeholder="e.g. Course-1 / Roof Plate"
+                      />
+                      <datalist id={`tws-component-suggestions-${idx}`}>
+                        {TWS_COMPONENT_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
+                      </datalist>
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input
+                        className="h-8 text-xs"
+                        list={`tws-weld-id-suggestions-${idx}`}
+                        value={row.plateWeldId}
+                        onChange={(e) => updateTwsRow(idx, { plateWeldId: e.target.value })}
+                        placeholder="e.g. Vertical Seam CS-1"
+                      />
+                      <datalist id={`tws-weld-id-suggestions-${idx}`}>
+                        {TWS_WELD_SEAM_ID_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
+                      </datalist>
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input
+                        className="h-8 text-xs"
+                        value={row.weldDimension}
+                        onChange={(e) => updateTwsRow(idx, { weldDimension: e.target.value })}
+                        placeholder="e.g. L600 mm × T24 mm"
+                      />
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Select
+                        value={row.probeAngle || undefined}
+                        onValueChange={(v) => updateTwsRow(idx, { probeAngle: v })}
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {TWS_PROBE_ANGLE_OPTIONS.map((a) => (
+                            <SelectItem key={a} value={a}>{a}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Input
+                        className="h-8 text-xs"
+                        list={`tws-frequency-suggestions-${idx}`}
+                        value={row.probeFrequency}
+                        onChange={(e) => updateTwsRow(idx, { probeFrequency: e.target.value })}
+                        placeholder="e.g. 4 MHz"
+                      />
+                      <datalist id={`tws-frequency-suggestions-${idx}`}>
+                        {TWS_PROBE_FREQUENCY_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
+                      </datalist>
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <Textarea
+                        rows={1}
+                        className="text-xs min-h-[32px] py-1"
+                        value={row.observationResult}
+                        onChange={(e) => updateTwsRow(idx, { observationResult: e.target.value })}
+                        placeholder="No Significant Indication Observed / Accept / Reject or custom text"
+                      />
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {TWS_OBSERVATION_QUICK_OPTIONS.map((opt) => (
+                          <button
+                            key={opt}
+                            type="button"
+                            className={`px-1.5 py-0.5 text-[10px] rounded border transition-colors ${
+                              row.observationResult === opt
+                                ? "bg-sky-700 text-white border-sky-800"
+                                : "bg-white text-zinc-600 border-zinc-300 hover:bg-sky-50"
+                            }`}
+                            onClick={() => updateTwsRow(idx, { observationResult: opt })}
+                          >
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="border border-zinc-300 p-1">
+                      <div className="flex justify-center">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+                          onClick={() => removeTwsRow(idx)}
+                          title="Remove row"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+
+      {/* Step 2 navigation */}
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" onClick={goPrevious}>
+          <ArrowLeft className="mr-2 h-4 w-4" /> Previous
+        </Button>
+        <Button variant="ghost" onClick={saveDraft} disabled={saving}>
+          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+          Save Draft
+        </Button>
+        <Button onClick={proceedToNext} disabled={saving}>
+          Proceed to Next <ArrowRight className="ml-2 h-4 w-4" />
+        </Button>
+      </div>
+      </>
+      )} {/* end step 2 — TANK WELD SCAN */}
+
