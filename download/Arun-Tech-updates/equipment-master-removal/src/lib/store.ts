@@ -1,0 +1,121 @@
+// Global app state for the inspection report automation UI.
+// Tracks current session, navigation target, and refresh counters
+// so list views can re-fetch after mutations.
+
+import { create } from "zustand";
+
+export type ViewKey =
+  // Role-specific dashboards (only these two are shown per spec)
+  | "admin-dashboard"
+  | "employee-dashboard"
+  // Report history + audit + admin views
+  | "report-history"
+  | "clients"
+  | "audit-logs"
+  // Pipeline thickness reports
+  | "pipeline-reports"
+  | "pipeline-report-type-selector"
+  | "pipeline-report-form"
+  | "pipeline-report-detail"
+  | "pipe-standards"
+  // Admin: employee management
+  | "employees"
+  // Engineering drawings module
+  | "drawings"
+  // Alias for backwards compat with code that uses "dashboard"
+  | "dashboard";
+
+interface AppUser {
+  id: string;
+  email: string;
+  name: string;
+  role: "ADMIN" | "EMPLOYEE" | "INSPECTOR" | "APPROVER";
+  dashboardRole: "ADMIN" | "EMPLOYEE";
+}
+
+// Pipeline report type — set when the user picks a type in the selector
+// screen before opening the form. When null (default), the form opens
+// without a type, which only makes sense when editing an existing report
+// (the type is read from the API response in that case).
+//
+// Active report types (shown in the selector):
+//   • PIPELINE_THICKNESS  → Pipeline Thickness Measurement Report
+//   • PIPELINE_DPT        → DPT / DPPT Dye Penetrant Testing Report
+//   • PIPELINE_MPT        → Magnetic Particle Testing Report (placeholder)
+//   • PIPELINE_WELD_SCAN  → Weld Scan Report (placeholder)
+//
+// Legacy report types (kept type-compatible for existing DB rows):
+//   • PIPELINE_VISUAL     → Pipeline Visual Inspection Report (legacy)
+//   • PIPELINE_CONDITION  → Pipeline Condition Assessment Report (legacy)
+export type PipelineReportType =
+  | "PIPELINE_THICKNESS"
+  | "PIPELINE_DPT"
+  | "PIPELINE_MPT"
+  | "PIPELINE_WELD_SCAN"
+  | "PIPELINE_VISUAL"
+  | "PIPELINE_CONDITION";
+
+interface AppState {
+  view: ViewKey;
+  inspectionClientId: string | null;
+  selectedPipelineReportId: string | null;
+  editingPipelineReportId: string | null;
+  // When opening the form for a NEW report, this holds the report type
+  // the user picked in the selector screen. Cleared after the form
+  // consumes it (so reopening the form later doesn't reuse a stale type).
+  pendingPipelineReportType: PipelineReportType | null;
+  refreshKey: number;
+  user: AppUser | null;
+  setView: (v: ViewKey) => void;
+  /** Navigate to the role-appropriate dashboard. */
+  goToMyDashboard: () => void;
+  openPipelineReport: (id: string) => void;
+  /** Show the report type selector (then the user picks a type → openNewPipelineReportWithType). */
+  openNewPipelineReport: () => void;
+  /** Open the form for a new report of the given type. */
+  openNewPipelineReportWithType: (type: PipelineReportType) => void;
+  openEditPipelineReport: (id: string) => void;
+  setEditingPipelineReportId: (id: string) => void;
+  setUser: (u: AppUser | null) => void;
+  refresh: () => void;
+}
+
+export const useAppStore = create<AppState>((set, get) => ({
+  view: "dashboard",
+  inspectionClientId: null,
+  selectedPipelineReportId: null,
+  editingPipelineReportId: null,
+  pendingPipelineReportType: null,
+  refreshKey: 0,
+  user: null,
+  setView: (v) => set({ view: v }),
+  goToMyDashboard: () => {
+    const u = get().user;
+    if (!u) {
+      set({ view: "dashboard" });
+      return;
+    }
+    set({ view: u.dashboardRole === "ADMIN" ? "admin-dashboard" : "employee-dashboard" });
+  },
+  openPipelineReport: (id) => set({ view: "pipeline-report-detail", selectedPipelineReportId: id }),
+  // Default: show the report type selector screen.
+  openNewPipelineReport: () =>
+    set({ view: "pipeline-report-type-selector", editingPipelineReportId: null, pendingPipelineReportType: null }),
+  // After the user picks a type, set it and switch to the form view.
+  openNewPipelineReportWithType: (type) =>
+    set({ view: "pipeline-report-form", editingPipelineReportId: null, pendingPipelineReportType: type }),
+  openEditPipelineReport: (id) =>
+    set({ view: "pipeline-report-form", editingPipelineReportId: id, pendingPipelineReportType: null }),
+  setEditingPipelineReportId: (id) => set({ editingPipelineReportId: id }),
+  setUser: (u) =>
+    set((s) => ({
+      user: u,
+      // On login, route to the appropriate dashboard
+      view: u
+        ? u.dashboardRole === "ADMIN"
+          ? "admin-dashboard"
+          : "employee-dashboard"
+        : s.view,
+    })),
+  refresh: () => set((s) => ({ refreshKey: s.refreshKey + 1 })),
+}));
