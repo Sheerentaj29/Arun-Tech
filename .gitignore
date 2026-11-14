@@ -55,3 +55,8 @@ server.log
 
 # Nested clone of the GitHub repo (reference copy only, not part of the project)
 /Arun-Tech/
+# Generated artifacts — never track (they bloat history)
+download/Arun-Tech-full.bundle
+download/Arun-Tech-full-repo.zip
+*.bundle
+*.bundle.temp
