@@ -55,11 +55,15 @@ interface AppUser {
 //                           table — completely separate from the Piping
 //                           Weld Scan, which stays untouched)
 //   • VESSEL_UTM          → Vessel UT Thickness Measurement Report (Vessel;
-//                           clock-position readings table (12 / 3 / 6 / 9
-//                           o'clock) with dynamic readings per position,
-//                           plus dish-end and nozzle components. Completely
-//                           separate from the Piping Thickness Measurement
-//                           (PIPELINE_THICKNESS), which stays untouched)
+//                           requires a Horizontal / Vertical orientation —
+//                           the ONLY module that asks for one. Horizontal
+//                           vessels measure at clock positions (12 / 3 / 6
+//                           / 9 o'clock), vertical vessels in directions
+//                           (East / West / North / South); every position
+//                           starts with ONE reading and grows dynamically.
+//                           Completely separate from the Piping Thickness
+//                           Measurement (PIPELINE_THICKNESS), which stays
+//                           untouched)
 //   • VESSEL_VISUAL       → RESERVED for "Visual Inspection" on Vessel —
 //                           shown as a "Coming soon" card in the selector
 //                           only. NOT implemented; the API refuses to
@@ -91,6 +95,13 @@ export type PipelineReportType =
 // whether the inspection was performed on piping or a vessel.
 export type EquipmentType = "PIPING" | "VESSEL";
 
+// Vessel orientation — required ONLY for VESSEL_UTM (Vessel UT Thickness
+// Measurement) reports, picked in the selector before the form opens.
+// Horizontal vessels measure at clock positions, vertical vessels in
+// East/West/North/South directions. No other module asks for an
+// orientation (DPT / MPT / Weld Scan / Visual / all Piping).
+export type VesselOrientation = "HORIZONTAL" | "VERTICAL";
+
 interface AppState {
   view: ViewKey;
   selectedPipelineReportId: string | null;
@@ -102,6 +113,9 @@ interface AppState {
   // Equipment type picked in the selector ("PIPING" or "VESSEL"). Stored
   // on the created report; null when editing an existing report.
   pendingEquipmentType: EquipmentType | null;
+  // Vessel orientation picked in the selector — set ONLY for VESSEL_UTM
+  // reports ("HORIZONTAL" or "VERTICAL"); null for every other type.
+  pendingVesselOrientation: VesselOrientation | null;
   refreshKey: number;
   user: AppUser | null;
   setView: (v: ViewKey) => void;
@@ -114,11 +128,13 @@ interface AppState {
   openNewPipelineReportWithType: (type: PipelineReportType) => void;
   /**
    * Open the form for a new report with the full selector selection:
-   * report type + equipment type (Piping/Vessel).
+   * report type + equipment type (Piping/Vessel) +, for VESSEL_UTM only,
+   * the vessel orientation (Horizontal/Vertical).
    */
   openNewPipelineReportWithSelection: (
     type: PipelineReportType,
     equipmentType: EquipmentType | null,
+    vesselOrientation?: VesselOrientation | null,
   ) => void;
   openEditPipelineReport: (id: string) => void;
   setEditingPipelineReportId: (id: string) => void;
@@ -132,6 +148,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   editingPipelineReportId: null,
   pendingPipelineReportType: null,
   pendingEquipmentType: null,
+  pendingVesselOrientation: null,
   refreshKey: 0,
   user: null,
   setView: (v) => set({ view: v }),
@@ -151,6 +168,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       editingPipelineReportId: null,
       pendingPipelineReportType: null,
       pendingEquipmentType: null,
+      pendingVesselOrientation: null,
     }),
   // After the user picks a type, set it and switch to the form view.
   // (No equipment type — used by legacy callers.)
@@ -160,15 +178,18 @@ export const useAppStore = create<AppState>((set, get) => ({
       editingPipelineReportId: null,
       pendingPipelineReportType: type,
       pendingEquipmentType: null,
+      pendingVesselOrientation: null,
     }),
   // Full selection from the staged selector:
-  //   type + equipment type (Piping/Vessel).
-  openNewPipelineReportWithSelection: (type, equipmentType) =>
+  //   type + equipment type (Piping/Vessel) +, for VESSEL_UTM only, the
+  //   vessel orientation (Horizontal/Vertical).
+  openNewPipelineReportWithSelection: (type, equipmentType, vesselOrientation = null) =>
     set({
       view: "pipeline-report-form",
       editingPipelineReportId: null,
       pendingPipelineReportType: type,
       pendingEquipmentType: equipmentType,
+      pendingVesselOrientation: vesselOrientation,
     }),
   openEditPipelineReport: (id) =>
     set({
@@ -176,6 +197,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       editingPipelineReportId: id,
       pendingPipelineReportType: null,
       pendingEquipmentType: null,
+      pendingVesselOrientation: null,
     }),
   setEditingPipelineReportId: (id) => set({ editingPipelineReportId: id }),
   setUser: (u) =>

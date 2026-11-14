@@ -1,8 +1,11 @@
 // Runtime verification for the REWORKED VESSEL → UT Thickness Measurement
-// (VESSEL_UTM) module — Horizontal/Vertical selection REMOVED, readings are
-// ONE unified clock-position table (12/3/6/9 o'clock) starting with ONE
-// reading per position, dynamic "+ Add Reading", read-only auto Minimum.
-// Also checks Piping / Vessel DPT / MPT / Weld Scan are untouched.
+// (VESSEL_UTM) module — Horizontal / Vertical selection restored (VESSEL_UTM
+// ONLY):
+//   • HORIZONTAL → clock positions (12 / 3 / 6 / 9 o'clock), ONE reading
+//     slot per position initially, dynamic "+ Add Reading", auto Minimum.
+//   • VERTICAL   → directions (East / West / North / South), one row per
+//     component + direction, ONE reading initially, dynamic, auto Minimum.
+// No other module asks for an orientation (DPT / MPT / Weld Scan / Piping).
 // Run: node scripts/test-vutm-clock-readings.mjs
 const BASE = "http://localhost:3000";
 const fs = await import("fs");
@@ -41,196 +44,236 @@ check("Coromandel client exists", !!coro);
 const ennore = coro.plants.find((p) => p.name.includes("Ennore"));
 check("Ennore plant exists", !!ennore);
 const ts = Date.now().toString().slice(-6);
+const base = { clientId: coro.id, plantId: ennore.id };
+const { execSync } = await import("child_process");
 
-// ─── 1. Create VESSEL_UTM report — NO orientation field sent at all ───
-console.log("── 1. Unified clock-position readings (no orientation) ──");
-const utm = await api("/api/pipeline-inspections", {
+// ─── 1. HORIZONTAL report — clock positions, dynamic readings ───
+console.log("── 1. VESSEL_UTM HORIZONTAL (clock positions) ──");
+const horiz = await api("/api/pipeline-inspections", {
   method: "POST",
   body: JSON.stringify({
-    reportNumber: `VUTM-C-${ts}`,
+    ...base,
+    reportNumber: `VUTM-H2-${ts}`,
     reportType: "VESSEL_UTM",
     equipmentType: "VESSEL",
-    clientId: coro.id,
-    plantId: ennore.id,
-    pipelineDescription: "Test vessel S-V-1 (East side)",
-    pipelineIdentificationNumber: "V-C-001",
+    vesselOrientation: "HORIZONTAL",
+    pipelineDescription: "Horizontal survey vessel",
+    pipelineIdentificationNumber: "V-H-101",
     vutmDateOfExamination: "2026-11-14",
     vutmTestingStandard: "ASME Section VIII Div. 1",
-    vutmAcceptanceCriteria: "Min wall 6.0 mm",
     vutmMethod: "Contact Pulse Echo",
-    // One unified row per component. Row 1 mirrors the user's example:
-    // 12 o'clock 8.2/8.1, 3 o'clock 8.4, 6 o'clock 8.0/8.3, 9 o'clock 8.5.
+    // User's example: 12 o'clock 8.2/8.1, 3 o'clock 8.4, 6 o'clock 8.0/8.3,
+    // 9 o'clock 8.5 → Minimum = 8.0.
     vutmShellRows: JSON.stringify([
       { moc: "Carbon Steel", componentType: "Shell-1", componentId: "S-01", nominalThickness: "12",
         c12: ["8.2", "8.1"], c3: ["8.4"], c6: ["8.0", "8.3"], c9: ["8.5"] },
       { moc: "SS316", componentType: "Nozzle", componentId: "N1", nominalThickness: "8",
         c12: ["7.6"], c3: [], c6: ["7.4", "7.7"], c9: [] },
-      { moc: "Carbon Steel", componentType: "Top Dish", componentId: "", nominalThickness: "14",
-        c12: [], c3: [], c6: [], c9: [] },
     ]),
   }),
 });
-check("POST creates VESSEL_UTM without orientation (201)", utm.httpStatus === 201, JSON.stringify(utm).slice(0, 200));
-check("vesselOrientation NOT stored (null)", utm.vesselOrientation === null || utm.vesselOrientation === undefined, `got ${utm.vesselOrientation}`);
-const utmId = utm.id;
+check("POST creates HORIZONTAL VESSEL_UTM (201)", horiz.httpStatus === 201, JSON.stringify(horiz).slice(0, 200));
+check("vesselOrientation = HORIZONTAL stored", horiz.vesselOrientation === "HORIZONTAL", `got ${horiz.vesselOrientation}`);
+const hRows = JSON.parse(horiz.vutmShellRows ?? "[]");
+check("row1 min = 8.0 (min across ALL clock readings)", hRows[0]?.min === "8.0", `got ${hRows[0]?.min}`);
+check("arrays dynamic — NOT padded to 4", hRows[0]?.c12?.length === 2 && hRows[0]?.c3?.length === 1, `got ${JSON.stringify(hRows[0]?.c12)}`);
+check("empty clock array → one blank slot", hRows[1]?.c3?.length === 1 && hRows[1]?.c3?.[0] === "");
+check("nozzle row min = 7.4", hRows[1]?.min === "7.4", `got ${hRows[1]?.min}`);
+const horizId = horiz.id;
 
-let rows = JSON.parse(utm.vutmShellRows ?? "[]");
-check("row count = 3", rows.length === 3, `got ${rows.length}`);
-check("row1 min = 8.0 (min of ALL readings across positions)", rows[0]?.min === "8.0", `got ${rows[0]?.min}`);
-check("arrays NOT padded to 4 spots (c12 len 2)", rows[0]?.c12?.length === 2, `got ${JSON.stringify(rows[0]?.c12)}`);
-check("arrays NOT padded (c3 len 1)", rows[0]?.c3?.length === 1, `got ${JSON.stringify(rows[0]?.c3)}`);
-check("empty clock array → one blank slot ['']", rows[1]?.c3?.length === 1 && rows[1]?.c3?.[0] === "", `got ${JSON.stringify(rows[1]?.c3)}`);
-check("nozzle row min = 7.4", rows[1]?.min === "7.4", `got ${rows[1]?.min}`);
-check("componentType Nozzle + componentId N1 preserved", rows[1]?.componentType === "Nozzle" && rows[1]?.componentId === "N1");
-check("Top Dish row with no readings → min empty", rows[2]?.min === "", `got ${rows[2]?.min}`);
-
-// ─── 2. GET preserves everything ───
-console.log("── 2. GET preserves the unified rows ──");
-const got1 = await api(`/api/pipeline-inspections/${utmId}`);
-check("GET returns report", got1.reportNumber === `VUTM-C-${ts}`);
-const gotRows = JSON.parse(got1.vutmShellRows ?? "[]");
-check("GET rows = 3", gotRows.length === 3);
-check("GET row1 readings preserved", JSON.stringify(gotRows[0]?.c12) === JSON.stringify(["8.2", "8.1"]));
-check("GET min still 8.0", gotRows[0]?.min === "8.0");
-
-// ─── 3. PUT edit — dynamic add / change / remove readings, min recomputes ───
-console.log("── 3. PUT — add / change readings, min recomputes ──");
-const edited = JSON.parse(JSON.stringify(gotRows));
-edited[0].c12.push("7.9");            // + Add Reading on 12 o'clock → new minimum
-edited[0].c6 = ["8.0"];               // remove reading on 6 o'clock
-edited[1].c3.push("7.2");             // + Add Reading on 3 o'clock (was empty → [''])
-const put1 = await api(`/api/pipeline-inspections/${utmId}`, {
-  method: "PUT",
-  body: JSON.stringify({ vutmShellRows: JSON.stringify(edited), vutmDishRows: "[]", vutmNozzleRows: "[]" }),
-});
-check("PUT 200", put1.httpStatus === 200, JSON.stringify(put1).slice(0, 200));
-const putRows = JSON.parse(put1.vutmShellRows ?? "[]");
-check("12 o'clock now has 3 readings", putRows[0]?.c12?.length === 3, `got ${JSON.stringify(putRows[0]?.c12)}`);
-check("6 o'clock reduced to 1 reading", putRows[0]?.c6?.length === 1);
-check("min recomputed to 7.9 after adding reading", putRows[0]?.min === "7.9", `got ${putRows[0]?.min}`);
-check("nozzle min recomputed to 7.2", putRows[1]?.min === "7.2", `got ${putRows[1]?.min}`);
-check("dish/nozzle columns cleared on save", put1.vutmDishRows === "[]" && put1.vutmNozzleRows === "[]");
-
-// ─── 4. Legacy report shapes convert transparently ───
-console.log("── 4. Legacy H/V/dish/nozzle data converts, nothing lost ──");
-const legacy = await api("/api/pipeline-inspections", {
+// ─── 2. VERTICAL report — directions, dynamic readings ───
+console.log("── 2. VESSEL_UTM VERTICAL (directions) ──");
+const vert = await api("/api/pipeline-inspections", {
   method: "POST",
   body: JSON.stringify({
-    reportNumber: `VUTM-L-${ts}`,
+    ...base,
+    reportNumber: `VUTM-V2-${ts}`,
     reportType: "VESSEL_UTM",
     equipmentType: "VESSEL",
-    vesselOrientation: "VERTICAL", // legacy column value — ignored now
-    clientId: coro.id,
-    plantId: ennore.id,
-    pipelineDescription: "Legacy shape conversion test",
-    pipelineIdentificationNumber: "V-L-001",
+    vesselOrientation: "VERTICAL",
+    pipelineDescription: "Vertical survey vessel",
+    pipelineIdentificationNumber: "V-V-101",
+    vutmDateOfExamination: "2026-11-14",
+    vutmMethod: "Contact Pulse Echo",
     vutmShellRows: JSON.stringify([
-      // Legacy VERTICAL shell rows: one row per direction.
+      { moc: "Carbon Steel", componentType: "Shell-1", componentId: "S-01", nominalThickness: "12",
+        direction: "North", readings: ["9.8", "9.6"] },
+      { moc: "Carbon Steel", componentType: "Shell-1", componentId: "S-01", nominalThickness: "12",
+        direction: "East", readings: ["9.4"] },
+      { moc: "Carbon Steel", componentType: "Shell-1", componentId: "S-01", nominalThickness: "12",
+        direction: "South", readings: ["9.2", "9.5"] },
+      { moc: "Carbon Steel", componentType: "Shell-1", componentId: "S-01", nominalThickness: "12",
+        direction: "West", readings: ["9.0"] },
+      { moc: "SS304", componentType: "Nozzle", componentId: "N2", nominalThickness: "8",
+        direction: "East", readings: ["7.8"] },
+    ]),
+  }),
+});
+check("POST creates VERTICAL VESSEL_UTM (201)", vert.httpStatus === 201, JSON.stringify(vert).slice(0, 200));
+check("vesselOrientation = VERTICAL stored", vert.vesselOrientation === "VERTICAL", `got ${vert.vesselOrientation}`);
+const vRows = JSON.parse(vert.vutmShellRows ?? "[]");
+check("vertical rows kept as direction rows (5)", vRows.length === 5, `got ${vRows.length}`);
+check("North row readings preserved (2)", vRows[0]?.direction === "North" && vRows[0]?.readings?.length === 2, `got ${JSON.stringify(vRows[0])}`);
+check("North row min = 9.6", vRows[0]?.min === "9.6", `got ${vRows[0]?.min}`);
+check("West row min = 9.0", vRows[3]?.min === "9.0", `got ${vRows[3]?.min}`);
+check("nozzle direction row min = 7.8", vRows[4]?.min === "7.8", `got ${vRows[4]?.min}`);
+const vertId = vert.id;
+
+// ─── 3. Report WITHOUT orientation → null, clock rows (default) ───
+console.log("── 3. No orientation sent → null, clock rows ──");
+const noOri = await api("/api/pipeline-inspections", {
+  method: "POST",
+  body: JSON.stringify({
+    ...base,
+    reportNumber: `VUTM-N2-${ts}`,
+    reportType: "VESSEL_UTM",
+    equipmentType: "VESSEL",
+    pipelineDescription: "No orientation report",
+    vutmShellRows: JSON.stringify([
+      { moc: "CS", componentType: "Shell-2", componentId: "S-02", nominalThickness: "10",
+        c12: ["9.9", "9.8"], c3: ["9.7"], c6: ["9.6"], c9: ["9.5"] },
+    ]),
+  }),
+});
+check("POST without orientation (201)", noOri.httpStatus === 201);
+check("vesselOrientation stored null", noOri.vesselOrientation === null || noOri.vesselOrientation === undefined, `got ${noOri.vesselOrientation}`);
+const nRows = JSON.parse(noOri.vutmShellRows ?? "[]");
+check("clock rows normalized + min 9.5", nRows[0]?.min === "9.5", `got ${nRows[0]?.min}`);
+
+// ─── 4. Legacy shapes convert per orientation, nothing lost ───
+console.log("── 4. Legacy conversion (VERTICAL + HORIZONTAL) ──");
+const legacyV = await api("/api/pipeline-inspections", {
+  method: "POST",
+  body: JSON.stringify({
+    ...base,
+    reportNumber: `VUTM-LV-${ts}`,
+    reportType: "VESSEL_UTM",
+    equipmentType: "VESSEL",
+    vesselOrientation: "VERTICAL",
+    pipelineDescription: "Legacy vertical shapes",
+    // Legacy VERTICAL shell rows: direction + fixed Spot 1–4.
+    vutmShellRows: JSON.stringify([
       { moc: "Carbon Steel", componentType: "Shell-1", direction: "North", nominalThickness: "12",
         spot1: "12.1", spot2: "12.0", spot3: "11.9", spot4: "11.8" },
       { moc: "Carbon Steel", componentType: "Shell-1", direction: "East", nominalThickness: "12",
         spot1: "11.7", spot2: "11.6", spot3: "11.5", spot4: "11.4" },
-      { moc: "Carbon Steel", componentType: "Shell-1", direction: "South", nominalThickness: "12",
-        spot1: "11.3", spot2: "11.2", spot3: "11.1", spot4: "11.0" },
-      { moc: "Carbon Steel", componentType: "Shell-1", direction: "West", nominalThickness: "12",
-        spot1: "10.9", spot2: "10.8", spot3: "10.7", spot4: "10.6" },
     ]),
+    // Legacy dish + nozzle columns.
     vutmDishRows: JSON.stringify([
       { component: "Bottom Dish", direction: "South", spot1: "9.9", spot2: "9.8", spot3: "9.7", spot4: "9.6" },
     ]),
     vutmNozzleRows: JSON.stringify([
-      { nozzleId: "N2", nominalThickness: "8", size: '2"', schedule: "SCH 40", moc: "SS304", spot1: "7.5", spot2: "7.4", spot3: "7.3", spot4: "7.2" },
+      { nozzleId: "N3", nominalThickness: "8", size: '2"', schedule: "SCH 40", moc: "SS304", spot1: "7.5", spot2: "7.4", spot3: "7.3", spot4: "7.2" },
     ]),
   }),
 });
-check("POST legacy-shaped report (201)", legacy.httpStatus === 201, JSON.stringify(legacy).slice(0, 200));
-const legacyRows = JSON.parse(legacy.vutmShellRows ?? "[]");
-check("4 direction rows merged into ONE Shell-1 row", legacyRows.length === 1 && legacyRows[0]?.componentType === "Shell-1", `got ${legacyRows.length}`);
-check("North → 12 o'clock (4 readings)", legacyRows[0]?.c12?.length === 4 && legacyRows[0]?.c12?.[0] === "12.1", `got ${JSON.stringify(legacyRows[0]?.c12)}`);
-check("East → 3 o'clock", legacyRows[0]?.c3?.[0] === "11.7", `got ${JSON.stringify(legacyRows[0]?.c3)}`);
-check("South → 6 o'clock", legacyRows[0]?.c6?.[0] === "11.3");
-check("West → 9 o'clock", legacyRows[0]?.c9?.[0] === "10.9");
-check("legacy min = 10.6 across merged directions", legacyRows[0]?.min === "10.6", `got ${legacyRows[0]?.min}`);
-const legacyDish = JSON.parse(legacy.vutmDishRows ?? "[]");
-check("legacy dish → unified row (Top/Bottom Dish in componentType)", legacyDish.length === 1 && legacyDish[0]?.componentType === "Bottom Dish", `got ${JSON.stringify(legacyDish[0])}`);
-check("legacy dish readings kept (South→6 o'clock)", legacyDish[0]?.c6?.length === 4 && legacyDish[0]?.min === "9.6", `got ${legacyDish[0]?.min}`);
-const legacyNoz = JSON.parse(legacy.vutmNozzleRows ?? "[]");
-check("legacy nozzle → unified Nozzle row, spots map to 12/3/6/9", legacyNoz.length === 1 && legacyNoz[0]?.componentType === "Nozzle" && legacyNoz[0]?.componentId === "N2", `got ${JSON.stringify(legacyNoz[0])}`);
-check("legacy nozzle min = 7.2", legacyNoz[0]?.min === "7.2", `got ${legacyNoz[0]?.min}`);
+const lvRows = JSON.parse(legacyV.vutmShellRows ?? "[]");
+check("legacy direction rows → readings arrays", lvRows.length === 2 && lvRows[0]?.direction === "North" && lvRows[0]?.readings?.length === 4, `got ${JSON.stringify(lvRows[0])}`);
+check("legacy North min = 11.8", lvRows[0]?.min === "11.8", `got ${lvRows[0]?.min}`);
+const lvDish = JSON.parse(legacyV.vutmDishRows ?? "[]");
+check("legacy dish → direction row (South, 4 readings)", lvDish.length === 1 && lvDish[0]?.direction === "South" && lvDish[0]?.readings?.length === 4 && lvDish[0]?.min === "9.6", `got ${JSON.stringify(lvDish[0])}`);
+const lvNoz = JSON.parse(legacyV.vutmNozzleRows ?? "[]");
+check("legacy nozzle → 4 direction rows (N/E/S/W)", lvNoz.length === 4 && lvNoz[0]?.direction === "North" && lvNoz[3]?.direction === "West", `got ${JSON.stringify(lvNoz.map(r => r.direction))}`);
+check("legacy nozzle readings preserved", lvNoz[0]?.readings?.[0] === "7.5" && lvNoz[3]?.readings?.[0] === "7.2", "");
 
-// Old horizontal legacy shape (4 fixed spots per clock) also still loads.
 const legacyH = await api("/api/pipeline-inspections", {
   method: "POST",
   body: JSON.stringify({
-    reportNumber: `VUTM-LH-${ts}`,
+    ...base,
+    reportNumber: `VUTM-LH2-${ts}`,
     reportType: "VESSEL_UTM",
     equipmentType: "VESSEL",
     vesselOrientation: "HORIZONTAL",
-    clientId: coro.id,
-    plantId: ennore.id,
-    pipelineDescription: "Legacy horizontal shape",
+    pipelineDescription: "Legacy horizontal shapes",
     vutmShellRows: JSON.stringify([
       { moc: "CS", componentType: "Shell-2", componentId: "S-02", nominalThickness: "10",
         c12: ["9.9", "9.8", "9.7", "9.6"], c3: ["9.5"], c6: [], c9: ["9.2", "9.1"] },
     ]),
   }),
 });
-const legacyHRows = JSON.parse(legacyH.vutmShellRows ?? "[]");
-check("legacy horizontal rows pass through with all spots", legacyHRows[0]?.c12?.length === 4 && legacyHRows[0]?.c12?.[3] === "9.6", `got ${JSON.stringify(legacyHRows[0]?.c12)}`);
-check("legacy horizontal min = 9.1", legacyHRows[0]?.min === "9.1", `got ${legacyHRows[0]?.min}`);
+const lhRows = JSON.parse(legacyH.vutmShellRows ?? "[]");
+check("legacy horizontal rows pass through with all spots", lhRows[0]?.c12?.length === 4 && lhRows[0]?.min === "9.1", `got ${JSON.stringify(lhRows[0])}`);
 
-// ─── 5. PDF: unified layout, entered readings only, no orientation ───
-console.log("── 5. PDF output ──");
-const pdfRes = await fetch(`${BASE}/api/pipeline-inspections/${utmId}/pdf?orientation=landscape`, { headers: H });
-check("PDF 200", pdfRes.status === 200, `${pdfRes.status}`);
-const pdfBuf = Buffer.from(await pdfRes.arrayBuffer());
-fs.writeFileSync(`/tmp/vutm-clock-${ts}.pdf`, pdfBuf);
-check("PDF is a real PDF", pdfBuf.subarray(0, 4).toString() === "%PDF");
-const { execSync } = await import("child_process");
-let txt = "";
-try { txt = execSync(`pdftotext /tmp/vutm-clock-${ts}.pdf - 2>/dev/null`, { encoding: "utf8" }); } catch {}
-check("pdftotext available + extracted", txt.length > 100, `len=${txt.length}`);
-check("PDF shows UT Thickness Measurement Parameters", txt.includes("UT Thickness Measurement Parameters"));
-check("PDF shows UT Thickness Measurement Readings", txt.includes("UT Thickness Measurement Readings"));
-check("PDF shows Component Measurements (Clock Positions)", txt.includes("Component Measurements (Clock Positions)"));
-check("PDF shows all entered readings (8.2)", txt.includes("8.2"));
-check("PDF shows added reading (7.9)", txt.includes("7.9"));
-check("PDF shows min 7.9", txt.includes("7.9"));
-check("PDF shows Nozzle component row", txt.includes("Nozzle"));
-check("PDF shows Top Dish component row", txt.includes("Top Dish"));
-check("PDF does NOT mention Orientation", !/orientation/i.test(txt), "found orientation text");
+// ─── 5. PUT — add readings dynamically, min recomputes ───
+console.log("── 5. PUT — dynamic add / change readings ──");
+const hEdited = JSON.parse(JSON.stringify(hRows));
+hEdited[0].c12.push("7.9");              // + Add Reading on 12 o'clock
+hEdited[0].c6 = ["8.0"];                 // remove reading on 6 o'clock
+const putH = await api(`/api/pipeline-inspections/${horizId}`, {
+  method: "PUT",
+  body: JSON.stringify({ vutmShellRows: JSON.stringify(hEdited), vesselOrientation: "HORIZONTAL", vutmDishRows: "[]", vutmNozzleRows: "[]" }),
+});
+check("HORIZONTAL PUT 200", putH.httpStatus === 200, JSON.stringify(putH).slice(0, 160));
+const putHRows = JSON.parse(putH.vutmShellRows ?? "[]");
+check("12 o'clock now has 3 readings", putHRows[0]?.c12?.length === 3);
+check("min recomputed to 7.9", putHRows[0]?.min === "7.9", `got ${putHRows[0]?.min}`);
 
-const pdfLegacyRes = await fetch(`${BASE}/api/pipeline-inspections/${legacy.id}/pdf?orientation=landscape`, { headers: H });
-const pdfLegacyBuf = Buffer.from(await pdfLegacyRes.arrayBuffer());
-fs.writeFileSync(`/tmp/vutm-legacy-${ts}.pdf`, pdfLegacyBuf);
-let ltxt = "";
-try { ltxt = execSync(`pdftotext /tmp/vutm-legacy-${ts}.pdf - 2>/dev/null`, { encoding: "utf8" }); } catch {}
-check("legacy PDF renders all converted readings (10.6 min)", ltxt.includes("10.6"), "");
-check("legacy PDF keeps dish readings (9.6)", ltxt.includes("9.6"));
-check("legacy PDF keeps nozzle readings (7.2)", ltxt.includes("7.2"));
-check("legacy PDF does NOT mention Orientation", !/orientation/i.test(ltxt), "");
+const vEdited = JSON.parse(JSON.stringify(vRows));
+vEdited[1].readings.push("8.8");         // + Add Reading on East row
+const putV = await api(`/api/pipeline-inspections/${vertId}`, {
+  method: "PUT",
+  body: JSON.stringify({ vutmShellRows: JSON.stringify(vEdited), vesselOrientation: "VERTICAL", vutmDishRows: "[]", vutmNozzleRows: "[]" }),
+});
+check("VERTICAL PUT 200", putV.httpStatus === 200, JSON.stringify(putV).slice(0, 160));
+const putVRows = JSON.parse(putV.vutmShellRows ?? "[]");
+check("East row now has 2 readings", putVRows[1]?.readings?.length === 2);
+check("East min recomputed to 8.8", putVRows[1]?.min === "8.8", `got ${putVRows[1]?.min}`);
+check("orientation unchanged on edit", putV.vesselOrientation === "VERTICAL");
 
-// ─── 6. Regression — all other modules work without any orientation ───
-console.log("── 6. Regression: other modules unchanged ──");
-const base = {
-  clientId: coro.id, plantId: ennore.id,
-  pipelineDescription: "Regression check", pipelineIdentificationNumber: "R-001",
-  inspectionDate: "2026-11-14", fromDate: "2026-11-14", toDate: "2026-11-14",
-};
-for (const [type, num] of [
-  ["PIPELINE_DPT", `RGS-DPT-${ts}`], ["PIPELINE_MPT", `RGS-MPT-${ts}`],
-  ["PIPELINE_THICKNESS", `RGS-PT-${ts}`], ["VESSEL_DPT", `RGS-VDPT-${ts}`],
-  ["VESSEL_MPT", `RGS-VMPT-${ts}`], ["VESSEL_WELD_SCAN", `RGS-VWS-${ts}`],
+// ─── 6. PDF — orientation line + correct structure ───
+console.log("── 6. PDF output (H and V) ──");
+const pdfH = await fetch(`${BASE}/api/pipeline-inspections/${horizId}/pdf?orientation=landscape`, { headers: H });
+const pdfHBuf = Buffer.from(await pdfH.arrayBuffer());
+fs.writeFileSync(`/tmp/vutm-h2-${ts}.pdf`, pdfHBuf);
+check("HORIZONTAL PDF 200", pdfH.status === 200 && pdfHBuf.subarray(0, 4).toString() === "%PDF");
+let htxt = "";
+try { htxt = execSync(`pdftotext /tmp/vutm-h2-${ts}.pdf - 2>/dev/null`, { encoding: "utf8" }); } catch {}
+check("H PDF: Equipment Type: Vessel", htxt.includes("Equipment Type: Vessel"));
+check("H PDF: Inspection: UT Thickness Measurement", htxt.includes("Inspection: UT Thickness Measurement"));
+check("H PDF: Orientation: Horizontal", htxt.includes("Orientation: Horizontal"));
+check("H PDF: clock table heading", htxt.includes("Component Measurements (Clock Positions)"));
+check("H PDF: 12 O'clock column", /12 O'?clock/.test(htxt));
+check("H PDF: added reading 7.9 + min 7.9", htxt.includes("7.9"));
+check("H PDF: no direction table", !htxt.includes("Component Measurements (Directions)"));
+check("H PDF: cover shows Vessel Orientation row", htxt.includes("Vessel Orientation") && htxt.includes("Horizontal Vessel"));
+
+const pdfV = await fetch(`${BASE}/api/pipeline-inspections/${vertId}/pdf?orientation=landscape`, { headers: H });
+const pdfVBuf = Buffer.from(await pdfV.arrayBuffer());
+fs.writeFileSync(`/tmp/vutm-v2-${ts}.pdf`, pdfVBuf);
+check("VERTICAL PDF 200", pdfV.status === 200 && pdfVBuf.subarray(0, 4).toString() === "%PDF");
+let vtxt = "";
+try { vtxt = execSync(`pdftotext /tmp/vutm-v2-${ts}.pdf - 2>/dev/null`, { encoding: "utf8" }); } catch {}
+check("V PDF: Orientation: Vertical", vtxt.includes("Orientation: Vertical"));
+check("V PDF: direction table heading", vtxt.includes("Component Measurements (Directions)"));
+check("V PDF: Direction column + North/East rows", vtxt.includes("Direction") && vtxt.includes("North") && vtxt.includes("East"));
+check("V PDF: added reading 8.8 + min 8.8", vtxt.includes("8.8"));
+check("V PDF: no clock table", !vtxt.includes("Component Measurements (Clock Positions)"));
+
+// ─── 7. Regression — orientation accepted ONLY for VESSEL_UTM ───
+console.log("── 7. Regression: other modules never get an orientation ──");
+for (const [type, num, eq] of [
+  ["PIPELINE_DPT", `RGS2-DPT-${ts}`, "PIPING"],
+  ["PIPELINE_MPT", `RGS2-MPT-${ts}`, "PIPING"],
+  ["PIPELINE_THICKNESS", `RGS2-PT-${ts}`, "PIPING"],
+  ["VESSEL_DPT", `RGS2-VDPT-${ts}`, "VESSEL"],
+  ["VESSEL_MPT", `RGS2-VMPT-${ts}`, "VESSEL"],
+  ["VESSEL_WELD_SCAN", `RGS2-VWS-${ts}`, "VESSEL"],
 ]) {
+  // Send vesselOrientation: "HORIZONTAL" — it must be IGNORED (stored null).
   const r = await api("/api/pipeline-inspections", {
     method: "POST",
-    body: JSON.stringify({ ...base, reportNumber: num, reportType: type, equipmentType: type.startsWith("VESSEL") ? "VESSEL" : "PIPING" }),
+    body: JSON.stringify({
+      ...base, reportNumber: num, reportType: type, equipmentType: eq,
+      vesselOrientation: "HORIZONTAL",
+      pipelineDescription: "Regression check", pipelineIdentificationNumber: "R-002",
+      inspectionDate: "2026-11-14", fromDate: "2026-11-14", toDate: "2026-11-14",
+    }),
   });
-  check(`${type} creates without orientation (201)`, r.httpStatus === 201, JSON.stringify(r).slice(0, 160));
-  check(`${type} vesselOrientation null`, r.vesselOrientation === null || r.vesselOrientation === undefined);
+  check(`${type} creates (201) even with orientation in payload`, r.httpStatus === 201, JSON.stringify(r).slice(0, 140));
+  check(`${type} vesselOrientation forced to null`, r.vesselOrientation === null || r.vesselOrientation === undefined, `got ${r.vesselOrientation}`);
 }
-const pipingList = await api("/api/pipeline-inspections?limit=100");
-check("report list still loads", pipingList.httpStatus === 200 && Array.isArray(pipingList.items));
+const list = await api("/api/pipeline-inspections?limit=100");
+check("report list still loads", list.httpStatus === 200 && Array.isArray(list.items));
 
 console.log(`\n═══ RESULT: ${pass} passed, ${fail} failed ═══`);
 process.exit(fail === 0 ? 0 : 1);

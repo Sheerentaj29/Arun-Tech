@@ -10,6 +10,8 @@ import {
   ChevronRight,
   Workflow,
   Cylinder,
+  MoveHorizontal,
+  MoveVertical,
   Eye,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -100,17 +102,34 @@ const VESSEL_OPTIONS: TypeOption[] = [
   },
 ];
 
-type Stage = "equipment" | "test";
+// Vessel UT Thickness Measurement is the ONLY module that requires a
+// vessel orientation (Horizontal / Vertical) before the form opens:
+// horizontal vessels measure at the 12 / 3 / 6 / 9 o'clock positions,
+// vertical vessels in the East / West / North / South directions.
+// DPT, MPT, Weld Scan, Visual Inspection and every Piping module
+// deliberately do NOT ask for an orientation.
+const ORIENTATION_REQUIRED_TYPE: PipelineReportType = "VESSEL_UTM";
+
+// Label used by the Step-3 breadcrumb for the orientation stage.
+const ORIENTATION_STAGE_TEST_LABELS: Partial<Record<PipelineReportType, string>> = {
+  VESSEL_UTM: "UT Thickness Measurement",
+};
+
+type Stage = "equipment" | "test" | "orientation";
 
 export function PipelineReportTypeSelectorView() {
   const { setView, openNewPipelineReportWithSelection } = useAppStore();
-  // Stage 1: Equipment Type → Stage 2: Test Type → form.
-  // (No orientation stage — the report form opens directly.)
+  // Stage 1: Equipment Type → Stage 2: Test Type → (VESSEL_UTM only)
+  // Stage 3: Vessel Orientation → form. Every other test type opens its
+  // form directly after Stage 2.
   const [stage, setStage] = useState<Stage>("equipment");
   const [equipmentType, setEquipmentType] = useState<"PIPING" | "VESSEL" | null>(null);
+  // Test type picked in Stage 2. Kept so the orientation stage knows
+  // which test the orientation is being selected for.
+  const [selectedTestType, setSelectedTestType] = useState<PipelineReportType | null>(null);
 
   const options = equipmentType === "VESSEL" ? VESSEL_OPTIONS : PIPING_OPTIONS;
-  const stepNumber = stage === "equipment" ? 1 : 2;
+  const stepNumber = stage === "equipment" ? 1 : stage === "test" ? 2 : 3;
 
   function pickEquipment(t: "PIPING" | "VESSEL") {
     setEquipmentType(t);
@@ -119,7 +138,20 @@ export function PipelineReportTypeSelectorView() {
 
   function pickTest(opt: TypeOption) {
     if (opt.comingSoon) return;
+    // Vessel UT Thickness Measurement requires the orientation step
+    // before the form opens — it cannot be skipped. Every other test
+    // type opens its form directly.
+    if (opt.type === ORIENTATION_REQUIRED_TYPE) {
+      setSelectedTestType(opt.type);
+      setStage("orientation");
+      return;
+    }
     openNewPipelineReportWithSelection(opt.type, equipmentType);
+  }
+
+  function pickOrientation(orientation: "HORIZONTAL" | "VERTICAL") {
+    if (!selectedTestType) return;
+    openNewPipelineReportWithSelection(selectedTestType, equipmentType, orientation);
   }
 
   return (
@@ -152,7 +184,9 @@ export function PipelineReportTypeSelectorView() {
           <span className="font-medium">
             {stage === "equipment"
               ? "Select Equipment Type"
-              : "Select Test Type"}
+              : stage === "test"
+                ? "Select Test Type"
+                : "Select Vessel Orientation"}
           </span>
           <span className="text-muted-foreground ml-auto">Choose one →</span>
         </div>
@@ -164,6 +198,14 @@ export function PipelineReportTypeSelectorView() {
                 ? "Vessel"
                 : "Piping"}
           </span>
+          {stage === "orientation" && selectedTestType && (
+            <>
+              <span>→</span>
+              <span className="font-medium text-emerald-700">
+                {ORIENTATION_STAGE_TEST_LABELS[selectedTestType] ?? selectedTestType}
+              </span>
+            </>
+          )}
         </div>
       </div>
 
@@ -272,11 +314,72 @@ export function PipelineReportTypeSelectorView() {
         </div>
       )}
 
+      {/* ─── STAGE 3: VESSEL ORIENTATION (Vessel UT Thickness Measurement ONLY) ─── */}
+      {stage === "orientation" && (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {([
+            {
+              key: "HORIZONTAL",
+              title: "Horizontal",
+              description: "Measurements at the 12 / 3 / 6 / 9 o'clock positions",
+              icon: MoveHorizontal,
+              accent: "border-emerald-500 bg-emerald-50 hover:bg-emerald-100",
+            },
+            {
+              key: "VERTICAL",
+              title: "Vertical",
+              description: "Measurements in the East / West / North / South directions",
+              icon: MoveVertical,
+              accent: "border-blue-500 bg-blue-50 hover:bg-blue-100",
+            },
+          ] as const).map((opt) => {
+            const Icon = opt.icon;
+            return (
+              <Card
+                key={opt.key}
+                className={`cursor-pointer border-2 transition-all hover:shadow-md ${opt.accent}`}
+                onClick={() => pickOrientation(opt.key)}
+              >
+                <CardContent className="flex h-full flex-col p-6">
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-md bg-white shrink-0">
+                      <Icon className="h-8 w-8" />
+                    </div>
+                    <div>
+                      <div className="font-semibold text-lg">{opt.title}</div>
+                      <div className="text-xs text-muted-foreground">{opt.description}</div>
+                    </div>
+                  </div>
+                  <div className="mt-4 flex items-center justify-end">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        pickOrientation(opt.key);
+                      }}
+                    >
+                      Select <ChevronRight className="ml-1 h-3 w-3" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
       {/* Back navigation between stages */}
       <div>
         {stage === "test" && (
           <Button variant="ghost" size="sm" onClick={() => setStage("equipment")}>
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to Equipment Type
+          </Button>
+        )}
+        {stage === "orientation" && (
+          <Button variant="ghost" size="sm" onClick={() => setStage("test")}>
+            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Test Type
           </Button>
         )}
       </div>

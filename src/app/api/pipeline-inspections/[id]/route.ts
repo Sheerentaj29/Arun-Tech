@@ -286,15 +286,21 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       wsInstrumentRows: body.wsInstrumentRows !== undefined ? body.wsInstrumentRows : existing.wsInstrumentRows,
       wsProbeRows: body.wsProbeRows !== undefined ? body.wsProbeRows : existing.wsProbeRows,
       wsTestResultRows: body.wsTestResultRows !== undefined ? body.wsTestResultRows : existing.wsTestResultRows,
-      // ─── EQUIPMENT TYPE ───
-      // Only updated when the form explicitly sends it; existing values
-      // are preserved otherwise. vesselOrientation is no longer written —
-      // the Horizontal / Vertical selection was removed from the
-      // application (legacy rows keep their stored value, unused).
+      // ─── EQUIPMENT TYPE + VESSEL ORIENTATION ───
+      // Only updated when the form explicitly sends them; existing values
+      // are preserved otherwise. vesselOrientation is updatable ONLY for
+      // VESSEL_UTM reports (the only module with an orientation); other
+      // report types keep their existing value untouched.
       equipmentType:
         body.equipmentType !== undefined
           ? (body.equipmentType === "PIPING" || body.equipmentType === "VESSEL" ? body.equipmentType : null)
           : existing.equipmentType,
+      vesselOrientation:
+        existing.reportType === "VESSEL_UTM" &&
+        body.vesselOrientation !== undefined &&
+        (body.vesselOrientation === "HORIZONTAL" || body.vesselOrientation === "VERTICAL")
+          ? body.vesselOrientation
+          : existing.vesselOrientation,
       // ─── VESSEL DPT CONSUMABLE DETAILS (Make / Product / Batch / Expiry) ───
       vdptSolventMake: body.vdptSolventMake !== undefined ? (body.vdptSolventMake?.trim() || null) : existing.vdptSolventMake,
       vdptSolventProduct: body.vdptSolventProduct !== undefined ? (body.vdptSolventProduct?.trim() || null) : existing.vdptSolventProduct,
@@ -369,12 +375,44 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       vutmCouplant: body.vutmCouplant !== undefined ? (body.vutmCouplant?.trim() || null) : existing.vutmCouplant,
       vutmSurfacePreparation: body.vutmSurfacePreparation !== undefined ? (body.vutmSurfacePreparation?.trim() || null) : existing.vutmSurfacePreparation,
       vutmSurfaceFinish: body.vutmSurfaceFinish !== undefined ? (body.vutmSurfaceFinish?.trim() || null) : existing.vutmSurfaceFinish,
+      // Readings rows are normalized to the report's orientation shape
+      // (VESSEL_UTM only): HORIZONTAL → clock rows, VERTICAL → direction
+      // rows. The orientation sent by the form matches the stored one;
+      // fall back to the stored value. The legacy dish/nozzle columns use
+      // the same orientation so their rows convert consistently.
       vutmShellRows:
         body.vutmShellRows !== undefined
-          ? normalizeVutmRows(body.vutmShellRows)
+          ? normalizeVutmRows(
+              body.vutmShellRows,
+              (body.vesselOrientation === "VERTICAL" || body.vesselOrientation === "HORIZONTAL"
+                ? body.vesselOrientation
+                : (existing.vesselOrientation as string | null)) === "VERTICAL"
+                ? "VERTICAL"
+                : "HORIZONTAL",
+            )
           : existing.vutmShellRows,
-      vutmDishRows: body.vutmDishRows !== undefined ? normalizeVutmRows(body.vutmDishRows) : existing.vutmDishRows,
-      vutmNozzleRows: body.vutmNozzleRows !== undefined ? normalizeVutmRows(body.vutmNozzleRows) : existing.vutmNozzleRows,
+      vutmDishRows:
+        body.vutmDishRows !== undefined
+          ? normalizeVutmRows(
+              body.vutmDishRows,
+              (body.vesselOrientation === "VERTICAL" || body.vesselOrientation === "HORIZONTAL"
+                ? body.vesselOrientation
+                : (existing.vesselOrientation as string | null)) === "VERTICAL"
+                ? "VERTICAL"
+                : "HORIZONTAL",
+            )
+          : existing.vutmDishRows,
+      vutmNozzleRows:
+        body.vutmNozzleRows !== undefined
+          ? normalizeVutmRows(
+              body.vutmNozzleRows,
+              (body.vesselOrientation === "VERTICAL" || body.vesselOrientation === "HORIZONTAL"
+                ? body.vesselOrientation
+                : (existing.vesselOrientation as string | null)) === "VERTICAL"
+                ? "VERTICAL"
+                : "HORIZONTAL",
+            )
+          : existing.vutmNozzleRows,
     },
   });
 

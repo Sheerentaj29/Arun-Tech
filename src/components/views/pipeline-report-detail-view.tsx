@@ -38,7 +38,7 @@ import {
 import { useAppStore } from "@/lib/store";
 import { apiFetch } from "@/lib/api-client";
 import { AuthImage } from "@/components/auth-image";
-import { vutmMinOfSpots, vutmUnifiedRowsFromReport } from "@/lib/vutm-rows";
+import { vutmMinOfSpots, vutmRowsFromReport, type VutmClockRow } from "@/lib/vutm-rows";
 import { resolveClientLogo } from "@/lib/client-logo-mapping";
 import {
   parseThicknessTablesConfig,
@@ -64,8 +64,11 @@ interface FullReport {
     | "VESSEL_MPT"
     | "VESSEL_WELD_SCAN"
     | "VESSEL_UTM";
-  // Equipment type ("PIPING" | "VESSEL") from the report-creation flow
+  // Equipment type ("PIPING" | "VESSEL") from the report-creation flow.
+  // vesselOrientation is set ONLY for VESSEL_UTM reports (the orientation
+  // decides the readings-table structure); null for legacy rows.
   equipmentType?: string | null;
+  vesselOrientation?: string | null;
   clientId: string;
   plantId: string;
   inspectionArea: string | null;
@@ -833,10 +836,19 @@ export function PipelineReportDetailView() {
             ["Plant Name", report.plant.name],
             ["Inspection Area", report.inspectionArea ?? "—"],
             // All Vessel reports use equipment wording in the header grid.
+            // Only VESSEL_UTM reports carry a Vessel Orientation (the UT
+            // Thickness Measurement module is the only one that asks for
+            // one) — shown as an extra header row for that report type.
             ...(report.reportType === "VESSEL_DPT" || report.reportType === "VESSEL_MPT" || report.reportType === "VESSEL_UTM" || report.reportType === "VESSEL_WELD_SCAN"
               ? [
                   ["Equipment / Vessel Description", report.pipelineDescription ?? "—"],
                   ["Equipment Identification No.", report.pipelineIdentificationNumber ?? "—"],
+                  ...(report.reportType === "VESSEL_UTM"
+                    ? [["Vessel Orientation",
+                        report.vesselOrientation === "VERTICAL" ? "Vertical Vessel"
+                        : report.vesselOrientation === "HORIZONTAL" ? "Horizontal Vessel"
+                        : "Horizontal Vessel (default)"]] as Array<[string, string]>
+                    : []),
                 ]
               : [
                     ["Pipeline Description", report.pipelineDescription ?? "—"],
@@ -1565,10 +1577,14 @@ export function PipelineReportDetailView() {
             const parsed = JSON.parse(report.vutmLwProbeRows ?? "[]");
             if (Array.isArray(parsed) && parsed.length > 0) utmProbes = parsed;
           } catch {}
-          const utmRows = vutmUnifiedRowsFromReport(
+          // The orientation (VESSEL_UTM only) decides the readings-table
+          // structure: VERTICAL → direction rows, otherwise clock rows.
+          const utmIsVertical = report.vesselOrientation === "VERTICAL";
+          const utmRows = vutmRowsFromReport(
             report.vutmShellRows,
             report.vutmDishRows,
             report.vutmNozzleRows,
+            (report.vesselOrientation as "HORIZONTAL" | "VERTICAL" | null) ?? null,
           );
           const utmParamGroups: Array<{ title: string; rows: Array<[string, string | null | undefined, boolean?]> }> = [
             {
@@ -1616,10 +1632,13 @@ export function PipelineReportDetailView() {
           const minCell = (min: unknown) => (min && String(min).trim() ? String(min) : "—");
           return (
             <div className="mt-6 space-y-6">
-              {/* Equipment type badge */}
+              {/* Equipment type + Vessel Orientation badges (UTM only) */}
               <div className="flex items-center gap-2 flex-wrap">
                 <Badge variant="outline" className="border-emerald-400 text-emerald-700">
                   Equipment: Vessel
+                </Badge>
+                <Badge variant="outline" className="border-emerald-400 text-emerald-700">
+                  {utmIsVertical ? "Vertical Vessel" : "Horizontal Vessel"}
                 </Badge>
               </div>
 
@@ -1692,12 +1711,55 @@ export function PipelineReportDetailView() {
                 </div>
               )}
 
-              {/* UT Thickness Measurement Readings — unified clock-position table */}
+              {/* UT Thickness Measurement Readings — H/V structure follows
+                  the report's orientation (VESSEL_UTM only). */}
               <div>
                 <h3 className="mb-2 text-xs font-bold uppercase text-emerald-700 border-b border-emerald-300 pb-1">
-                  UT Thickness Measurement Readings — Components (Clock Positions)
+                  UT Thickness Measurement Readings — Components{" "}
+                  {utmIsVertical ? "(Directions)" : "(Clock Positions)"}
                 </h3>
                 <div className="overflow-x-auto">
+                  {utmIsVertical ? (
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-emerald-700 text-white">
+                          <th className="border border-emerald-800 px-2 py-2 text-center">MOC</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Component Type</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Component ID</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Nominal Thickness (mm)</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Direction</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Readings (mm)</th>
+                          <th className="border border-emerald-800 px-2 py-2 text-center">Minimum Measured Thickness (mm)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {utmRows.length === 0 && (
+                          <tr><td colSpan={7} className="text-center py-4 text-muted-foreground border border-zinc-300">No component measurement rows recorded.</td></tr>
+                        )}
+                        {utmRows.map((rowV, idx) => {
+                          const dirRow = rowV as import("@/lib/vutm-rows").VutmDirectionRow;
+                          const readings = (dirRow.readings ?? []).filter((s) => s && String(s).trim());
+                          return (
+                            <tr key={idx} className="hover:bg-muted/30 align-top">
+                              <td className="border border-zinc-300 px-2 py-1">{dirRow.moc || "—"}</td>
+                              <td className="border border-zinc-300 px-2 py-1">{dirRow.componentType || "—"}</td>
+                              <td className="border border-zinc-300 px-2 py-1">{dirRow.componentId || "—"}</td>
+                              <td className="border border-zinc-300 px-2 py-1 text-center">{dirRow.nominalThickness || "—"}</td>
+                              <td className="border border-zinc-300 px-2 py-1 text-center">{dirRow.direction || "—"}</td>
+                              <td className="border border-zinc-300 px-2 py-1 text-center">
+                                {readings.length > 0 ? (
+                                  <span className="whitespace-pre-line">{readings.join("\n")}</span>
+                                ) : "—"}
+                              </td>
+                              <td className="border border-zinc-300 px-2 py-1 text-center font-mono font-semibold">
+                                {minCell(vutmMinOfSpots(dirRow.readings))}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  ) : (
                   <table className="w-full border-collapse text-xs">
                     <thead>
                       <tr className="bg-emerald-700 text-white">
@@ -1733,12 +1795,18 @@ export function PipelineReportDetailView() {
                             </td>
                           ))}
                           <td className="border border-zinc-300 px-2 py-1 text-center font-mono font-semibold">
-                            {minCell(vutmMinOfSpots(row.c12, row.c3, row.c6, row.c9))}
+                            {minCell(vutmMinOfSpots(
+                              (row as VutmClockRow).c12,
+                              (row as VutmClockRow).c3,
+                              (row as VutmClockRow).c6,
+                              (row as VutmClockRow).c9,
+                            ))}
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
+                  )}
                 </div>
               </div>
             </div>

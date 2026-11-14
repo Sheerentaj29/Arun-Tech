@@ -454,11 +454,13 @@ model PipelineInspection {
   // ─── EQUIPMENT TYPE + VESSEL FIELDS ───
   // equipmentType records the selection made in the report-creation flow
   // ("PIPING" or "VESSEL"). Null for legacy rows created before this
-  // field existed. vesselOrientation is a legacy column only — the
-  // Horizontal / Vertical selection was removed from the application and
-  // new reports never carry one (old rows keep their stored value).
+  // field existed. vesselOrientation is required for VESSEL_UTM reports
+  // ONLY ("HORIZONTAL" or "VERTICAL" — the UT Thickness Measurement is
+  // the only module that asks for one; it decides the readings-table
+  // structure). Other report types store null; old Vessel DPT/MPT rows
+  // keep their legacy value but no longer display it.
   equipmentType             String?  // PIPING | VESSEL
-  vesselOrientation         String?  // LEGACY: no longer used by the UI
+  vesselOrientation         String?  // HORIZONTAL | VERTICAL (VESSEL_UTM only)
 
   // ─── VESSEL DPT CONSUMABLE DETAILS ───
   // Populated when reportType = VESSEL_DPT. Separate Make / Product /
@@ -552,10 +554,14 @@ model PipelineInspection {
   // Populated when reportType = VESSEL_UTM. Completely separate from the
   // Piping Thickness Measurement (reportType = PIPELINE_THICKNESS, which
   // uses the ThicknessMeasurement child table and stays untouched) and
-  // from the Vessel Weld Scan vws* fields above. The readings use ONE
-  // unified clock-position row shape (12 / 3 / 6 / 9 o'clock, dynamic
-  // readings per position) stored in vutmShellRows; vutmDishRows and
-  // vutmNozzleRows are legacy columns kept for old reports.
+  // from the Vessel Weld Scan vws* fields above. The readings shape
+  // follows the orientation (vesselOrientation, VESSEL_UTM only):
+  //   • HORIZONTAL → clock rows (12 / 3 / 6 / 9 o'clock, dynamic readings
+  //     per position) in vutmShellRows;
+  //   • VERTICAL   → direction rows (East / West / North / South, one row
+  //     per component + direction, dynamic readings) in vutmShellRows.
+  // vutmDishRows and vutmNozzleRows are legacy columns kept for old
+  // reports.
   // Parameters — UT Thickness Measurement Parameters form:
   vutmDateOfExamination     DateTime? // Date of Examination (calendar picker)
   vutmTestingStandard       String?  // Testing Standard

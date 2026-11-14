@@ -47,7 +47,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useAppStore, type PipelineReportType, type EquipmentType } from "@/lib/store";
+import { useAppStore, type PipelineReportType, type EquipmentType, type VesselOrientation } from "@/lib/store";
 import { apiFetch } from "@/lib/api-client";
 import { AuthImage } from "@/components/auth-image";
 import { resolveClientLogo } from "@/lib/client-logo-mapping";
@@ -62,16 +62,20 @@ import {
 } from "@/lib/thickness-tables";
 import {
   vutmMinOfSpots,
-  vutmUnifiedRowsFromReport,
+  vutmRowsFromReport,
   emptyVutmRow,
   VUTM_COMPONENT_TYPES,
+  VUTM_DIRECTIONS,
   VUTM_NOZZLE_ID_SUGGESTIONS,
   VUTM_MOC_SUGGESTIONS,
   VUTM_METHOD_SUGGESTIONS,
   VUTM_COUPLANT_SUGGESTIONS,
   VUTM_CRYSTAL_SUGGESTIONS,
   type VutmRow,
+  type VutmClockRow,
+  type VutmDirectionRow,
   type VutmClockKey,
+  type VesselOrientation as VutmOrientation,
 } from "@/lib/vutm-rows";
 import { toast } from "sonner";
 
@@ -246,8 +250,12 @@ interface ReportHeader {
   // sends it on POST (the API uses it on create; ignored on PUT).
   reportType: PipelineReportType;
   // Equipment type ("PIPING" | "VESSEL") selected in the report-creation
-  // flow. Persisted on the report.
+  // flow. Persisted on the report. vesselOrientation is set ONLY for
+  // VESSEL_UTM reports ("HORIZONTAL" | "VERTICAL" — picked in the
+  // selector) and decides the readings-table structure; "" for all
+  // other report types and legacy rows.
   equipmentType: string;
+  vesselOrientation: string;
   clientId: string;
   plantId: string;
   inspectionArea: string;
@@ -509,6 +517,7 @@ const EMPTY_HEADER: ReportHeader = {
   reportNumber: "",
   reportType: "PIPELINE_THICKNESS", // overwritten from store on first render
   equipmentType: "",
+  vesselOrientation: "",
   clientId: "",
   plantId: "",
   inspectionArea: "",
@@ -993,6 +1002,7 @@ export function PipelineReportFormView() {
     refresh,
     pendingPipelineReportType,
     pendingEquipmentType,
+    pendingVesselOrientation,
   } = useAppStore();
   const isEdit = !!editingPipelineReportId;
 
@@ -1003,6 +1013,9 @@ export function PipelineReportFormView() {
     // response in the edit-load effect.
     reportType: pendingPipelineReportType ?? "PIPELINE_THICKNESS",
     equipmentType: pendingEquipmentType ?? "",
+    // VESSEL_UTM only ("HORIZONTAL" | "VERTICAL" from the selector);
+    // null/"" for every other report type.
+    vesselOrientation: pendingVesselOrientation ?? "",
   }));
   const [rows, setRows] = useState<MeasurementRow[]>([]);
   // ─── Multi-table Thickness support ───
@@ -1106,9 +1119,11 @@ export function PipelineReportFormView() {
           // reportType is fixed at creation time. Read it from the API
           // response (defaults to PIPELINE_THICKNESS for legacy rows).
           reportType: (r.reportType as PipelineReportType) ?? "PIPELINE_THICKNESS",
-          // Equipment type (from the selector flow; null for legacy rows
-          // created before this field existed).
+          // Equipment type + vessel orientation (from the selector flow;
+          // vesselOrientation is only set for VESSEL_UTM reports and null
+          // for legacy rows created before it existed).
           equipmentType: r.equipmentType ?? "",
+          vesselOrientation: r.vesselOrientation ?? "",
           clientId: r.clientId,
           plantId: r.plantId,
           inspectionArea: r.inspectionArea ?? "",
@@ -1440,12 +1455,19 @@ export function PipelineReportFormView() {
         // JSON column (VESSEL_WELD_SCAN reports only).
         setVwsRows(parseVwsRows(r.vwsDetailRows));
         // Load Vessel UT Thickness Measurement readings rows (VESSEL_UTM
-        // reports). All legacy row shapes (horizontal clock rows with
-        // Spot 1–4, vertical direction rows, dish rows, nozzle rows) are
-        // converted into the unified clock-position shape, so a report
-        // always reopens with exactly the readings it was saved with.
+        // reports). Rows are converted to the report's orientation shape:
+        // HORIZONTAL → clock-position rows (12 / 3 / 6 / 9), VERTICAL →
+        // direction rows (East / West / North / South). All legacy row
+        // shapes (fixed Spot 1–4 rows, dish rows, nozzle rows) convert
+        // transparently, so a report always reopens with exactly the
+        // readings it was saved with.
         setVutmShellRows(
-          vutmUnifiedRowsFromReport(r.vutmShellRows, r.vutmDishRows, r.vutmNozzleRows),
+          vutmRowsFromReport(
+            r.vutmShellRows,
+            r.vutmDishRows,
+            r.vutmNozzleRows,
+            (r.vesselOrientation as VutmOrientation | null) ?? null,
+          ),
         );
       })
       .catch((e) => setError(e.message))
@@ -2737,23 +2759,33 @@ export function PipelineReportFormView() {
   // Rows live in local state and are persisted as the vutmShellRows JSON
   // column whenever the header is saved (no per-row API calls). Minimum
   // Measured Thickness is derived at render time from the readings —
-  // never stored in local state. Every clock position starts with ONE
-  // reading slot; the user can add more readings (+ Add Reading) or
-  // remove them again, without limit.
+  // never stored in local state. The row shape follows the orientation
+  // selected for the report (the ONLY module with an orientation):
+  //   • HORIZONTAL → clock rows: every clock position (12 / 3 / 6 / 9
+  //     o'clock) starts with ONE reading slot;
+  //   • VERTICAL   → direction rows: one row per component + direction
+  //     (East / West / North / South), each starting with ONE reading.
+  // The user can add more readings (+ Add Reading) or remove them again,
+  // without limit; the last remaining slot always stays.
 
   function addVutmShellRow() {
-    setVutmShellRows((arr) => [...arr, emptyVutmRow()]);
+    setVutmShellRows(
+      (arr) => [...arr, emptyVutmRow(header.vesselOrientation as VutmOrientation | null)],
+    );
   }
 
-  function updateVutmShellRow(idx: number, patch: Partial<VutmRow>) {
+  function updateVutmShellRow(
+    idx: number,
+    patch: Partial<VutmClockRow> | Partial<VutmDirectionRow>,
+  ) {
     setVutmShellRows((arr) => {
       const next = [...arr];
-      next[idx] = { ...next[idx], ...patch };
+      next[idx] = { ...next[idx], ...patch } as VutmRow;
       return next;
     });
   }
 
-  /** Update one reading of a clock-position group on a component row. */
+  /** Update one reading of a clock-position group on a HORIZONTAL row. */
   function updateVutmShellClockSpot(
     idx: number,
     clock: VutmClockKey,
@@ -2761,7 +2793,7 @@ export function PipelineReportFormView() {
     value: string,
   ) {
     setVutmShellRows((arr) => {
-      const cur = arr[idx];
+      const cur = arr[idx] as VutmClockRow;
       if (!cur) return arr;
       const spots = [...cur[clock]];
       spots[spotIdx] = value;
@@ -2772,14 +2804,49 @@ export function PipelineReportFormView() {
     });
   }
 
+  /** Update the direction of a VERTICAL row. */
+  function updateVutmDirection(idx: number, direction: string) {
+    setVutmShellRows((arr) => {
+      const cur = arr[idx] as VutmDirectionRow;
+      if (!cur) return arr;
+      const next = [...arr];
+      next[idx] = { ...cur, direction };
+      return next;
+    });
+  }
+
+  /** Update one reading of a VERTICAL direction row. */
+  function updateVutmDirReading(idx: number, readingIdx: number, value: string) {
+    setVutmShellRows((arr) => {
+      const cur = arr[idx] as VutmDirectionRow;
+      if (!cur) return arr;
+      const readings = [...cur.readings];
+      readings[readingIdx] = value;
+      const next = [...arr];
+      next[idx] = { ...cur, readings };
+      return next;
+    });
+  }
+
   /** Append one more reading slot to a clock position (no limit). */
   function addVutmReading(idx: number, clock: VutmClockKey) {
     setVutmShellRows((arr) => {
-      const cur = arr[idx];
+      const cur = arr[idx] as VutmClockRow;
       if (!cur) return arr;
       const nextRow = { ...cur, [clock]: [...cur[clock], ""] };
       const next = [...arr];
       next[idx] = nextRow;
+      return next;
+    });
+  }
+
+  /** Append one more reading slot to a VERTICAL direction row (no limit). */
+  function addVutmDirReading(idx: number) {
+    setVutmShellRows((arr) => {
+      const cur = arr[idx] as VutmDirectionRow;
+      if (!cur) return arr;
+      const next = [...arr];
+      next[idx] = { ...cur, readings: [...cur.readings, ""] };
       return next;
     });
   }
@@ -2790,13 +2857,29 @@ export function PipelineReportFormView() {
    */
   function removeVutmReading(idx: number, clock: VutmClockKey, spotIdx: number) {
     setVutmShellRows((arr) => {
-      const cur = arr[idx];
+      const cur = arr[idx] as VutmClockRow;
       if (!cur) return arr;
       if (cur[clock].length <= 1) return arr;
       const spots = cur[clock].filter((_, i) => i !== spotIdx);
       const nextRow = { ...cur, [clock]: spots };
       const next = [...arr];
       next[idx] = nextRow;
+      return next;
+    });
+  }
+
+  /**
+   * Remove one reading slot from a VERTICAL direction row. The LAST
+   * remaining slot cannot be removed.
+   */
+  function removeVutmDirReading(idx: number, readingIdx: number) {
+    setVutmShellRows((arr) => {
+      const cur = arr[idx] as VutmDirectionRow;
+      if (!cur) return arr;
+      if (cur.readings.length <= 1) return arr;
+      const readings = cur.readings.filter((_, i) => i !== readingIdx);
+      const next = [...arr];
+      next[idx] = { ...cur, readings };
       return next;
     });
   }
@@ -5639,22 +5722,38 @@ export function PipelineReportFormView() {
       )} {/* end step 2 — VESSEL WELD SCAN */}
 
       {/* ═══ STEP 2 (VESSEL UT THICKNESS MEASUREMENT) ═══
-          Shown only for VESSEL_UTM reports. Renders, in this order:
+          Shown only for VESSEL_UTM reports. The orientation (Horizontal /
+          Vertical — the ONLY module that asks for one) decides the
+          readings-table structure. Renders, in this order:
             A. UT Thickness Measurement Parameters (grouped two-column
-               table + the repeatable Longitudinal Wave 0° probe grid).
-            B. UT Thickness Measurement Readings — ONE unified table:
-               every component (Shell, Shell-1, Shell-2, Dish End, Top
-               Dish, Bottom Dish, Nozzle or a custom component) is
-               measured at the 12 / 3 / 6 / 9 o'clock positions. Each
-               position starts with ONE reading input; "+ Add Reading"
-               appends more slots (no limit) and extra readings can be
-               removed again. Minimum Measured Thickness is read-only and
-               auto-calculated from ALL readings of the row on every
-               change.
+               table + the repeatable Longitudinal Wave 0° probe grid) —
+               identical for both orientations.
+            B. UT Thickness Measurement Readings:
+               • HORIZONTAL → every component is measured at the 12 / 3 /
+                 6 / 9 o'clock positions; each position starts with ONE
+                 reading input.
+               • VERTICAL   → one row per component + direction (East /
+                 West / North / South); each direction starts with ONE
+                 reading input.
+               "+ Add Reading" appends more slots (no limit) and extra
+               readings can be removed again. Minimum Measured Thickness
+               is read-only and auto-calculated from ALL readings of the
+               row on every change.
           Completely separate from the Piping Thickness Measurement
           (PIPELINE_THICKNESS) Step 2, which stays untouched. */}
       {step === 2 && header.reportType === "VESSEL_UTM" && (
       <>
+        {/* Orientation badge — selected in the selector (VESSEL_UTM only). */}
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="border-emerald-500 text-emerald-700">
+            {header.vesselOrientation === "VERTICAL" ? "Vertical Vessel" : "Horizontal Vessel"}
+          </Badge>
+          <span className="text-xs text-muted-foreground">
+            {header.vesselOrientation === "VERTICAL"
+              ? "Vertical vessel — readings are taken in the East / West / North / South directions."
+              : "Horizontal vessel — readings are taken at the 12 / 3 / 6 / 9 o'clock positions."}
+          </span>
+        </div>
 
         {/* ═══ A. UT THICKNESS MEASUREMENT PARAMETERS ═══ */}
         <Card>
@@ -5964,9 +6063,17 @@ export function PipelineReportFormView() {
           <CardHeader>
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
-                <CardTitle className="text-base">UT Thickness Measurement Readings</CardTitle>
+                <CardTitle className="text-base flex items-center gap-2">
+                  UT Thickness Measurement Readings
+                  <Badge variant="outline" className="border-emerald-400 text-emerald-700 text-[10px]">
+                    {header.vesselOrientation === "VERTICAL" ? "Vertical Vessel" : "Horizontal Vessel"}
+                  </Badge>
+                </CardTitle>
                 <CardDescription>
-                  Every component (Shell, Shell-1, Shell-2, Dish End, Top Dish, Bottom Dish, Nozzle or a custom component) is measured at the 12 / 3 / 6 / 9 o&apos;clock positions. Each position starts with ONE reading — use “+ Add Reading” to record more readings at that position (no limit); extra readings can be removed again. Minimum Measured Thickness is calculated automatically across ALL readings of the row and is read-only.
+                  {header.vesselOrientation === "VERTICAL"
+                    ? "Vertical vessel — one row per component and direction (East / West / North / South). Each direction starts with ONE reading — use “+ Add Reading” to record more readings for that direction (no limit); extra readings can be removed again."
+                    : "Horizontal vessel — every component (Shell, Shell-1, Shell-2, Dish End, Top Dish, Bottom Dish, Nozzle or a custom component) is measured at the 12 / 3 / 6 / 9 o'clock positions. Each position starts with ONE reading — use “+ Add Reading” to record more readings at that position (no limit); extra readings can be removed again."}{" "}
+                  Minimum Measured Thickness is calculated automatically across ALL readings of the row and is read-only.
                 </CardDescription>
               </div>
             </div>
@@ -5976,17 +6083,169 @@ export function PipelineReportFormView() {
             <div className="p-4 pb-0">
               <div className="flex items-center justify-between mb-2">
                 <div className="text-sm font-semibold text-zinc-700">
-                  Component Measurements (Clock Positions)
+                  Component Measurements{" "}
+                  {header.vesselOrientation === "VERTICAL" ? "(Directions)" : "(Clock Positions)"}
                 </div>
                 <Button onClick={addVutmShellRow} size="sm">
                   <Plus className="mr-1 h-4 w-4" /> Add Component Row
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground mb-2">
+                {header.vesselOrientation === "VERTICAL"
+                  ? "One row per component + direction — pick the direction per row. "
+                  : ""}
                 Component suggestions: {VUTM_COMPONENT_TYPES.join(", ")} — any custom component can be typed. Nozzle ID suggestions: {VUTM_NOZZLE_ID_SUGGESTIONS.join(", ")}.
               </p>
               <div className="overflow-x-auto">
-                {/* ─── Unified clock-position table (all components) ─── */}
+                {/* ─── VERTICAL: direction-based table ─── */}
+                {header.vesselOrientation === "VERTICAL" ? (
+                <table className="w-full text-xs border-collapse">
+                  <thead className="bg-emerald-800 text-white">
+                    <tr>
+                      <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 110 }}>MOC</th>
+                      <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 130 }}>Component Type</th>
+                      <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 110 }}>Component ID</th>
+                      <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 90 }}>Nominal Thickness (mm)</th>
+                      <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 100 }}>Direction</th>
+                      <th className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 170 }}>Readings (mm)</th>
+                      <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 80 }}>Minimum Measured Thickness (mm)</th>
+                      <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 60 }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {vutmShellRows.length === 0 && (
+                      <tr>
+                        <td colSpan={8} className="text-center py-6 text-muted-foreground border border-zinc-300">
+                          No rows yet. Click <strong>Add Component Row</strong> to begin — e.g. one row per direction for Shell-1 (East, West, North, South).
+                        </td>
+                      </tr>
+                    )}
+                    {vutmShellRows.map((row, idx) => {
+                      const dirRow = row as VutmDirectionRow;
+                      return (
+                      <tr key={idx} className="hover:bg-muted/30 align-top">
+                        <td className="border border-zinc-300 p-1">
+                          <Input
+                            className="h-8 text-xs"
+                            list={`vutm-moc-v-${idx}`}
+                            value={dirRow.moc}
+                            onChange={(e) => updateVutmShellRow(idx, { moc: e.target.value })}
+                            placeholder="e.g. Carbon Steel"
+                          />
+                          <datalist id={`vutm-moc-v-${idx}`}>
+                            {VUTM_MOC_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
+                          </datalist>
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          <Input
+                            className="h-8 text-xs"
+                            list={`vutm-comp-type-v-${idx}`}
+                            value={dirRow.componentType}
+                            onChange={(e) => updateVutmShellRow(idx, { componentType: e.target.value })}
+                            placeholder="e.g. Shell-1 / Top Dish / Nozzle"
+                          />
+                          <datalist id={`vutm-comp-type-v-${idx}`}>
+                            {VUTM_COMPONENT_TYPES.map((s) => <option key={s} value={s} />)}
+                          </datalist>
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          <Input
+                            className="h-8 text-xs"
+                            list={`vutm-comp-id-v-${idx}`}
+                            value={dirRow.componentId}
+                            onChange={(e) => updateVutmShellRow(idx, { componentId: e.target.value })}
+                            placeholder="e.g. S-01 / N1"
+                          />
+                          <datalist id={`vutm-comp-id-v-${idx}`}>
+                            {VUTM_NOZZLE_ID_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
+                          </datalist>
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          <Input
+                            className="h-8 text-xs"
+                            inputMode="decimal"
+                            value={dirRow.nominalThickness}
+                            onChange={(e) => updateVutmShellRow(idx, { nominalThickness: e.target.value })}
+                            placeholder="mm"
+                          />
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          <Select
+                            value={dirRow.direction || undefined}
+                            onValueChange={(v) => updateVutmDirection(idx, v)}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="Select" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {VUTM_DIRECTIONS.map((d) => (
+                                <SelectItem key={d} value={d}>{d}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="border border-zinc-300 p-1 align-top">
+                          <div className="space-y-1">
+                            {dirRow.readings.map((reading, ri) => (
+                              <div key={ri} className="flex items-center gap-1">
+                                <span className="w-8 shrink-0 text-[10px] leading-8 text-muted-foreground">
+                                  R{ri + 1}
+                                </span>
+                                <Input
+                                  className="h-8 flex-1 text-xs px-1 text-center"
+                                  inputMode="decimal"
+                                  value={reading}
+                                  onChange={(e) => updateVutmDirReading(idx, ri, e.target.value)}
+                                  placeholder="—"
+                                  aria-label={`${dirRow.direction || "Direction"} — reading ${ri + 1}`}
+                                />
+                                {dirRow.readings.length > 1 && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-6 w-6 p-0 text-red-600 hover:text-red-700 shrink-0"
+                                    onClick={() => removeVutmDirReading(idx, ri)}
+                                    title="Remove this reading"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                )}
+                              </div>
+                            ))}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-6 w-full px-1 text-[10px]"
+                              onClick={() => addVutmDirReading(idx)}
+                              title={`Add another reading for ${dirRow.direction || "this direction"}`}
+                            >
+                              <Plus className="mr-0.5 h-3 w-3" /> Add Reading
+                            </Button>
+                          </div>
+                        </td>
+                        <td className="border border-zinc-300 p-1 text-center bg-zinc-50 font-mono tabular-nums font-semibold">
+                          {vutmMinOfSpots(dirRow.readings) || "—"}
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          <div className="flex justify-center">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+                              onClick={() => removeVutmShellRow(idx)}
+                              title="Remove row"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                ) : (
+                /* ─── HORIZONTAL: clock-position table (all components) ─── */
                 <table className="w-full text-xs border-collapse">
                   <thead className="bg-emerald-800 text-white">
                     <tr>
@@ -6102,7 +6361,12 @@ export function PipelineReportFormView() {
                           </td>
                         ))}
                         <td className="border border-zinc-300 p-1 text-center bg-zinc-50 font-mono tabular-nums font-semibold">
-                          {vutmMinOfSpots(row.c12, row.c3, row.c6, row.c9) || "—"}
+                          {vutmMinOfSpots(
+                            (row as VutmClockRow).c12,
+                            (row as VutmClockRow).c3,
+                            (row as VutmClockRow).c6,
+                            (row as VutmClockRow).c9,
+                          ) || "—"}
                         </td>
                         <td className="border border-zinc-300 p-1">
                           <div className="flex justify-center">
@@ -6121,6 +6385,7 @@ export function PipelineReportFormView() {
                     ))}
                   </tbody>
                 </table>
+                )}
               </div>
             </div>
 
@@ -6129,8 +6394,8 @@ export function PipelineReportFormView() {
 
         <Card className="bg-zinc-50">
           <CardContent className="p-4 text-xs text-muted-foreground space-y-1">
-            <div><strong>Minimum Measured Thickness:</strong> calculated automatically as the minimum of ALL readings entered across the 12 / 3 / 6 / 9 o'clock positions of each row — it is read-only and updates whenever a reading is added, changed, or removed.</div>
-            <div><strong>Dynamic readings:</strong> every clock position starts with one reading input; “+ Add Reading” adds more slots for that position (no limit) and the ✕ button removes a reading again. Only the readings you actually enter appear in the report.</div>
+            <div><strong>Minimum Measured Thickness:</strong> calculated automatically as the minimum of ALL readings entered for the row {header.vesselOrientation === "VERTICAL" ? "(all readings of that direction row)" : "(across the 12 / 3 / 6 / 9 o'clock positions)"} — it is read-only and updates whenever a reading is added, changed, or removed.</div>
+            <div><strong>Dynamic readings:</strong> {header.vesselOrientation === "VERTICAL" ? "each direction" : "every clock position"} starts with one reading input; “+ Add Reading” adds more slots (no limit) and the ✕ button removes a reading again. Only the readings you actually enter appear in the report.</div>
             <div><strong>Component / Nozzle IDs:</strong> suggestions are offered (Shell-1, Top Dish, N1…) but any custom value can be typed.</div>
             <div><strong>Photographs:</strong> upload photographs taken during the UT Thickness Measurement in the next step (Findings &amp; Photos) — they appear after the readings in the review page and the generated PDF.</div>
           </CardContent>

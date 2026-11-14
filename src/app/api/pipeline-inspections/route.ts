@@ -155,14 +155,20 @@ export async function POST(req: NextRequest) {
       ].includes(body.reportType)
         ? body.reportType
         : "PIPELINE_THICKNESS",
-      // ─── EQUIPMENT TYPE ───
+      // ─── EQUIPMENT TYPE + VESSEL ORIENTATION ───
       // equipmentType: PIPING | VESSEL (from the selector flow).
-      // vesselOrientation was removed from the application — new reports
-      // never carry one (the column stays nullable for legacy rows).
+      // vesselOrientation: HORIZONTAL | VERTICAL — accepted ONLY for
+      // VESSEL_UTM (Vessel UT Thickness Measurement), the only module
+      // that asks for an orientation. Every other report type stores
+      // null (legacy rows keep their stored value).
       equipmentType: body.equipmentType === "PIPING" || body.equipmentType === "VESSEL"
         ? body.equipmentType
         : null,
-      vesselOrientation: null,
+      vesselOrientation:
+        body.reportType === "VESSEL_UTM" &&
+        (body.vesselOrientation === "HORIZONTAL" || body.vesselOrientation === "VERTICAL")
+          ? body.vesselOrientation
+          : null,
       clientId: body.clientId,
       plantId: body.plantId,
       inspectionArea: body.inspectionArea?.trim() || null,
@@ -367,9 +373,21 @@ export async function POST(req: NextRequest) {
       vutmCouplant: body.vutmCouplant?.trim() || null,
       vutmSurfacePreparation: body.vutmSurfacePreparation?.trim() || null,
       vutmSurfaceFinish: body.vutmSurfaceFinish?.trim() || null,
-      vutmShellRows: normalizeVutmRows(body.vutmShellRows),
-      vutmDishRows: normalizeVutmRows(body.vutmDishRows),
-      vutmNozzleRows: normalizeVutmRows(body.vutmNozzleRows),
+      // Readings rows are normalized to the report's orientation shape:
+      // HORIZONTAL → clock rows, VERTICAL → direction rows. The legacy
+      // dish/nozzle columns use the same orientation.
+      vutmShellRows: normalizeVutmRows(
+        body.vutmShellRows,
+        body.vesselOrientation === "VERTICAL" ? "VERTICAL" : "HORIZONTAL",
+      ),
+      vutmDishRows: normalizeVutmRows(
+        body.vutmDishRows,
+        body.vesselOrientation === "VERTICAL" ? "VERTICAL" : "HORIZONTAL",
+      ),
+      vutmNozzleRows: normalizeVutmRows(
+        body.vutmNozzleRows,
+        body.vesselOrientation === "VERTICAL" ? "VERTICAL" : "HORIZONTAL",
+      ),
       isDemo: false,
     },
     include: {
