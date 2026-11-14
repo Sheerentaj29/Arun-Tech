@@ -10,7 +10,6 @@ import {
   Trash2,
   ArrowUp,
   ArrowDown,
-  ShieldAlert,
   AlertCircle,
   Download,
   Camera,
@@ -3090,11 +3089,6 @@ export function PipelineReportFormView() {
             {typeInfo.shortLabel}
           </Badge>
         </div>
-        <p className="text-sm text-muted-foreground">
-          {isEdit
-            ? `Editing ${typeInfo.title.toLowerCase()} — ${typeInfo.formDescription}`
-            : typeInfo.formDescription}
-        </p>
       </div>
 
       {/* ─── Step indicator ───
@@ -3130,21 +3124,6 @@ export function PipelineReportFormView() {
         </span>
       </div>
 
-      {/* Reference-data notice: only relevant for thickness reports */}
-      {header.reportType === "PIPELINE_THICKNESS" && (
-        <Alert className="border-amber-200 bg-amber-50">
-          <ShieldAlert className="h-4 w-4 text-amber-700" />
-          <AlertTitle className="text-amber-900">Reference data notice</AlertTitle>
-          <AlertDescription className="text-amber-900">
-            Nominal thickness values come from publicly published ASME B36.10M / B36.19M
-            reference tables. They are marked UNVERIFIED until an administrator
-            confirms them against the licensed / official standard edition. The
-            nominal thickness is a dimensional reference value, distinct from
-            the measured remaining wall thickness, and is not, by itself, an
-            inspection pass / fail criterion.
-          </AlertDescription>
-        </Alert>
-      )}
 
       {/* ═══ STEP 1: HEADER ═══ */}
       {step === 1 && (
@@ -3221,11 +3200,6 @@ export function PipelineReportFormView() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Report Header</CardTitle>
-          <CardDescription>
-            {IS_VESSEL_REPORT
-              ? "Client, plant, and equipment / vessel identification. All fields editable by authorized users."
-              : "Client, plant, and pipeline identification. All fields editable by authorized users."}
-          </CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-2">
@@ -3393,11 +3367,6 @@ export function PipelineReportFormView() {
             <Camera className="h-4 w-4" />
             Primary Inspection Photo
           </CardTitle>
-          <CardDescription>
-            Upload one main photo of the pipeline, vessel, or equipment being inspected.
-            This photo appears on the first page of the generated PDF, immediately after the Client Details section,
-            filling the available space between the client details and the sign-off block.
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <PrimaryPhotoUploader
@@ -3433,13 +3402,6 @@ export function PipelineReportFormView() {
                 <PenTool className="h-4 w-4" />
                 Engineering Drawings
               </CardTitle>
-              <CardDescription>
-                Optional. Attach engineering drawings (PNG, JPG, JPEG, WEBP, or PDF).
-                Each image becomes one full page in the final PDF; each page of an
-                uploaded PDF drawing is rendered as a separate output page.
-                Drawings appear after the report header and before the measurement
-                table. Max 50 MB per file.
-              </CardDescription>
             </div>
             <div className="flex gap-2">
               <label className="cursor-pointer">
@@ -3598,13 +3560,6 @@ export function PipelineReportFormView() {
         </CardContent>
       </Card>
 
-      <Card className="bg-zinc-50">
-        <CardContent className="p-4 text-xs text-muted-foreground">
-          <strong>PDF page order:</strong> Report header → Engineering Drawings (one page
-          per image / per PDF page) → Measurement table → Findings → Photos → Sign-off.
-          No blank pages are inserted between the drawings and the table.
-        </CardContent>
-      </Card>
 
       </>
       )} {/* end engineering drawings (part of step 1) */}
@@ -3655,10 +3610,6 @@ export function PipelineReportFormView() {
       {/* Global toolbar for cross-table actions */}
       <Card className="mb-4">
         <CardContent className="flex flex-wrap items-center justify-between gap-2 p-3">
-          <div className="text-xs text-muted-foreground">
-            <strong>{thicknessTables.length}</strong> thickness table{thicknessTables.length === 1 ? "" : "s"} configured.
-            {" "}Custom columns are shared across all tables.
-          </div>
           <div className="flex gap-2">
             <Button onClick={deleteSelectedRows} size="sm" variant="outline" className="text-red-600"
               disabled={selectedRowIdxs.size === 0}>
@@ -3705,13 +3656,6 @@ export function PipelineReportFormView() {
                 onChange={(e) => renameThicknessTable(table.id, e.target.value)}
                 placeholder={`Thickness Pipeline Table ${tableIdx + 1}`}
               />
-              <CardDescription className="mt-1">
-                11 columns in fixed order. The first two columns are
-                dropdown-selected; the third is auto-computed from standards;
-                the four clock-position measurements are entered manually; the
-                observed minimum is calculated excluding any missing values.
-                {!isPrimary && " This is an additional table — it can be deleted."}
-              </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button onClick={() => addRow(table.id)} size="sm">
@@ -3804,7 +3748,7 @@ export function PipelineReportFormView() {
                 {rowsInThisTable.length === 0 && (
                   <tr>
                     <td colSpan={12 + customColumns.length} className="text-center py-6 text-muted-foreground border border-zinc-300">
-                      No measurement rows in this table yet. Click <strong>Add Row</strong> to begin.
+                      No rows yet.
                     </td>
                   </tr>
                 )}
@@ -4019,14 +3963,6 @@ export function PipelineReportFormView() {
         </Button>
       </div>
 
-      <Card className="bg-zinc-50">
-        <CardContent className="p-4 text-xs text-muted-foreground space-y-1">
-          <div><strong>Column order:</strong> Dia mm (inch) | Pipe Schedule | Nominal Thickness (mm) | Component Type | Point No | 12 o'clock / North (mm) | 3 o'clock / East (mm) | 6 o'clock / South (mm) | 9 o'clock / West (mm) | Observed Minimum Thickness (mm) | Findings / Comments{customColumns.length > 0 ? " | " + customColumns.map(c => c.name).join(" | ") : ""}</div>
-          <div><strong>Nominal Thickness</strong> is auto-populated from ASME B36.10M / B36.19M reference data. Unsupported combinations display an UNSUPPORTED badge.</div>
-          <div><strong>Observed Minimum</strong> is computed from valid (Measured) readings only. Missing / NotMeasured / NotApplicable values are excluded and never converted to zero.</div>
-          <div><strong>Custom columns</strong> can be added/deleted via the "Add Column" button. System columns (Dia, Schedule, Nominal, etc.) cannot be deleted.</div>
-        </CardContent>
-      </Card>
 
       {/* Step 2 navigation (shared across all three report types) */}
       <div className="flex items-center gap-2">
@@ -4052,11 +3988,6 @@ export function PipelineReportFormView() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-base">Visual Inspection Observations</CardTitle>
-              <CardDescription>
-                Add one row per inspection point along the pipeline. Each row
-                captures the visual condition at that point. Click <strong>Save</strong>
-                on each row to persist it before navigating away.
-              </CardDescription>
             </div>
             <Button onClick={addVisualObservation} size="sm">
               <Plus className="mr-1 h-4 w-4" /> Add Observation
@@ -4089,7 +4020,7 @@ export function PipelineReportFormView() {
                 {visualObservations.length === 0 && (
                   <tr>
                     <td colSpan={15} className="text-center py-6 text-muted-foreground border border-zinc-300">
-                      No observations yet. Click <strong>Add Observation</strong> to begin.
+                      No rows yet.
                     </td>
                   </tr>
                 )}
@@ -4281,13 +4212,6 @@ export function PipelineReportFormView() {
         </CardContent>
       </Card>
 
-      <Card className="bg-zinc-50">
-        <CardContent className="p-4 text-xs text-muted-foreground space-y-1">
-          <div><strong>Visual inspection:</strong> each row captures the visual condition at one inspection point along the pipeline.</div>
-          <div><strong>Photo attachment:</strong> use Step 3 (Findings &amp; Photos) to upload inspection photographs — they appear in the PDF photo gallery.</div>
-          <div><strong>Dropdowns:</strong> condition ratings are Good / Fair / Poor / Critical / N/A; corrosion is None / Light / Moderate / Severe / N/A.</div>
-        </CardContent>
-      </Card>
 
       {/* Step 2 navigation */}
       <div className="flex items-center gap-2">
@@ -4311,11 +4235,6 @@ export function PipelineReportFormView() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Pipeline Condition Assessment</CardTitle>
-          <CardDescription>
-            Capture the overall condition of the pipeline section, risk / priority
-            level, and recommendations. Click <strong>Save Draft</strong> to persist
-            changes — these fields are saved to the report header.
-          </CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-2">
@@ -4444,13 +4363,6 @@ export function PipelineReportFormView() {
         </CardContent>
       </Card>
 
-      <Card className="bg-zinc-50">
-        <CardContent className="p-4 text-xs text-muted-foreground space-y-1">
-          <div><strong>Condition assessment:</strong> single-instance fields describing the overall pipeline condition.</div>
-          <div><strong>Photos &amp; drawings:</strong> attach supporting evidence via Step 1 (drawings) and Step 3 (photos).</div>
-          <div><strong>Save:</strong> click <strong>Save Draft</strong> to persist changes. The fields are saved to the report header.</div>
-        </CardContent>
-      </Card>
 
       {/* Step 2 navigation */}
       <div className="flex items-center gap-2">
@@ -4482,11 +4394,6 @@ export function PipelineReportFormView() {
             <Droplet className="h-4 w-4 text-purple-700" />
             3. Dye Penetrant Procedure
           </CardTitle>
-          <CardDescription>
-            Record the complete dye penetrant inspection procedure. All fields
-            are editable — type the value as it applies to this inspection.
-            Leave a field blank if it is not applicable.
-          </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -4558,11 +4465,6 @@ export function PipelineReportFormView() {
             <Droplet className="h-4 w-4 text-purple-700" />
             Consumable Details
           </CardTitle>
-          <CardDescription>
-            Select the product / make used for each consumable. If the
-            required option is not listed, choose <strong>Other / Custom</strong>
-            and type the actual product used.
-          </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -4635,12 +4537,6 @@ export function PipelineReportFormView() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-base">DPT Inspection Results</CardTitle>
-              <CardDescription>
-                Add one row per inspection point. Serial numbers are auto-generated
-                and renumbered whenever rows are added or deleted. Select Accept or
-                Reject for each row. Use custom columns for any additional data you
-                need to record per inspection point.
-              </CardDescription>
             </div>
             <div className="flex gap-2">
               <Button onClick={addDptObservation} size="sm">
@@ -4685,7 +4581,7 @@ export function PipelineReportFormView() {
                 {dptObservations.length === 0 && (
                   <tr>
                     <td colSpan={7 + dptCustomColumns.length} className="text-center py-6 text-muted-foreground border border-zinc-300">
-                      No DPT observations yet. Click <strong>Add Row</strong> to begin.
+                      No rows yet.
                     </td>
                   </tr>
                 )}
@@ -4788,15 +4684,6 @@ export function PipelineReportFormView() {
         </CardContent>
       </Card>
 
-      <Card className="bg-zinc-50">
-        <CardContent className="p-4 text-xs text-muted-foreground space-y-1">
-          <div><strong>DPT Inspection:</strong> each row records one inspection point with Accept / Reject result.</div>
-          <div><strong>Serial numbers:</strong> auto-generated (1, 2, 3…) and renumbered when rows are added or deleted.</div>
-          <div><strong>Custom columns:</strong> click <strong>Add Column</strong> to add a new column. System columns (Sl. No, Description, Weld Type, Result, Remarks) cannot be deleted.</div>
-          <div><strong>No drawings:</strong> DPT reports do not include engineering drawing uploads.</div>
-          <div><strong>Results:</strong> only Accept / Reject is selectable per row. All other fields are typeable text.</div>
-        </CardContent>
-      </Card>
 
       {/* Step 2 navigation */}
       <div className="flex items-center gap-2">
@@ -4834,12 +4721,6 @@ export function PipelineReportFormView() {
             <Droplet className="h-4 w-4 text-purple-700" />
             Dye Penetrant Testing Parameters
           </CardTitle>
-          <CardDescription>
-            Record the dye penetrant testing parameters for this vessel
-            inspection. All fields are editable — type the value as it
-            applies to this examination. Leave a field blank if it is not
-            applicable.
-          </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -4908,10 +4789,6 @@ export function PipelineReportFormView() {
             <Droplet className="h-4 w-4 text-purple-700" />
             Consumable Details
           </CardTitle>
-          <CardDescription>
-            Enter the make, product / description, batch number, and expiry
-            date for each consumable used during the examination.
-          </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -4984,12 +4861,6 @@ export function PipelineReportFormView() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-base">Dye Penetrant Testing Details</CardTitle>
-              <CardDescription>
-                Add one row per part / weld examined (e.g. nozzle welds).
-                Serial numbers are auto-generated and renumbered whenever
-                rows are added or deleted. Observation &amp; Result is
-                free text (e.g. &quot;No relevant indication&quot;).
-              </CardDescription>
             </div>
             <Button onClick={addDptObservation} size="sm">
               <Plus className="mr-1 h-4 w-4" /> Add Row
@@ -5013,7 +4884,7 @@ export function PipelineReportFormView() {
                 {dptObservations.length === 0 && (
                   <tr>
                     <td colSpan={6} className="text-center py-6 text-muted-foreground border border-zinc-300">
-                      No rows yet. Click <strong>Add Row</strong> to begin.
+                      No rows yet.
                     </td>
                   </tr>
                 )}
@@ -5090,13 +4961,6 @@ export function PipelineReportFormView() {
         </CardContent>
       </Card>
 
-      <Card className="bg-zinc-50">
-        <CardContent className="p-4 text-xs text-muted-foreground space-y-1">
-          <div><strong>Vessel DPT:</strong> record the procedure parameters, consumable details, and one row per part / weld examined.</div>
-          <div><strong>Serial numbers:</strong> auto-generated (1, 2, 3…) and renumbered when rows are added or deleted.</div>
-          <div><strong>Photographs:</strong> upload DPT photographs in the next step (Findings &amp; Photos) — they appear in the review page and the generated PDF.</div>
-        </CardContent>
-      </Card>
 
       {/* Step 2 navigation */}
       <div className="flex items-center gap-2">
@@ -5124,12 +4988,6 @@ export function PipelineReportFormView() {
             <Magnet className="h-4 w-4 text-orange-700" />
             Magnetic Particle Testing Parameters
           </CardTitle>
-          <CardDescription>
-            Record the magnetic particle testing parameters for this vessel
-            inspection. All fields are editable — type the value as it
-            applies to this examination. Leave a field blank if it is not
-            applicable.
-          </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -5200,10 +5058,6 @@ export function PipelineReportFormView() {
             <Magnet className="h-4 w-4 text-orange-700" />
             Consumable Details
           </CardTitle>
-          <CardDescription>
-            Enter the make, product / description, lot number, and expiry
-            date for each consumable used during the examination.
-          </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -5277,11 +5131,6 @@ export function PipelineReportFormView() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-base">Magnetic Particle Testing Details</CardTitle>
-              <CardDescription>
-                Add one row per part / weld examined. Serial numbers are
-                auto-generated. Observation &amp; Result is free text (e.g.
-                &quot;No relevant indication&quot;).
-              </CardDescription>
             </div>
             <Button onClick={addVmptRow} size="sm">
               <Plus className="mr-1 h-4 w-4" /> Add Row
@@ -5306,7 +5155,7 @@ export function PipelineReportFormView() {
                 {vmptRows.length === 0 && (
                   <tr>
                     <td colSpan={7} className="text-center py-6 text-muted-foreground border border-zinc-300">
-                      No rows yet. Click <strong>Add Row</strong> to begin.
+                      No rows yet.
                     </td>
                   </tr>
                 )}
@@ -5376,13 +5225,6 @@ export function PipelineReportFormView() {
         </CardContent>
       </Card>
 
-      <Card className="bg-zinc-50">
-        <CardContent className="p-4 text-xs text-muted-foreground space-y-1">
-          <div><strong>Vessel MPT:</strong> record the magnetic particle testing parameters, consumable details, and one row per part / weld examined.</div>
-          <div><strong>Serial numbers:</strong> auto-generated (1, 2, 3…) and renumbered when rows are added or deleted.</div>
-          <div><strong>Photographs:</strong> upload MPT photographs in the next step (Findings &amp; Photos) — they appear in the review page and the generated PDF.</div>
-        </CardContent>
-      </Card>
 
       {/* Step 2 navigation */}
       <div className="flex items-center gap-2">
@@ -5414,12 +5256,6 @@ export function PipelineReportFormView() {
             <Zap className="h-4 w-4 text-cyan-700" />
             Weld Scan Testing Parameters
           </CardTitle>
-          <CardDescription>
-            Record the weld scan (ultrasonic) testing parameters for this
-            vessel examination. All fields are editable — type the value as
-            it applies to this examination. Leave a field blank if it is not
-            applicable.
-          </CardDescription>
         </CardHeader>
         <CardContent className="p-0 space-y-0">
           <div className="overflow-x-auto">
@@ -5592,10 +5428,6 @@ export function PipelineReportFormView() {
           <div className="border-t border-zinc-200 p-4 space-y-3">
             <div>
               <div className="text-sm font-semibold text-zinc-700">Probe Details</div>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                One entry per probe used. Frequency, probe size and serial
-                number are entered for each probe.
-              </p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs border-collapse">
@@ -5661,11 +5493,6 @@ export function PipelineReportFormView() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-base">Weld Scan Testing Details</CardTitle>
-              <CardDescription>
-                Add one row per weld / component examined. Serial numbers are
-                auto-generated. Observation &amp; Result is free text — use the
-                quick options or type your own.
-              </CardDescription>
             </div>
             <Button onClick={addVwsRow} size="sm">
               <Plus className="mr-1 h-4 w-4" /> Add Row
@@ -5691,7 +5518,7 @@ export function PipelineReportFormView() {
                 {vwsRows.length === 0 && (
                   <tr>
                     <td colSpan={8} className="text-center py-6 text-muted-foreground border border-zinc-300">
-                      No rows yet. Click <strong>Add Row</strong> to begin.
+                      No rows yet.
                     </td>
                   </tr>
                 )}
@@ -5803,14 +5630,6 @@ export function PipelineReportFormView() {
         </CardContent>
       </Card>
 
-      <Card className="bg-zinc-50">
-        <CardContent className="p-4 text-xs text-muted-foreground space-y-1">
-          <div><strong>Vessel Weld Scan:</strong> record the weld scan testing parameters (including the four-probe grid) and one row per weld / component examined.</div>
-          <div><strong>Serial numbers:</strong> auto-generated (1, 2, 3…) and renumbered when rows are added or deleted.</div>
-          <div><strong>Component / Weld ID:</strong> suggestions are offered (Shell-1, Head, Nozzle, Circumferential Weld…) but any custom value can be typed.</div>
-          <div><strong>Photographs:</strong> upload Weld Scan photographs in the next step (Findings &amp; Photos) — they appear in the review page and the generated PDF.</div>
-        </CardContent>
-      </Card>
 
       {/* Step 2 navigation */}
       <div className="flex items-center gap-2">
@@ -5869,12 +5688,6 @@ export function PipelineReportFormView() {
               <Gauge className="h-4 w-4 text-emerald-700" />
               UT Thickness Measurement Parameters
             </CardTitle>
-            <CardDescription>
-              Record the UT thickness measurement parameters for this vessel
-              examination. All fields are editable — type the value as it
-              applies to this examination. Leave a field blank if it is not
-              applicable.
-            </CardDescription>
           </CardHeader>
           <CardContent className="p-0 space-y-0">
             <div className="overflow-x-auto">
@@ -6089,10 +5902,6 @@ export function PipelineReportFormView() {
                   <div className="text-sm font-semibold text-zinc-700">
                     Probe Details — Longitudinal Wave (0°)
                   </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    One row per longitudinal-wave (0°) probe used. Add a row
-                    for each additional probe.
-                  </p>
                 </div>
                 <Button onClick={addVutmLwProbe} size="sm" variant="outline">
                   <Plus className="mr-1 h-4 w-4" /> Add Probe Row
@@ -6176,12 +5985,6 @@ export function PipelineReportFormView() {
                     {header.vesselOrientation === "VERTICAL" ? "Vertical Vessel" : "Horizontal Vessel"}
                   </Badge>
                 </CardTitle>
-                <CardDescription>
-                  {header.vesselOrientation === "VERTICAL"
-                    ? "Vertical vessel — one row per component and direction (East / West / North / South). Each direction starts with ONE reading — use “+ Add Reading” to record more readings for that direction (no limit); extra readings can be removed again."
-                    : "Horizontal vessel — every component (Shell, Shell-1, Shell-2, Dish End, Top Dish, Bottom Dish, Nozzle or a custom component) is measured at the 12 / 3 / 6 / 9 o'clock positions. Each position starts with ONE reading — use “+ Add Reading” to record more readings at that position (no limit); extra readings can be removed again."}{" "}
-                  Minimum Measured Thickness is calculated automatically across ALL readings of the row and is read-only.
-                </CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -6197,15 +6000,6 @@ export function PipelineReportFormView() {
                   <Plus className="mr-1 h-4 w-4" /> Add Component Row
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground mb-2">
-                {header.vesselOrientation === "VERTICAL"
-                  ? "One row per component + direction — pick the direction per row. "
-                  : ""}
-                Component suggestions: {VUTM_COMPONENT_TYPES.join(", ")} — any custom component can be typed. Nozzle ID suggestions: {VUTM_NOZZLE_ID_SUGGESTIONS.join(", ")}.
-              </p>
-              <p className="text-xs text-muted-foreground mb-2">
-                <strong>Size / Schedule / WT:</strong> pick the {header.vesselOrientation === "VERTICAL" ? "Nominal Bore / Inch (pink chart: 3 mm / 1/8 … 600 mm / 24)" : "NPS / Pipe Size (1/4 … 48 — 1/8 and 3/8 are not offered)"} first; the Schedule dropdown then shows only the schedules that have a wall-thickness value for that size, and the WT (mm) auto-populates the Nominal Thickness. Invalid size + schedule combinations cannot be selected. WT only — no weight data is used.
-              </p>
               <div className="overflow-x-auto">
                 {/* ─── VERTICAL: direction-based table ─── */}
                 {header.vesselOrientation === "VERTICAL" ? (
@@ -6228,7 +6022,7 @@ export function PipelineReportFormView() {
                     {vutmShellRows.length === 0 && (
                       <tr>
                         <td colSpan={10} className="text-center py-6 text-muted-foreground border border-zinc-300">
-                          No rows yet. Click <strong>Add Component Row</strong> to begin — e.g. one row per direction for Shell-1 (East, West, North, South).
+                          No rows yet.
                         </td>
                       </tr>
                     )}
@@ -6428,7 +6222,7 @@ export function PipelineReportFormView() {
                     {vutmShellRows.length === 0 && (
                       <tr>
                         <td colSpan={11} className="text-center py-6 text-muted-foreground border border-zinc-300">
-                          No rows yet. Click <strong>Add Component Row</strong> to begin.
+                          No rows yet.
                         </td>
                       </tr>
                     )}
@@ -6597,14 +6391,6 @@ export function PipelineReportFormView() {
           </CardContent>
         </Card>
 
-        <Card className="bg-zinc-50">
-          <CardContent className="p-4 text-xs text-muted-foreground space-y-1">
-            <div><strong>Minimum Measured Thickness:</strong> calculated automatically as the minimum of ALL readings entered for the row {header.vesselOrientation === "VERTICAL" ? "(all readings of that direction row)" : "(across the 12 / 3 / 6 / 9 o'clock positions)"} — it is read-only and updates whenever a reading is added, changed, or removed.</div>
-            <div><strong>Dynamic readings:</strong> {header.vesselOrientation === "VERTICAL" ? "each direction" : "every clock position"} starts with one reading input; “+ Add Reading” adds more slots (no limit) and the ✕ button removes a reading again. Only the readings you actually enter appear in the report.</div>
-            <div><strong>Component / Nozzle IDs:</strong> suggestions are offered (Shell-1, Top Dish, N1…) but any custom value can be typed.</div>
-            <div><strong>Photographs:</strong> upload photographs taken during the UT Thickness Measurement in the next step (Findings &amp; Photos) — they appear after the readings in the review page and the generated PDF.</div>
-          </CardContent>
-        </Card>
 
         {/* Step 2 navigation */}
         <div className="flex items-center gap-2">
@@ -6632,10 +6418,6 @@ export function PipelineReportFormView() {
             <Magnet className="h-4 w-4 text-orange-700" />
             5.1 Magnetic Particle Testing Parameters
           </CardTitle>
-          <CardDescription>
-            Record the MPT inspection parameters. All fields are editable.
-            Date fields use a calendar picker.
-          </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -6728,10 +6510,6 @@ export function PipelineReportFormView() {
             <Magnet className="h-4 w-4 text-orange-700" />
             Consumable Details
           </CardTitle>
-          <CardDescription>
-            Enter the actual make, product name, lot number, expiry date and
-            other relevant details. All fields are editable.
-          </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -6766,10 +6544,6 @@ export function PipelineReportFormView() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-base">MPT Inspection Results</CardTitle>
-              <CardDescription>
-                Add one row per inspection point. Serial numbers are auto-generated.
-                Select Accept or Reject for each row.
-              </CardDescription>
             </div>
             <div className="flex gap-2">
               <Button onClick={addDptObservation} size="sm">
@@ -6810,7 +6584,7 @@ export function PipelineReportFormView() {
                 {dptObservations.length === 0 && (
                   <tr>
                     <td colSpan={7 + mptCustomColumns.length} className="text-center py-6 text-muted-foreground border border-zinc-300">
-                      No MPT observations yet. Click <strong>Add Row</strong> to begin.
+                      No rows yet.
                     </td>
                   </tr>
                 )}
@@ -6942,7 +6716,7 @@ export function PipelineReportFormView() {
                 {(() => {
                   try {
                     const rows = JSON.parse(header.wsInstrumentRows || "[]");
-                    if (rows.length === 0) return <tr><td colSpan={6} className="text-center py-4 text-muted-foreground border border-zinc-300">No instrument rows. Click Add Row.</td></tr>;
+                    if (rows.length === 0) return <tr><td colSpan={6} className="text-center py-4 text-muted-foreground border border-zinc-300">No instrument rows yet.</td></tr>;
                     return rows.map((row: any, idx: number) => (
                       <tr key={idx} className="hover:bg-muted/30">
                         <td className="border border-zinc-300 p-1">
@@ -7002,11 +6776,6 @@ export function PipelineReportFormView() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Test Probe Details</CardTitle>
-          <CardDescription>
-            Fixed probe set — Probe Type and Probe Angle cannot be changed.
-            Enter the frequency, size, probe number, range and dB values for
-            each probe.
-          </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -7164,7 +6933,7 @@ export function PipelineReportFormView() {
                 {(() => {
                   try {
                     const rows = JSON.parse(header.wsTestResultRows || "[]");
-                    if (rows.length === 0) return <tr><td colSpan={13} className="text-center py-4 text-muted-foreground border border-zinc-300">No test result rows. Click Add Row.</td></tr>;
+                    if (rows.length === 0) return <tr><td colSpan={13} className="text-center py-4 text-muted-foreground border border-zinc-300">No test result rows yet.</td></tr>;
                     return rows.map((row: any, idx: number) => (
                       <tr key={idx} className="hover:bg-muted/30">
                         <td className="border border-zinc-300 p-1 text-center font-mono">{idx + 1}</td>
@@ -7226,10 +6995,6 @@ export function PipelineReportFormView() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Inspection Findings and Evidence</CardTitle>
-            <CardDescription>
-              Describe the inspection performed, visible conditions, observations,
-              and upload supporting photographs.
-            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             {/* A. Inspection Description */}
@@ -7242,9 +7007,6 @@ export function PipelineReportFormView() {
                 placeholder="Describe the inspection performed, visible condition of the component, observations and abnormalities, inspection limitations, and additional technical notes..."
                 className="text-sm"
               />
-              <p className="text-xs text-muted-foreground">
-                This description will be included in the generated PDF report.
-              </p>
             </div>
 
             {/* B. Summary of Site Observations */}
@@ -7446,7 +7208,6 @@ export function PipelineReportFormView() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="text-base">Instrument Calibration</CardTitle>
-                <CardDescription>Calibration certificates for instruments and equipment used during the inspection.</CardDescription>
               </div>
               <label className="cursor-pointer">
                 <input type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" multiple className="hidden"
@@ -7485,7 +7246,6 @@ export function PipelineReportFormView() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Inspector Certificates</CardTitle>
-            <CardDescription>NDT certification documents for inspectors involved in the inspection.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {/* NDT Level 3 Certificate (Optional) */}
@@ -7493,7 +7253,6 @@ export function PipelineReportFormView() {
               <div className="flex items-center justify-between mb-2">
                 <div>
                   <h4 className="text-sm font-semibold">NDT Level 3 Certificate</h4>
-                  <p className="text-xs text-muted-foreground">Optional — upload if available.</p>
                 </div>
                 <label className="cursor-pointer">
                   <input type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" multiple className="hidden"
@@ -7963,10 +7722,6 @@ function PrimaryPhotoUploader({
               <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
               <div className="text-xs">
                 <p className="font-semibold">Photo uploaded successfully</p>
-                <p className="text-muted-foreground mt-0.5">
-                  This photo appears on the first page of the generated PDF,
-                  immediately after the Client Details section.
-                </p>
               </div>
             </div>
             <div className="flex flex-wrap gap-2">

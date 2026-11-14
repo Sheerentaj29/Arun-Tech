@@ -2513,9 +2513,6 @@ export function PipelineReportDetailView() {
             <CardTitle className="text-base flex items-center gap-2">
               <GitBranch className="h-4 w-4" /> Revision History ({report.revisions.length})
             </CardTitle>
-            <CardDescription>
-              Each approved version is preserved as a separate revision. The currently-approved revision is highlighted.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="divide-y">

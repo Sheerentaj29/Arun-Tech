@@ -162,9 +162,7 @@ export function PipelineReportTypeSelectorView() {
         </Button>
         <h1 className="mt-2 text-2xl font-bold tracking-tight">New Inspection Report</h1>
         <p className="text-sm text-muted-foreground">
-          Select the equipment type and the inspection / test type. The form fields,
-          PDF template, and report title are determined by this choice — pick
-          carefully, the report type cannot be changed after the report is created.
+          The report type cannot be changed after the report is created.
         </p>
       </div>
 
