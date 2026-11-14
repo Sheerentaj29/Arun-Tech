@@ -40,7 +40,7 @@ import { promisify } from "util";
 import { tmpdir } from "os";
 import { join } from "path";
 import { mkdtempSync, readdirSync, unlinkSync, rmdirSync } from "fs";
-import { vutmMinOfSpots } from "@/lib/vutm-rows";
+import { vutmMinOfSpots, vutmUnifiedRowsFromReport } from "@/lib/vutm-rows";
 import {
   resolveClientLogo,
   CLIENT_LOGO_DIR,
@@ -638,27 +638,14 @@ export async function generatePipelineReportPdf(
     ["Location", report.plant.location],
     ["Plant Name", report.plant.name],
     ["Unit Name", report.inspectionArea],
-    // For Vessel DPT / MPT / UT Thickness Measurement reports the
-    // identification rows use vessel wording and the selected orientation
-    // is displayed on the cover. Vessel Weld Scan uses vessel wording too
-    // (no orientation step).
-    ...(reportType === "VESSEL_DPT" || reportType === "VESSEL_MPT" || reportType === "VESSEL_UTM"
+    // All Vessel reports use equipment wording in the header grid.
+    ...(reportType === "VESSEL_DPT" || reportType === "VESSEL_MPT" || reportType === "VESSEL_UTM" || reportType === "VESSEL_WELD_SCAN"
       ? [
           ["Equipment / Vessel Description", report.pipelineDescription],
           ["Equipment Identification No.", report.pipelineIdentificationNumber],
           ["Isometric Drawing No.", report.isometricDrawingNumber],
-          ["Vessel Orientation",
-            (report as any).vesselOrientation === "HORIZONTAL" ? "Horizontal Vessel"
-            : (report as any).vesselOrientation === "VERTICAL" ? "Vertical Vessel"
-            : null],
         ] as Array<[string, string | null | undefined]>
-      : reportType === "VESSEL_WELD_SCAN"
-        ? [
-            ["Equipment / Vessel Description", report.pipelineDescription],
-            ["Equipment Identification No.", report.pipelineIdentificationNumber],
-            ["Isometric Drawing No.", report.isometricDrawingNumber],
-          ] as Array<[string, string | null | undefined]>
-        : [
+      : [
             ["Pipeline Description", report.pipelineDescription],
             ["Pipeline Identification No.", report.pipelineIdentificationNumber],
             ["Isometric Drawing No.", report.isometricDrawingNumber],
@@ -1587,18 +1574,6 @@ export async function generatePipelineReportPdf(
       doc.fillColor("#000");
       y += 18;
 
-      // Vessel Orientation line — from the orientation selected in the
-      // report-creation flow and stored on the report.
-      const orientText =
-        vdptReport.vesselOrientation === "HORIZONTAL" ? "Horizontal Vessel"
-        : vdptReport.vesselOrientation === "VERTICAL" ? "Vertical Vessel"
-        : null;
-      if (orientText) {
-        doc.font(FONT_BOLD).fontSize(9).fillColor("#000");
-        doc.text(`Vessel Orientation: ${orientText}`, MARGIN, y);
-        y += 14;
-      }
-
       const procedureRows: Array<[string, string | null]> = [
         ["Date of Examination", vdptReport.dptDateOfExamination
           ? new Date(vdptReport.dptDateOfExamination).toISOString().slice(0, 10)
@@ -1807,18 +1782,6 @@ export async function generatePipelineReportPdf(
       doc.text("Magnetic Particle Testing Parameters", MARGIN, y);
       doc.fillColor("#000");
       y += 18;
-
-      // Vessel Orientation line — from the orientation selected in the
-      // report-creation flow and stored on the report.
-      const orientText =
-        vmptReport.vesselOrientation === "HORIZONTAL" ? "Horizontal Vessel"
-        : vmptReport.vesselOrientation === "VERTICAL" ? "Vertical Vessel"
-        : null;
-      if (orientText) {
-        doc.font(FONT_BOLD).fontSize(9).fillColor("#000");
-        doc.text(`Vessel Orientation: ${orientText}`, MARGIN, y);
-        y += 14;
-      }
 
       const procedureRows: Array<[string, string | null]> = [
         ["Date of Examination", vmptReport.mptDateOfExamination
@@ -2596,22 +2559,21 @@ export async function generatePipelineReportPdf(
   } else if (reportType === "VESSEL_UTM") {
     // ─── VESSEL UT THICKNESS MEASUREMENT REPORT BODY ───
     // Renders, in this order:
-    //   1. Equipment Type / Orientation line (the selected orientation is
-    //      displayed in the report).
+    //   1. Equipment Type line ("Equipment Type: Vessel").
     //   2. "UT Thickness Measurement Parameters" — grouped two-column
     //      table (General Information / Equipment Details / Cable &
     //      Crystal Details / Calibration Details / Other Testing
     //      Parameters). All values are typeable, nothing hardcoded.
     //   3. "Probe Details — Longitudinal Wave (0°)" — repeatable probe
     //      grid (Frequency / Size / S.No. per row).
-    //   4. "UT Thickness Measurement Readings" — orientation-specific:
-    //        • HORIZONTAL → clock positions (12 / 3 / 6 / 9 o'clock, each
-    //          with Spot 1–4) per component row.
-    //        • VERTICAL   → directions (East / West / North / South, each
-    //          with Spot 1–4) per component row.
-    //      followed by the Dish End table (direction-based) and the
-    //      Nozzle table. Minimum Measured Thickness is recomputed from
-    //      the spot readings (never trusted from storage).
+    //   4. "UT Thickness Measurement Readings" — ONE unified clock-
+    //      position table: every component row shows its 12 / 3 / 6 / 9
+    //      o'clock readings (every reading the user entered — one per
+    //      line, no empty slots) and the auto-calculated Minimum
+    //      Measured Thickness (recomputed from the stored readings,
+    //      never trusted from storage). Legacy orientation-based row
+    //      shapes (horizontal / vertical / dish / nozzle) are converted
+    //      transparently.
     //   5. Photographs are handled by the shared photo-gallery section
     //      below (heading "Photographs – During UT Thickness
     //      Measurement" for this report type).
@@ -2620,7 +2582,6 @@ export async function generatePipelineReportPdf(
     const utmReport = report as any;
     const utmUsableW = pageW - 2 * MARGIN;
     const utmAccent = "#065f46"; // emerald-800 — matches the Vessel UT Thickness UI accent
-    const utmIsHorizontal = (utmReport.vesselOrientation ?? "HORIZONTAL") !== "VERTICAL";
 
     const utmRowH = 18;
     const utmLabelW = utmUsableW * 0.38;
@@ -2656,14 +2617,11 @@ export async function generatePipelineReportPdf(
       y += utmRowH;
     };
 
-    // ─── 1. EQUIPMENT TYPE / ORIENTATION LINE ───
+    // ─── 1. EQUIPMENT TYPE LINE ───
     {
       if (y + 16 > pageMaxY) { addNewPage(); y = MARGIN; }
       doc.font(FONT_BOLD).fontSize(9).fillColor(utmAccent);
-      doc.text(
-        `Equipment Type: Vessel    Orientation: ${utmIsHorizontal ? "Horizontal" : "Vertical"}`,
-        MARGIN, y,
-      );
+      doc.text("Equipment Type: Vessel", MARGIN, y);
       doc.fillColor("#000");
       y += 16;
     }
@@ -2777,28 +2735,21 @@ export async function generatePipelineReportPdf(
 
     // ─── 4. UT THICKNESS MEASUREMENT READINGS ───
     {
-      // Parse the three readings-row JSON columns (defensively).
-      const parseRows = (raw: unknown): Array<Record<string, unknown>> => {
-        try {
-          const parsed = JSON.parse(String(raw ?? "[]"));
-          return Array.isArray(parsed) ? parsed : [];
-        } catch { return []; }
-      };
-      const utmShell = parseRows(utmReport.vutmShellRows);
-      const utmDish = parseRows(utmReport.vutmDishRows);
-      const utmNozzle = parseRows(utmReport.vutmNozzleRows);
+      // Parse the readings-row columns (defensively) into ONE unified
+      // clock-position row list. Legacy orientation-based shapes
+      // (horizontal 4-spot rows, vertical direction rows, dish rows,
+      // nozzle rows) are converted transparently — every stored reading
+      // survives into the report.
+      const utmRows = vutmUnifiedRowsFromReport(
+        utmReport.vutmShellRows,
+        utmReport.vutmDishRows,
+        utmReport.vutmNozzleRows,
+      );
 
       if (y + 24 + 30 > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 4;
       doc.font(FONT_BOLD).fontSize(11).fillColor(utmAccent);
       doc.text("UT Thickness Measurement Readings", MARGIN, y);
-      doc.fillColor("#000");
-      y += 16;
-      doc.font(FONT_BOLD).fontSize(8).fillColor("#374151");
-      doc.text(
-        `Vessel Orientation: ${utmIsHorizontal ? "Horizontal Vessel — clock position based readings" : "Vertical Vessel — direction based readings"}`,
-        MARGIN, y,
-      );
       doc.fillColor("#000");
       y += 16;
 
@@ -2824,192 +2775,113 @@ export async function generatePipelineReportPdf(
         doc.fillColor("#000");
       };
 
-      // ─── 4a. COMPONENT (SHELL) TABLE — orientation-specific ───
-      if (utmIsHorizontal) {
-        // Two-row header: clock-position group headers + Spot 1–4 sub headers.
-        const sInfoW = orientation === "landscape"
+      // ─── 4a. COMPONENT TABLE — unified clock positions ───
+      {
+        const uInfoW = orientation === "landscape"
           ? { moc: 62, comp: 80, id: 52, nom: 46, min: 48 }
           : { moc: 46, comp: 58, id: 38, nom: 34, min: 38 };
-        const sInfoSum = sInfoW.moc + sInfoW.comp + sInfoW.id + sInfoW.nom + sInfoW.min;
-        const sSpotW = Math.max(16, (utmUsableW - sInfoSum) / 16);
-        const sGroupH = 16;
-        const sSubH = 14;
-        const sRowH = Math.max(18, Math.min(26, sSubH * 2));
-        const sHeaderH = sGroupH + sSubH;
-        const sClockLabels = ["12 O'clock", "3 O'clock", "6 O'clock", "9 O'clock"];
-        const sClockKeys = ["c12", "c3", "c6", "c9"] as const;
+        const uInfoSum = uInfoW.moc + uInfoW.comp + uInfoW.id + uInfoW.nom + uInfoW.min;
+        const uClockW = Math.max(34, (utmUsableW - uInfoSum) / 4);
+        const uClockKeys = ["c12", "c3", "c6", "c9"] as const;
+        const uHeaderH = 26;
+        const uLineH = 8;
+        const uMinRowH = 18;
+        const uPad = 5;
+        const uCellText = (v: unknown): string => String(v ?? "").trim();
 
-        const drawUtmShellHeaderH = (headerY: number) => {
-          const startX = MARGIN;
-          const totalW = utmUsableW;
-          // Group header row (rowSpan cells + 4 clock groups)
-          doc.rect(startX, headerY, totalW, sHeaderH).fill(TABLE_HEADER_BG);
-          doc.rect(startX, headerY, totalW, sHeaderH).stroke(TABLE_OUTER_BORDER);
+        const drawUtmRowsHeader = (headerY: number) => {
+          doc.rect(MARGIN, headerY, utmUsableW, uHeaderH).fill(TABLE_HEADER_BG);
+          doc.rect(MARGIN, headerY, utmUsableW, uHeaderH).stroke(TABLE_OUTER_BORDER);
+          let x = MARGIN;
           doc.font(FONT_BOLD).fontSize(6.5).fillColor(TABLE_HEADER_FG);
-          // rowSpan cells (drawn over both rows)
-          let x = startX;
-          const spanCells: Array<[string, number]> = [
-            ["MOC", sInfoW.moc], ["Component Type", sInfoW.comp],
-            ["Component ID", sInfoW.id], ["Nominal\nThickness\n(mm)", sInfoW.nom],
+          const headers: Array<[string, number]> = [
+            ["MOC", uInfoW.moc],
+            ["Component Type", uInfoW.comp],
+            ["Component ID", uInfoW.id],
+            ["Nominal\nThickness\n(mm)", uInfoW.nom],
+            ["12 O'clock", uClockW],
+            ["3 O'clock", uClockW],
+            ["6 O'clock", uClockW],
+            ["9 O'clock", uClockW],
+            ["Minimum\nMeasured\n(mm)", uInfoW.min],
           ];
-          for (const [label, w] of spanCells) {
-            doc.text(label, x + 2, headerY + 4, { width: w - 4, align: "center" });
+          for (let i = 0; i < headers.length; i++) {
+            const [label, w] = headers[i];
+            if (i > 0) doc.moveTo(x, headerY).lineTo(x, headerY + uHeaderH).stroke(TABLE_INNER_BORDER);
+            doc.text(label, x + 2, headerY + 3, { width: w - 4, align: "center", lineGap: 0 });
             x += w;
-          }
-          // Clock group headers
-          sClockLabels.forEach((label, gi) => {
-            const gx = startX + sInfoW.moc + sInfoW.comp + sInfoW.id + sInfoW.nom + gi * 4 * sSpotW;
-            doc.text(label, gx + 2, headerY + 4, { width: 4 * sSpotW - 4, align: "center" });
-          });
-          // Min header
-          const minX = startX + totalW - sInfoW.min;
-          doc.text("Minimum\nMeasured\nThickness\n(mm)", minX + 1, headerY + 2, { width: sInfoW.min - 2, align: "center" });
-          // Group / rowSpan separators
-          x = startX;
-          for (const [, w] of spanCells) {
-            doc.moveTo(x, headerY).lineTo(x, headerY + sHeaderH).stroke(TABLE_INNER_BORDER);
-            x += w;
-          }
-          sClockLabels.forEach((_, gi) => {
-            const gx = startX + sInfoW.moc + sInfoW.comp + sInfoW.id + sInfoW.nom + gi * 4 * sSpotW;
-            doc.moveTo(gx, headerY + sGroupH).lineTo(gx, headerY + sHeaderH).stroke(TABLE_INNER_BORDER);
-          });
-          doc.moveTo(minX, headerY).lineTo(minX, headerY + sHeaderH).stroke(TABLE_INNER_BORDER);
-          // Line under the group header row (only across the clock groups)
-          doc.moveTo(startX + sInfoW.moc + sInfoW.comp + sInfoW.id + sInfoW.nom, headerY + sGroupH)
-            .lineTo(startX + totalW - sInfoW.min, headerY + sGroupH)
-            .stroke(TABLE_INNER_BORDER);
-          // Spot 1–4 sub headers
-          let sx = startX + sInfoW.moc + sInfoW.comp + sInfoW.id + sInfoW.nom;
-          doc.font(FONT_BOLD).fontSize(6).fillColor(TABLE_HEADER_FG);
-          for (let si = 0; si < 16; si++) {
-            if (si % 4 !== 0) {
-              doc.moveTo(sx, headerY + sGroupH).lineTo(sx, headerY + sHeaderH).stroke(TABLE_INNER_BORDER);
-            }
-            doc.text(`S${(si % 4) + 1}`, sx, headerY + sGroupH + 4, { width: sSpotW, align: "center" });
-            sx += sSpotW;
           }
           doc.fillColor("#000");
         };
 
-        if (y + 24 + sHeaderH + sRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+        if (y + 24 + uHeaderH + uMinRowH > pageMaxY) { addNewPage(); y = MARGIN; }
         y += 6;
         doc.font(FONT_BOLD).fontSize(9.5).fillColor(utmAccent);
         doc.text("Component Measurements (Clock Positions)", MARGIN, y);
         doc.fillColor("#000");
         y += 14;
-        drawUtmShellHeaderH(y);
-        y += sHeaderH;
+        drawUtmRowsHeader(y);
+        y += uHeaderH;
 
-        for (const row of utmShell) {
-          if (y + sRowH > pageMaxY) {
+        for (const row of utmRows) {
+          // Readings per clock position — every entered reading, blank
+          // slots excluded (never rendered).
+          const spotGroups = uClockKeys.map((k) =>
+            Array.isArray(row[k])
+              ? (row[k] as Array<unknown>).map((s) => uCellText(s))
+              : [],
+          );
+          const cells = spotGroups.map((g) => g.filter((s) => s !== ""));
+          const maxLines = Math.max(1, ...cells.map((c) => c.length));
+          const rowH = Math.max(uMinRowH, uPad * 2 + maxLines * uLineH);
+          if (y + rowH > pageMaxY) {
             addNewPage();
-            drawUtmShellHeaderH(MARGIN);
-            y = MARGIN + sHeaderH;
+            drawUtmRowsHeader(MARGIN);
+            y = MARGIN + uHeaderH;
           }
-          doc.rect(MARGIN, y, utmUsableW, sRowH).stroke(TABLE_OUTER_BORDER);
-          const spots = sClockKeys.map((k) => {
-            const arr = Array.isArray(row[k]) ? (row[k] as Array<unknown>) : [];
-            return [0, 1, 2, 3].map((i) => String(arr[i] ?? ""));
-          });
-          const cells: Array<[string, number, "left" | "center", boolean]> = [
-            [String(row.moc ?? ""), sInfoW.moc, "left", false],
-            [String(row.componentType ?? ""), sInfoW.comp, "left", false],
-            [String(row.componentId ?? ""), sInfoW.id, "left", false],
-            [String(row.nominalThickness ?? ""), sInfoW.nom, "center", false],
+          doc.rect(MARGIN, y, utmUsableW, rowH).stroke(TABLE_OUTER_BORDER);
+          const infoCells: Array<[string, number, "left" | "center", boolean]> = [
+            [uCellText(row.moc), uInfoW.moc, "left", false],
+            [uCellText(row.componentType), uInfoW.comp, "left", false],
+            [uCellText(row.componentId), uInfoW.id, "left", false],
+            [uCellText(row.nominalThickness), uInfoW.nom, "center", false],
           ];
           let cx = MARGIN;
-          for (const [text, w, align, bold] of cells) {
-            doc.moveTo(cx, y).lineTo(cx, y + sRowH).stroke(TABLE_INNER_BORDER);
-            drawUtmCell(text, cx, y, w, sRowH, align, bold, 6.5);
+          for (const [text, w, align, bold] of infoCells) {
+            doc.moveTo(cx, y).lineTo(cx, y + rowH).stroke(TABLE_INNER_BORDER);
+            drawUtmCell(text, cx, y, w, rowH, align, bold, 6.5);
             cx += w;
           }
-          for (const group of spots) {
-            for (const spot of group) {
-              doc.moveTo(cx, y).lineTo(cx, y + sRowH).stroke(TABLE_INNER_BORDER);
-              drawUtmCell(spot, cx, y, sSpotW, sRowH, "center", false, 6.5);
-              cx += sSpotW;
+          for (const lines of cells) {
+            doc.moveTo(cx, y).lineTo(cx, y + rowH).stroke(TABLE_INNER_BORDER);
+            if (lines.length === 0) {
+              drawUtmCell("—", cx, y, uClockW, rowH, "center", false, 6.5);
+            } else {
+              // One reading per line, vertically centred in the cell.
+              doc.font(FONT_REGULAR).fontSize(6.5).fillColor("#000");
+              const blockH = lines.length * uLineH;
+              let ly = y + Math.max(2, (rowH - blockH) / 2);
+              const maxW = uClockW - 6;
+              for (const line of lines) {
+                let disp = line;
+                if (doc.widthOfString(disp) > maxW) {
+                  const c = Math.floor((maxW / Math.max(1, doc.widthOfString(disp))) * disp.length);
+                  disp = disp.slice(0, Math.max(1, c - 1)) + "…";
+                }
+                doc.text(disp, cx + 3, ly, { width: maxW, align: "center" });
+                ly += uLineH;
+              }
+              doc.fillColor("#000");
             }
+            cx += uClockW;
           }
-          doc.moveTo(cx, y).lineTo(cx, y + sRowH).stroke(TABLE_INNER_BORDER);
-          const minVal = vutmMinOfSpots(spots[0], spots[1], spots[2], spots[3]);
-          drawUtmCell(minVal || "—", cx, y, sInfoW.min, sRowH, "center", true, 7);
+          doc.moveTo(cx, y).lineTo(cx, y + rowH).stroke(TABLE_INNER_BORDER);
+          const minVal = vutmMinOfSpots(spotGroups[0], spotGroups[1], spotGroups[2], spotGroups[3]);
+          drawUtmCell(minVal || "—", cx, y, uInfoW.min, rowH, "center", true, 7);
           doc.fillColor("#000");
-          y += sRowH;
+          y += rowH;
         }
-        if (utmShell.length === 0) {
-          doc.font(FONT_REGULAR).fontSize(8).fillColor("#6b7280");
-          doc.text("No component measurement rows recorded.", MARGIN, y + 4);
-          doc.fillColor("#000");
-          y += 18;
-        }
-        y += 8;
-      } else {
-        // VERTICAL: direction-based rows.
-        const vWidths = orientation === "landscape"
-          ? [62, 85, 50, 46, 44, 44, 44, 44, 50]
-          : [46, 62, 38, 34, 30, 30, 30, 30, 38];
-        const vScale = utmUsableW / vWidths.reduce((a, b) => a + b, 0);
-        const vW = vWidths.map((w) => w * Math.min(2.2, Math.max(1, vScale)));
-        const vHeaders = ["MOC", "Component Type", "Direction", "Nominal\nThickness\n(mm)", "Spot 1", "Spot 2", "Spot 3", "Spot 4", "Minimum\nMeasured\n(mm)"];
-        const vHeaderH = 26;
-        const vRowH = 20;
-
-        const drawUtmShellHeaderV = (headerY: number) => {
-          doc.rect(MARGIN, headerY, utmUsableW, vHeaderH).fill(TABLE_HEADER_BG);
-          doc.rect(MARGIN, headerY, utmUsableW, vHeaderH).stroke(TABLE_OUTER_BORDER);
-          let x = MARGIN;
-          doc.font(FONT_BOLD).fontSize(6.5).fillColor(TABLE_HEADER_FG);
-          for (let i = 0; i < vHeaders.length; i++) {
-            if (i > 0) doc.moveTo(x, headerY).lineTo(x, headerY + vHeaderH).stroke(TABLE_INNER_BORDER);
-            doc.text(vHeaders[i], x + 2, headerY + 5, { width: vW[i] - 4, align: "center" });
-            x += vW[i];
-          }
-          doc.fillColor("#000");
-        };
-
-        if (y + 24 + vHeaderH + vRowH > pageMaxY) { addNewPage(); y = MARGIN; }
-        y += 6;
-        doc.font(FONT_BOLD).fontSize(9.5).fillColor(utmAccent);
-        doc.text("Component Measurements (Directions)", MARGIN, y);
-        doc.fillColor("#000");
-        y += 14;
-        drawUtmShellHeaderV(y);
-        y += vHeaderH;
-
-        for (const row of utmShell) {
-          if (y + vRowH > pageMaxY) {
-            addNewPage();
-            drawUtmShellHeaderV(MARGIN);
-            y = MARGIN + vHeaderH;
-          }
-          doc.rect(MARGIN, y, utmUsableW, vRowH).stroke(TABLE_OUTER_BORDER);
-          const cells = [
-            String(row.moc ?? ""),
-            String(row.componentType ?? ""),
-            String(row.direction ?? ""),
-            String(row.nominalThickness ?? ""),
-            String(row.spot1 ?? ""),
-            String(row.spot2 ?? ""),
-            String(row.spot3 ?? ""),
-            String(row.spot4 ?? ""),
-          ];
-          let cx = MARGIN;
-          for (let i = 0; i < cells.length; i++) {
-            if (i > 0) doc.moveTo(cx, y).lineTo(cx, y + vRowH).stroke(TABLE_INNER_BORDER);
-            drawUtmCell(cells[i], cx, y, vW[i], vRowH, i < 2 ? "left" : "center", false, 7);
-            cx += vW[i];
-          }
-          doc.moveTo(cx, y).lineTo(cx, y + vRowH).stroke(TABLE_INNER_BORDER);
-          const minVal = vutmMinOfSpots(
-            String(row.spot1 ?? ""), String(row.spot2 ?? ""),
-            String(row.spot3 ?? ""), String(row.spot4 ?? ""),
-          );
-          drawUtmCell(minVal || "—", cx, y, vW[8], vRowH, "center", true, 7);
-          doc.fillColor("#000");
-          y += vRowH;
-        }
-        if (utmShell.length === 0) {
+        if (utmRows.length === 0) {
           doc.font(FONT_REGULAR).fontSize(8).fillColor("#6b7280");
           doc.text("No component measurement rows recorded.", MARGIN, y + 4);
           doc.fillColor("#000");
@@ -3018,140 +2890,6 @@ export async function generatePipelineReportPdf(
         y += 8;
       }
 
-      // ─── 4b. DISH END TABLE (direction-based) ───
-      if (utmDish.length > 0) {
-        const dWidths = orientation === "landscape"
-          ? [75, 55, 44, 44, 44, 44, 52]
-          : [58, 42, 32, 32, 32, 32, 40];
-        const dScale = utmUsableW / dWidths.reduce((a, b) => a + b, 0);
-        const dW = dWidths.map((w) => w * Math.min(2.6, Math.max(1, dScale)));
-        const dHeaders = ["Dish", "Direction", "Spot 1", "Spot 2", "Spot 3", "Spot 4", "Minimum\nMeasured\n(mm)"];
-        const dHeaderH = 26;
-        const dRowH = 20;
-
-        const drawUtmDishHeader = (headerY: number) => {
-          doc.rect(MARGIN, headerY, utmUsableW, dHeaderH).fill(TABLE_HEADER_BG);
-          doc.rect(MARGIN, headerY, utmUsableW, dHeaderH).stroke(TABLE_OUTER_BORDER);
-          let x = MARGIN;
-          doc.font(FONT_BOLD).fontSize(6.5).fillColor(TABLE_HEADER_FG);
-          for (let i = 0; i < dHeaders.length; i++) {
-            if (i > 0) doc.moveTo(x, headerY).lineTo(x, headerY + dHeaderH).stroke(TABLE_INNER_BORDER);
-            doc.text(dHeaders[i], x + 2, headerY + 5, { width: dW[i] - 4, align: "center" });
-            x += dW[i];
-          }
-          doc.fillColor("#000");
-        };
-
-        if (y + 24 + dHeaderH + dRowH > pageMaxY) { addNewPage(); y = MARGIN; }
-        y += 6;
-        doc.font(FONT_BOLD).fontSize(9.5).fillColor(utmAccent);
-        doc.text("Dish End Measurements", MARGIN, y);
-        doc.fillColor("#000");
-        y += 14;
-        drawUtmDishHeader(y);
-        y += dHeaderH;
-
-        for (const row of utmDish) {
-          if (y + dRowH > pageMaxY) {
-            addNewPage();
-            drawUtmDishHeader(MARGIN);
-            y = MARGIN + dHeaderH;
-          }
-          doc.rect(MARGIN, y, utmUsableW, dRowH).stroke(TABLE_OUTER_BORDER);
-          const cells = [
-            String(row.component ?? ""),
-            String(row.direction ?? ""),
-            String(row.spot1 ?? ""),
-            String(row.spot2 ?? ""),
-            String(row.spot3 ?? ""),
-            String(row.spot4 ?? ""),
-          ];
-          let cx = MARGIN;
-          for (let i = 0; i < cells.length; i++) {
-            if (i > 0) doc.moveTo(cx, y).lineTo(cx, y + dRowH).stroke(TABLE_INNER_BORDER);
-            drawUtmCell(cells[i], cx, y, dW[i], dRowH, i < 2 ? "left" : "center", false, 7);
-            cx += dW[i];
-          }
-          doc.moveTo(cx, y).lineTo(cx, y + dRowH).stroke(TABLE_INNER_BORDER);
-          const minVal = vutmMinOfSpots(
-            String(row.spot1 ?? ""), String(row.spot2 ?? ""),
-            String(row.spot3 ?? ""), String(row.spot4 ?? ""),
-          );
-          drawUtmCell(minVal || "—", cx, y, dW[6], dRowH, "center", true, 7);
-          doc.fillColor("#000");
-          y += dRowH;
-        }
-        y += 8;
-      }
-
-      // ─── 4c. NOZZLE TABLE ───
-      if (utmNozzle.length > 0) {
-        const nWidths = orientation === "landscape"
-          ? [55, 50, 45, 55, 62, 44, 44, 44, 44, 52]
-          : [42, 38, 34, 42, 46, 30, 30, 30, 30, 40];
-        const nScale = utmUsableW / nWidths.reduce((a, b) => a + b, 0);
-        const nW = nWidths.map((w) => w * Math.min(2.4, Math.max(1, nScale)));
-        const nHeaders = ["Nozzle ID", "Nominal\nThickness\n(mm)", "Size", "Schedule", "MOC", "Spot 1", "Spot 2", "Spot 3", "Spot 4", "Minimum\nMeasured\n(mm)"];
-        const nHeaderH = 26;
-        const nRowH = 20;
-
-        const drawUtmNozzleHeader = (headerY: number) => {
-          doc.rect(MARGIN, headerY, utmUsableW, nHeaderH).fill(TABLE_HEADER_BG);
-          doc.rect(MARGIN, headerY, utmUsableW, nHeaderH).stroke(TABLE_OUTER_BORDER);
-          let x = MARGIN;
-          doc.font(FONT_BOLD).fontSize(6.5).fillColor(TABLE_HEADER_FG);
-          for (let i = 0; i < nHeaders.length; i++) {
-            if (i > 0) doc.moveTo(x, headerY).lineTo(x, headerY + nHeaderH).stroke(TABLE_INNER_BORDER);
-            doc.text(nHeaders[i], x + 2, headerY + 5, { width: nW[i] - 4, align: "center" });
-            x += nW[i];
-          }
-          doc.fillColor("#000");
-        };
-
-        if (y + 24 + nHeaderH + nRowH > pageMaxY) { addNewPage(); y = MARGIN; }
-        y += 6;
-        doc.font(FONT_BOLD).fontSize(9.5).fillColor(utmAccent);
-        doc.text("Nozzle Measurements", MARGIN, y);
-        doc.fillColor("#000");
-        y += 14;
-        drawUtmNozzleHeader(y);
-        y += nHeaderH;
-
-        for (const row of utmNozzle) {
-          if (y + nRowH > pageMaxY) {
-            addNewPage();
-            drawUtmNozzleHeader(MARGIN);
-            y = MARGIN + nHeaderH;
-          }
-          doc.rect(MARGIN, y, utmUsableW, nRowH).stroke(TABLE_OUTER_BORDER);
-          const cells = [
-            String(row.nozzleId ?? ""),
-            String(row.nominalThickness ?? ""),
-            String(row.size ?? ""),
-            String(row.schedule ?? ""),
-            String(row.moc ?? ""),
-            String(row.spot1 ?? ""),
-            String(row.spot2 ?? ""),
-            String(row.spot3 ?? ""),
-            String(row.spot4 ?? ""),
-          ];
-          let cx = MARGIN;
-          for (let i = 0; i < cells.length; i++) {
-            if (i > 0) doc.moveTo(cx, y).lineTo(cx, y + nRowH).stroke(TABLE_INNER_BORDER);
-            drawUtmCell(cells[i], cx, y, nW[i], nRowH, i < 5 ? "left" : "center", false, 7);
-            cx += nW[i];
-          }
-          doc.moveTo(cx, y).lineTo(cx, y + nRowH).stroke(TABLE_INNER_BORDER);
-          const minVal = vutmMinOfSpots(
-            String(row.spot1 ?? ""), String(row.spot2 ?? ""),
-            String(row.spot3 ?? ""), String(row.spot4 ?? ""),
-          );
-          drawUtmCell(minVal || "—", cx, y, nW[9], nRowH, "center", true, 7);
-          doc.fillColor("#000");
-          y += nRowH;
-        }
-        y += 8;
-      }
       y += 6;
     }
   }

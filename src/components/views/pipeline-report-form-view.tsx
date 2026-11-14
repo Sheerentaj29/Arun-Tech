@@ -47,7 +47,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useAppStore, type PipelineReportType, type EquipmentType, type VesselOrientation } from "@/lib/store";
+import { useAppStore, type PipelineReportType, type EquipmentType } from "@/lib/store";
 import { apiFetch } from "@/lib/api-client";
 import { AuthImage } from "@/components/auth-image";
 import { resolveClientLogo } from "@/lib/client-logo-mapping";
@@ -62,15 +62,16 @@ import {
 } from "@/lib/thickness-tables";
 import {
   vutmMinOfSpots,
-  VUTM_SHELL_COMPONENTS_HORIZONTAL,
-  VUTM_SHELL_COMPONENTS_VERTICAL,
-  VUTM_DISH_COMPONENTS,
+  vutmUnifiedRowsFromReport,
+  emptyVutmRow,
+  VUTM_COMPONENT_TYPES,
   VUTM_NOZZLE_ID_SUGGESTIONS,
-  VUTM_DIRECTIONS,
   VUTM_MOC_SUGGESTIONS,
   VUTM_METHOD_SUGGESTIONS,
   VUTM_COUPLANT_SUGGESTIONS,
   VUTM_CRYSTAL_SUGGESTIONS,
+  type VutmRow,
+  type VutmClockKey,
 } from "@/lib/vutm-rows";
 import { toast } from "sonner";
 
@@ -244,11 +245,9 @@ interface ReportHeader {
   // loaded from the API. It's included in the header object so saveHeader
   // sends it on POST (the API uses it on create; ignored on PUT).
   reportType: PipelineReportType;
-  // Equipment type ("PIPING" | "VESSEL") + vessel orientation
-  // ("HORIZONTAL" | "VERTICAL", VESSEL_DPT and VESSEL_MPT only) selected
-  // in the report-creation flow. Persisted on the report.
+  // Equipment type ("PIPING" | "VESSEL") selected in the report-creation
+  // flow. Persisted on the report.
   equipmentType: string;
-  vesselOrientation: string;
   clientId: string;
   plantId: string;
   inspectionArea: string;
@@ -510,7 +509,6 @@ const EMPTY_HEADER: ReportHeader = {
   reportNumber: "",
   reportType: "PIPELINE_THICKNESS", // overwritten from store on first render
   equipmentType: "",
-  vesselOrientation: "",
   clientId: "",
   plantId: "",
   inspectionArea: "",
@@ -911,180 +909,24 @@ const VWS_OBSERVATION_QUICK_OPTIONS = [
 // Types + helpers for the VESSEL_UTM report (Vessel → UT Thickness
 // Measurement). Completely separate from the Piping Thickness Measurement
 // (PIPELINE_THICKNESS — which keeps its own ThicknessMeasurement rows
-// and form layout untouched). Row shapes differ by orientation:
-//   • HORIZONTAL shell rows measure each component at the 12 / 3 / 6 / 9
-//     o'clock positions, each position with Spot 1–4.
-//   • VERTICAL shell rows measure each component in the East / West /
-//     North / South directions, each direction with Spot 1–4.
-//   • Dish-end rows (Top Dish / Bottom Dish) are direction-based.
-//   • Nozzle rows carry their own column set (Nozzle ID / Nominal /
-//     Size / Schedule / MOC + Spot 1–4).
-// Minimum Measured Thickness is ALWAYS derived from the spot readings
-// via vutmMinOfSpots (imported from @/lib/vutm-rows) — it is read-only
-// everywhere in the UI and recomputed on every keystroke.
+// and form layout untouched).
+//
+// Readings use ONE unified clock-position row shape (see @/lib/vutm-rows):
+// every component row (Shell / Shell-N / Dish End / Top Dish / Bottom
+// Dish / Nozzle / custom) is measured at the 12 / 3 / 6 / 9 o'clock
+// positions, each position starting with ONE reading input that the user
+// can extend dynamically (Add Reading) or trim (remove). Minimum
+// Measured Thickness is ALWAYS derived from all readings of the row via
+// vutmMinOfSpots (imported from @/lib/vutm-rows) — it is read-only
+// everywhere in the UI and recomputed on every keystroke. Legacy
+// orientation-based rows (horizontal / vertical / dish / nozzle shapes)
+// are converted transparently on load, so existing reports keep their
+// readings.
 
-interface VutmShellRowHorizontal {
-  moc: string;
-  componentType: string;
-  componentId: string;
-  nominalThickness: string;
-  c12: string[]; // 4 spots
-  c3: string[];
-  c6: string[];
-  c9: string[];
-}
-interface VutmShellRowVertical {
-  moc: string;
-  componentType: string;
-  direction: string;
-  nominalThickness: string;
-  spot1: string;
-  spot2: string;
-  spot3: string;
-  spot4: string;
-}
-interface VutmDishRow {
-  component: string;
-  direction: string;
-  spot1: string;
-  spot2: string;
-  spot3: string;
-  spot4: string;
-}
-interface VutmNozzleRow {
-  nozzleId: string;
-  nominalThickness: string;
-  size: string;
-  schedule: string;
-  moc: string;
-  spot1: string;
-  spot2: string;
-  spot3: string;
-  spot4: string;
-}
 interface VutmLwProbeEntry {
   frequency: string;
   probeSize: string;
   serialNo: string;
-}
-
-function emptySpots4(): [string, string, string, string] {
-  return ["", "", "", ""];
-}
-const EMPTY_VUTM_SHELL_HORIZONTAL: VutmShellRowHorizontal = {
-  moc: "",
-  componentType: "",
-  componentId: "",
-  nominalThickness: "",
-  c12: emptySpots4(),
-  c3: emptySpots4(),
-  c6: emptySpots4(),
-  c9: emptySpots4(),
-};
-const EMPTY_VUTM_SHELL_VERTICAL: VutmShellRowVertical = {
-  moc: "",
-  componentType: "",
-  direction: "",
-  nominalThickness: "",
-  spot1: "",
-  spot2: "",
-  spot3: "",
-  spot4: "",
-};
-const EMPTY_VUTM_DISH: VutmDishRow = {
-  component: "",
-  direction: "",
-  spot1: "",
-  spot2: "",
-  spot3: "",
-  spot4: "",
-};
-const EMPTY_VUTM_NOZZLE: VutmNozzleRow = {
-  nozzleId: "",
-  nominalThickness: "",
-  size: "",
-  schedule: "",
-  moc: "",
-  spot1: "",
-  spot2: "",
-  spot3: "",
-  spot4: "",
-};
-
-function spotArr(v: unknown, len = 4): string[] {
-  const arr = Array.isArray(v) ? v : [];
-  return Array.from({ length: len }, (_, i) => String(arr[i] ?? ""));
-}
-
-function parseVutmShellRowsHorizontal(json: string | null | undefined): VutmShellRowHorizontal[] {
-  try {
-    const parsed = JSON.parse(json ?? "[]");
-    if (!Array.isArray(parsed)) return [];
-    return parsed.map((r: Record<string, unknown>) => ({
-      moc: String(r.moc ?? ""),
-      componentType: String(r.componentType ?? ""),
-      componentId: String(r.componentId ?? ""),
-      nominalThickness: String(r.nominalThickness ?? ""),
-      c12: spotArr(r.c12),
-      c3: spotArr(r.c3),
-      c6: spotArr(r.c6),
-      c9: spotArr(r.c9),
-    }));
-  } catch {}
-  return [];
-}
-
-function parseVutmShellRowsVertical(json: string | null | undefined): VutmShellRowVertical[] {
-  try {
-    const parsed = JSON.parse(json ?? "[]");
-    if (!Array.isArray(parsed)) return [];
-    return parsed.map((r: Record<string, unknown>) => ({
-      moc: String(r.moc ?? ""),
-      componentType: String(r.componentType ?? ""),
-      direction: String(r.direction ?? ""),
-      nominalThickness: String(r.nominalThickness ?? ""),
-      spot1: String(r.spot1 ?? ""),
-      spot2: String(r.spot2 ?? ""),
-      spot3: String(r.spot3 ?? ""),
-      spot4: String(r.spot4 ?? ""),
-    }));
-  } catch {}
-  return [];
-}
-
-function parseVutmDishRows(json: string | null | undefined): VutmDishRow[] {
-  try {
-    const parsed = JSON.parse(json ?? "[]");
-    if (!Array.isArray(parsed)) return [];
-    return parsed.map((r: Record<string, unknown>) => ({
-      component: String(r.component ?? ""),
-      direction: String(r.direction ?? ""),
-      spot1: String(r.spot1 ?? ""),
-      spot2: String(r.spot2 ?? ""),
-      spot3: String(r.spot3 ?? ""),
-      spot4: String(r.spot4 ?? ""),
-    }));
-  } catch {}
-  return [];
-}
-
-function parseVutmNozzleRows(json: string | null | undefined): VutmNozzleRow[] {
-  try {
-    const parsed = JSON.parse(json ?? "[]");
-    if (!Array.isArray(parsed)) return [];
-    return parsed.map((r: Record<string, unknown>) => ({
-      nozzleId: String(r.nozzleId ?? ""),
-      nominalThickness: String(r.nominalThickness ?? ""),
-      size: String(r.size ?? ""),
-      schedule: String(r.schedule ?? ""),
-      moc: String(r.moc ?? ""),
-      spot1: String(r.spot1 ?? ""),
-      spot2: String(r.spot2 ?? ""),
-      spot3: String(r.spot3 ?? ""),
-      spot4: String(r.spot4 ?? ""),
-    }));
-  } catch {}
-  return [];
 }
 
 function parseVutmLwProbes(json: string | null | undefined): VutmLwProbeEntry[] {
@@ -1104,6 +946,14 @@ function parseVutmLwProbes(json: string | null | undefined): VutmLwProbeEntry[] 
 const CORROSION_LEVELS = ["None", "Light", "Moderate", "Severe", "N/A"];
 const CONDITION_RATINGS = ["Good", "Fair", "Poor", "Critical", "N/A"];
 const RISK_LEVELS = ["Low", "Medium", "High", "Critical"];
+
+// Display labels for the Vessel UT clock-position readings columns.
+const VUTM_CLOCK_LABELS: Record<VutmClockKey, string> = {
+  c12: "12 o'clock",
+  c3: "3 o'clock",
+  c6: "6 o'clock",
+  c9: "9 o'clock",
+};
 
 // System columns that cannot be deleted
 const SYSTEM_COLUMN_KEYS = [
@@ -1143,18 +993,16 @@ export function PipelineReportFormView() {
     refresh,
     pendingPipelineReportType,
     pendingEquipmentType,
-    pendingVesselOrientation,
   } = useAppStore();
   const isEdit = !!editingPipelineReportId;
 
   const [header, setHeader] = useState<ReportHeader>(() => ({
     ...EMPTY_HEADER,
-    // For new reports: use the type (and equipment type / vessel
-    // orientation) the user picked in the selector screen. For existing
-    // reports: overwritten by the API response in the edit-load effect.
+    // For new reports: use the type (and equipment type) the user picked
+    // in the selector screen. For existing reports: overwritten by the API
+    // response in the edit-load effect.
     reportType: pendingPipelineReportType ?? "PIPELINE_THICKNESS",
     equipmentType: pendingEquipmentType ?? "",
-    vesselOrientation: pendingVesselOrientation ?? "",
   }));
   const [rows, setRows] = useState<MeasurementRow[]>([]);
   // ─── Multi-table Thickness support ───
@@ -1178,13 +1026,13 @@ export function PipelineReportFormView() {
   // NOT use this state — it keeps its own wsTestResultRows storage.
   const [vwsRows, setVwsRows] = useState<VwsDetailRow[]>([]);
   // Vessel UT Thickness Measurement readings rows (VESSEL_UTM reports).
-  // Stored locally and persisted as the vutmShellRows / vutmDishRows /
-  // vutmNozzleRows JSON columns whenever the header is saved. The shell
-  // rows' shape depends on the selected orientation (clock positions for
-  // horizontal vessels, directions for vertical vessels).
-  const [vutmShellRows, setVutmShellRows] = useState<VutmShellRowHorizontal[] | VutmShellRowVertical[]>([]);
-  const [vutmDishRows, setVutmDishRows] = useState<VutmDishRow[]>([]);
-  const [vutmNozzleRows, setVutmNozzleRows] = useState<VutmNozzleRow[]>([]);
+  // Stored locally as ONE unified clock-position row list and persisted
+  // as the vutmShellRows JSON column whenever the header is saved (the
+  // legacy vutmDishRows / vutmNozzleRows columns are cleared on save —
+  // their data is migrated into the unified rows on load). The Minimum
+  // Measured Thickness is derived at render time from the readings —
+  // never stored in local state.
+  const [vutmShellRows, setVutmShellRows] = useState<VutmRow[]>([]);
   const [clients, setClients] = useState<ClientItem[]>([]);
   const [componentTypes, setComponentTypes] = useState<ComponentTypeItem[]>([]);
   const [standards, setStandards] = useState<PipeStandardItem[]>([]);
@@ -1258,10 +1106,9 @@ export function PipelineReportFormView() {
           // reportType is fixed at creation time. Read it from the API
           // response (defaults to PIPELINE_THICKNESS for legacy rows).
           reportType: (r.reportType as PipelineReportType) ?? "PIPELINE_THICKNESS",
-          // Equipment type + vessel orientation (from the selector flow;
-          // null for legacy rows created before these fields existed).
+          // Equipment type (from the selector flow; null for legacy rows
+          // created before this field existed).
           equipmentType: r.equipmentType ?? "",
-          vesselOrientation: r.vesselOrientation ?? "",
           clientId: r.clientId,
           plantId: r.plantId,
           inspectionArea: r.inspectionArea ?? "",
@@ -1593,16 +1440,13 @@ export function PipelineReportFormView() {
         // JSON column (VESSEL_WELD_SCAN reports only).
         setVwsRows(parseVwsRows(r.vwsDetailRows));
         // Load Vessel UT Thickness Measurement readings rows (VESSEL_UTM
-        // reports). The shell-row shape follows the report orientation;
-        // both shapes are parsed defensively so a report always reopens
-        // with exactly the rows it was saved with.
+        // reports). All legacy row shapes (horizontal clock rows with
+        // Spot 1–4, vertical direction rows, dish rows, nozzle rows) are
+        // converted into the unified clock-position shape, so a report
+        // always reopens with exactly the readings it was saved with.
         setVutmShellRows(
-          r.vesselOrientation === "VERTICAL"
-            ? parseVutmShellRowsVertical(r.vutmShellRows)
-            : parseVutmShellRowsHorizontal(r.vutmShellRows),
+          vutmUnifiedRowsFromReport(r.vutmShellRows, r.vutmDishRows, r.vutmNozzleRows),
         );
-        setVutmDishRows(parseVutmDishRows(r.vutmDishRows));
-        setVutmNozzleRows(parseVutmNozzleRows(r.vutmNozzleRows));
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -1846,20 +1690,18 @@ export function PipelineReportFormView() {
         // from the header spread.
         payload.vwsDetailRows = JSON.stringify(vwsRows);
       } else if (header.reportType === "VESSEL_UTM") {
-        // Vessel UT Thickness Measurement: the readings rows are stored as
-        // the vutmShellRows / vutmDishRows / vutmNozzleRows JSON columns
-        // (the local row states are the source of truth). The UT Thickness
-        // Measurement Parameters (vutm* fields incl. the repeatable
-        // vutmLwProbeRows grid) pass through verbatim from the header
-        // spread. The API recomputes Minimum Measured Thickness from the
-        // spot readings server-side.
-        payload.vutmShellRows = JSON.stringify(
-          header.vesselOrientation === "VERTICAL"
-            ? (vutmShellRows as VutmShellRowVertical[])
-            : (vutmShellRows as VutmShellRowHorizontal[]),
-        );
-        payload.vutmDishRows = JSON.stringify(vutmDishRows);
-        payload.vutmNozzleRows = JSON.stringify(vutmNozzleRows);
+        // Vessel UT Thickness Measurement: the unified clock-position
+        // readings rows are stored as the vutmShellRows JSON column (the
+        // local row state is the source of truth). The legacy
+        // vutmDishRows / vutmNozzleRows columns are cleared — their data
+        // was migrated into the unified rows when the report was loaded.
+        // The UT Thickness Measurement Parameters (vutm* fields incl. the
+        // repeatable vutmLwProbeRows grid) pass through verbatim from the
+        // header spread. The API recomputes Minimum Measured Thickness
+        // from the readings server-side.
+        payload.vutmShellRows = JSON.stringify(vutmShellRows);
+        payload.vutmDishRows = "[]";
+        payload.vutmNozzleRows = "[]";
       } else {
         payload.pipelineAgeYears = null;
       }
@@ -2202,8 +2044,8 @@ export function PipelineReportFormView() {
         toast.warning("No Weld Scan Testing Details rows yet. You can proceed, but you'll need to add at least one before submitting.");
       }
     } else if (header.reportType === "VESSEL_UTM") {
-      if (vutmShellRows.length === 0 && vutmDishRows.length === 0 && vutmNozzleRows.length === 0) {
-        toast.warning("No UT thickness measurement rows yet. You can proceed, but you'll need to add at least one shell, dish end or nozzle reading before submitting.");
+      if (vutmShellRows.length === 0) {
+        toast.warning("No UT thickness measurement rows yet. You can proceed, but you'll need to add at least one component reading before submitting.");
       }
     }
     // PIPELINE_CONDITION and PIPELINE_MPT (piping) have no row requirement.
@@ -2892,94 +2734,75 @@ export function PipelineReportFormView() {
   }
 
   // ─── VESSEL UT THICKNESS MEASUREMENT ROW OPERATIONS (VESSEL_UTM) ───
-  // Rows live in local state and are persisted as the vutmShellRows /
-  // vutmDishRows / vutmNozzleRows JSON columns whenever the header is
-  // saved (no per-row API calls). Minimum Measured Thickness is derived
-  // at render time from the spot readings — never stored in local state.
-  // The shell-row shape depends on the report's orientation.
+  // Rows live in local state and are persisted as the vutmShellRows JSON
+  // column whenever the header is saved (no per-row API calls). Minimum
+  // Measured Thickness is derived at render time from the readings —
+  // never stored in local state. Every clock position starts with ONE
+  // reading slot; the user can add more readings (+ Add Reading) or
+  // remove them again, without limit.
 
   function addVutmShellRow() {
-    if (header.vesselOrientation === "VERTICAL") {
-      setVutmShellRows((arr) => [
-        ...(arr as VutmShellRowVertical[]),
-        { ...EMPTY_VUTM_SHELL_VERTICAL },
-      ] as VutmShellRowHorizontal[] | VutmShellRowVertical[]);
-    } else {
-      setVutmShellRows((arr) => [
-        ...(arr as VutmShellRowHorizontal[]),
-        { ...EMPTY_VUTM_SHELL_HORIZONTAL },
-      ] as VutmShellRowHorizontal[] | VutmShellRowVertical[]);
-    }
+    setVutmShellRows((arr) => [...arr, emptyVutmRow()]);
   }
 
-  function updateVutmShellRow(
-    idx: number,
-    patch: Partial<VutmShellRowHorizontal> | Partial<VutmShellRowVertical>,
-  ) {
+  function updateVutmShellRow(idx: number, patch: Partial<VutmRow>) {
     setVutmShellRows((arr) => {
-      const next = [...arr] as Array<VutmShellRowHorizontal | VutmShellRowVertical>;
-      next[idx] = { ...next[idx], ...patch } as (typeof next)[number];
-      return next as VutmShellRowHorizontal[] | VutmShellRowVertical[];
+      const next = [...arr];
+      next[idx] = { ...next[idx], ...patch };
+      return next;
     });
   }
 
-  /** Update one spot of a clock-position group on a HORIZONTAL shell row. */
+  /** Update one reading of a clock-position group on a component row. */
   function updateVutmShellClockSpot(
     idx: number,
-    clock: "c12" | "c3" | "c6" | "c9",
+    clock: VutmClockKey,
     spotIdx: number,
     value: string,
   ) {
     setVutmShellRows((arr) => {
-      const rows = arr as VutmShellRowHorizontal[];
-      const cur = rows[idx];
+      const cur = arr[idx];
       if (!cur) return arr;
       const spots = [...cur[clock]];
       spots[spotIdx] = value;
       const nextRow = { ...cur, [clock]: spots };
-      const next = [...rows];
+      const next = [...arr];
       next[idx] = nextRow;
-      return next as VutmShellRowHorizontal[] | VutmShellRowVertical[];
+      return next;
+    });
+  }
+
+  /** Append one more reading slot to a clock position (no limit). */
+  function addVutmReading(idx: number, clock: VutmClockKey) {
+    setVutmShellRows((arr) => {
+      const cur = arr[idx];
+      if (!cur) return arr;
+      const nextRow = { ...cur, [clock]: [...cur[clock], ""] };
+      const next = [...arr];
+      next[idx] = nextRow;
+      return next;
+    });
+  }
+
+  /**
+   * Remove one reading slot from a clock position. The LAST remaining
+   * slot cannot be removed — every position always keeps one input.
+   */
+  function removeVutmReading(idx: number, clock: VutmClockKey, spotIdx: number) {
+    setVutmShellRows((arr) => {
+      const cur = arr[idx];
+      if (!cur) return arr;
+      if (cur[clock].length <= 1) return arr;
+      const spots = cur[clock].filter((_, i) => i !== spotIdx);
+      const nextRow = { ...cur, [clock]: spots };
+      const next = [...arr];
+      next[idx] = nextRow;
+      return next;
     });
   }
 
   function removeVutmShellRow(idx: number) {
-    setVutmShellRows(
-      (arr) =>
-        arr.filter((_, i) => i !== idx) as VutmShellRowHorizontal[] | VutmShellRowVertical[],
-    );
-  }
-
-  function addVutmDishRow() {
-    setVutmDishRows((arr) => [...arr, { ...EMPTY_VUTM_DISH }]);
-  }
-
-  function updateVutmDishRow(idx: number, patch: Partial<VutmDishRow>) {
-    setVutmDishRows((arr) => {
-      const next = [...arr];
-      next[idx] = { ...next[idx], ...patch };
-      return next;
-    });
-  }
-
-  function removeVutmDishRow(idx: number) {
-    setVutmDishRows((arr) => arr.filter((_, i) => i !== idx));
-  }
-
-  function addVutmNozzleRow() {
-    setVutmNozzleRows((arr) => [...arr, { ...EMPTY_VUTM_NOZZLE }]);
-  }
-
-  function updateVutmNozzleRow(idx: number, patch: Partial<VutmNozzleRow>) {
-    setVutmNozzleRows((arr) => {
-      const next = [...arr];
-      next[idx] = { ...next[idx], ...patch };
-      return next;
-    });
-  }
-
-  function removeVutmNozzleRow(idx: number) {
-    setVutmNozzleRows((arr) => arr.filter((_, i) => i !== idx));
+    setVutmShellRows((arr) => arr.filter((_, i) => i !== idx));
   }
 
   // Longitudinal Wave (0°) probe rows — repeatable rows stored as the
@@ -4802,7 +4625,7 @@ export function PipelineReportFormView() {
       )} {/* end step 2 — DPT */}
 
       {/* ═══ STEP 2 (VESSEL DPT): DYE PENETRANT TESTING PARAMETERS,
-              CONSUMABLE DETAILS, AND TESTING DETAILS TABLE ═══
+          CONSUMABLE DETAILS, AND TESTING DETAILS TABLE ═══
           Structure mirrors the sample vessel DPT report:
             A. Dye Penetrant Testing Parameters (17 editable fields)
             B. Consumable Details (Solvent / Penetrant / Developer, each
@@ -4810,8 +4633,6 @@ export function PipelineReportFormView() {
             C. Dye Penetrant Testing Details (editable table:
                Part Details | Type of Weld | Size of Indication Approx. (mm) |
                Observation & Result)
-          The Vessel Orientation (Horizontal / Vertical) selected in the
-          selector is stored on the report and displayed on this step.
           Photographs are captured in Step 3 (shared with all report types)
           and rendered in the PDF under "Inspection Photographs". */}
       {step === 2 && header.reportType === "VESSEL_DPT" && (
@@ -4822,11 +4643,6 @@ export function PipelineReportFormView() {
           <CardTitle className="text-base flex items-center gap-2">
             <Droplet className="h-4 w-4 text-purple-700" />
             Dye Penetrant Testing Parameters
-            {header.vesselOrientation && (
-              <Badge variant="outline" className="border-purple-400 text-purple-700 text-[10px]">
-                {header.vesselOrientation === "HORIZONTAL" ? "Horizontal Vessel" : "Vertical Vessel"}
-              </Badge>
-            )}
           </CardTitle>
           <CardDescription>
             Record the dye penetrant testing parameters for this vessel
@@ -5089,7 +4905,6 @@ export function PipelineReportFormView() {
           <div><strong>Vessel DPT:</strong> record the procedure parameters, consumable details, and one row per part / weld examined.</div>
           <div><strong>Serial numbers:</strong> auto-generated (1, 2, 3…) and renumbered when rows are added or deleted.</div>
           <div><strong>Photographs:</strong> upload DPT photographs in the next step (Findings &amp; Photos) — they appear in the review page and the generated PDF.</div>
-          <div><strong>Vessel orientation:</strong> {header.vesselOrientation === "HORIZONTAL" ? "Horizontal Vessel" : header.vesselOrientation === "VERTICAL" ? "Vertical Vessel" : "not set"} — selected when creating the report and shown on the review page and PDF.</div>
         </CardContent>
       </Card>
 
@@ -5118,11 +4933,6 @@ export function PipelineReportFormView() {
           <CardTitle className="text-base flex items-center gap-2">
             <Magnet className="h-4 w-4 text-orange-700" />
             Magnetic Particle Testing Parameters
-            {header.vesselOrientation && (
-              <Badge variant="outline" className="border-orange-400 text-orange-700 text-[10px]">
-                {header.vesselOrientation === "HORIZONTAL" ? "Horizontal Vessel" : "Vertical Vessel"}
-              </Badge>
-            )}
           </CardTitle>
           <CardDescription>
             Record the magnetic particle testing parameters for this vessel
@@ -5381,7 +5191,6 @@ export function PipelineReportFormView() {
           <div><strong>Vessel MPT:</strong> record the magnetic particle testing parameters, consumable details, and one row per part / weld examined.</div>
           <div><strong>Serial numbers:</strong> auto-generated (1, 2, 3…) and renumbered when rows are added or deleted.</div>
           <div><strong>Photographs:</strong> upload MPT photographs in the next step (Findings &amp; Photos) — they appear in the review page and the generated PDF.</div>
-          <div><strong>Vessel orientation:</strong> {header.vesselOrientation === "HORIZONTAL" ? "Horizontal Vessel" : header.vesselOrientation === "VERTICAL" ? "Vertical Vessel" : "not set"} — selected when creating the report and shown on the review page and PDF.</div>
         </CardContent>
       </Card>
 
@@ -5833,36 +5642,19 @@ export function PipelineReportFormView() {
           Shown only for VESSEL_UTM reports. Renders, in this order:
             A. UT Thickness Measurement Parameters (grouped two-column
                table + the repeatable Longitudinal Wave 0° probe grid).
-            B. UT Thickness Measurement Readings — orientation-specific
-               tables:
-                 • HORIZONTAL → clock positions (12 / 3 / 6 / 9 o'clock,
-                   each with Spot 1–4)
-                 • VERTICAL   → directions (East / West / North / South,
-                   each with Spot 1–4)
-               plus dedicated Dish End (direction-based) and Nozzle
-               tables. Minimum Measured Thickness is read-only and
-               auto-calculated from the spot readings on every change.
+            B. UT Thickness Measurement Readings — ONE unified table:
+               every component (Shell, Shell-1, Shell-2, Dish End, Top
+               Dish, Bottom Dish, Nozzle or a custom component) is
+               measured at the 12 / 3 / 6 / 9 o'clock positions. Each
+               position starts with ONE reading input; "+ Add Reading"
+               appends more slots (no limit) and extra readings can be
+               removed again. Minimum Measured Thickness is read-only and
+               auto-calculated from ALL readings of the row on every
+               change.
           Completely separate from the Piping Thickness Measurement
           (PIPELINE_THICKNESS) Step 2, which stays untouched. */}
-      {step === 2 && header.reportType === "VESSEL_UTM" && (() => {
-        const utmIsHorizontal = header.vesselOrientation !== "VERTICAL";
-        const utmShellComponents = utmIsHorizontal
-          ? VUTM_SHELL_COMPONENTS_HORIZONTAL
-          : VUTM_SHELL_COMPONENTS_VERTICAL;
-        const shellRowsH = utmIsHorizontal ? (vutmShellRows as VutmShellRowHorizontal[]) : [];
-        const shellRowsV = utmIsHorizontal ? [] : (vutmShellRows as VutmShellRowVertical[]);
-        return (
-        <>
-        {header.vesselOrientation && (
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="border-emerald-500 text-emerald-700">
-              {header.vesselOrientation === "HORIZONTAL" ? "Horizontal Vessel" : "Vertical Vessel"}
-            </Badge>
-            <span className="text-xs text-muted-foreground">
-              The orientation determines the readings-table structure.
-            </span>
-          </div>
-        )}
+      {step === 2 && header.reportType === "VESSEL_UTM" && (
+      <>
 
         {/* ═══ A. UT THICKNESS MEASUREMENT PARAMETERS ═══ */}
         <Card>
@@ -6174,396 +5966,88 @@ export function PipelineReportFormView() {
               <div>
                 <CardTitle className="text-base">UT Thickness Measurement Readings</CardTitle>
                 <CardDescription>
-                  {utmIsHorizontal
-                    ? "Horizontal vessel — cylindrical shell components are measured at the 12 / 3 / 6 / 9 o'clock positions, each with Spot 1–4."
-                    : "Vertical vessel — components are measured in the East / West / North / South directions, each with Spot 1–4. Each direction is a separate row."}{" "}
-                  Minimum Measured Thickness is calculated automatically and is read-only.
+                  Every component (Shell, Shell-1, Shell-2, Dish End, Top Dish, Bottom Dish, Nozzle or a custom component) is measured at the 12 / 3 / 6 / 9 o&apos;clock positions. Each position starts with ONE reading — use “+ Add Reading” to record more readings at that position (no limit); extra readings can be removed again. Minimum Measured Thickness is calculated automatically across ALL readings of the row and is read-only.
                 </CardDescription>
               </div>
             </div>
           </CardHeader>
           <CardContent className="p-0 space-y-6">
-            {/* ─── B.1 SHELL / COMPONENT MEASUREMENTS ─── */}
+            {/* ─── B.1 COMPONENT MEASUREMENTS (CLOCK POSITIONS) ─── */}
             <div className="p-4 pb-0">
               <div className="flex items-center justify-between mb-2">
                 <div className="text-sm font-semibold text-zinc-700">
-                  Component Measurements {utmIsHorizontal ? "(Clock Positions)" : "(Directions)"}
+                  Component Measurements (Clock Positions)
                 </div>
                 <Button onClick={addVutmShellRow} size="sm">
                   <Plus className="mr-1 h-4 w-4" /> Add Component Row
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground mb-2">
-                Component suggestions: {utmShellComponents.join(", ")} — any custom component can be typed.
+                Component suggestions: {VUTM_COMPONENT_TYPES.join(", ")} — any custom component can be typed. Nozzle ID suggestions: {VUTM_NOZZLE_ID_SUGGESTIONS.join(", ")}.
               </p>
               <div className="overflow-x-auto">
-                {utmIsHorizontal ? (
-                  /* ─── HORIZONTAL: clock-position based table ─── */
-                  <table className="w-full text-xs border-collapse">
-                    <thead className="bg-emerald-800 text-white">
-                      <tr>
-                        <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 110 }}>MOC</th>
-                        <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 130 }}>Component Type</th>
-                        <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 110 }}>Component ID</th>
-                        <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 90 }}>Nominal Thickness (mm)</th>
-                        <th colSpan={4} className="border border-emerald-900 px-2 py-2 text-center">12 O&apos;clock</th>
-                        <th colSpan={4} className="border border-emerald-900 px-2 py-2 text-center">3 O&apos;clock</th>
-                        <th colSpan={4} className="border border-emerald-900 px-2 py-2 text-center">6 O&apos;clock</th>
-                        <th colSpan={4} className="border border-emerald-900 px-2 py-2 text-center">9 O&apos;clock</th>
-                        <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 80 }}>Minimum Measured Thickness (mm)</th>
-                        <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 60 }}>Actions</th>
-                      </tr>
-                      <tr>
-                        {(["c12", "c3", "c6", "c9"] as const).map((k) =>
-                          [1, 2, 3, 4].map((s) => (
-                            <th key={`${k}-${s}`} className="border border-emerald-900 px-1 py-1.5 text-center font-normal">Spot {s}</th>
-                          )),
-                        )}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {shellRowsH.length === 0 && (
-                        <tr>
-                          <td colSpan={22} className="text-center py-6 text-muted-foreground border border-zinc-300">
-                            No rows yet. Click <strong>Add Component Row</strong> to begin.
-                          </td>
-                        </tr>
-                      )}
-                      {shellRowsH.map((row, idx) => (
-                        <tr key={idx} className="hover:bg-muted/30">
-                          <td className="border border-zinc-300 p-1">
-                            <Input
-                              className="h-8 text-xs"
-                              list={`vutm-moc-suggestions-${idx}`}
-                              value={row.moc}
-                              onChange={(e) => updateVutmShellRow(idx, { moc: e.target.value })}
-                              placeholder="e.g. Carbon Steel"
-                            />
-                            <datalist id={`vutm-moc-suggestions-${idx}`}>
-                              {VUTM_MOC_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
-                            </datalist>
-                          </td>
-                          <td className="border border-zinc-300 p-1">
-                            <Input
-                              className="h-8 text-xs"
-                              list={`vutm-shell-comp-h-${idx}`}
-                              value={row.componentType}
-                              onChange={(e) => updateVutmShellRow(idx, { componentType: e.target.value })}
-                              placeholder="e.g. Shell-1 / custom"
-                            />
-                            <datalist id={`vutm-shell-comp-h-${idx}`}>
-                              {utmShellComponents.map((s) => <option key={s} value={s} />)}
-                            </datalist>
-                          </td>
-                          <td className="border border-zinc-300 p-1">
-                            <Input
-                              className="h-8 text-xs"
-                              value={row.componentId}
-                              onChange={(e) => updateVutmShellRow(idx, { componentId: e.target.value })}
-                              placeholder="e.g. S-01"
-                            />
-                          </td>
-                          <td className="border border-zinc-300 p-1">
-                            <Input
-                              className="h-8 text-xs"
-                              inputMode="decimal"
-                              value={row.nominalThickness}
-                              onChange={(e) => updateVutmShellRow(idx, { nominalThickness: e.target.value })}
-                              placeholder="mm"
-                            />
-                          </td>
-                          {(["c12", "c3", "c6", "c9"] as const).map((clock) =>
-                            [0, 1, 2, 3].map((si) => (
-                              <td key={`${clock}-${si}`} className="border border-zinc-300 p-0.5">
-                                <Input
-                                  className="h-8 text-xs px-1 text-center"
-                                  inputMode="decimal"
-                                  value={row[clock][si] ?? ""}
-                                  onChange={(e) => updateVutmShellClockSpot(idx, clock, si, e.target.value)}
-                                  placeholder="—"
-                                  aria-label={`${clock} spot ${si + 1}`}
-                                />
-                              </td>
-                            )),
-                          )}
-                          <td className="border border-zinc-300 p-1 text-center bg-zinc-50 font-mono tabular-nums font-semibold">
-                            {vutmMinOfSpots(row.c12, row.c3, row.c6, row.c9) || "—"}
-                          </td>
-                          <td className="border border-zinc-300 p-1">
-                            <div className="flex justify-center">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
-                                onClick={() => removeVutmShellRow(idx)}
-                                title="Remove row"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                ) : (
-                  /* ─── VERTICAL: direction based table ─── */
-                  <table className="w-full text-xs border-collapse">
-                    <thead className="bg-emerald-800 text-white">
-                      <tr>
-                        <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 110 }}>MOC</th>
-                        <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 130 }}>Component Type</th>
-                        <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 100 }}>Direction</th>
-                        <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 90 }}>Nominal Thickness (mm)</th>
-                        <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 70 }}>Spot 1</th>
-                        <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 70 }}>Spot 2</th>
-                        <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 70 }}>Spot 3</th>
-                        <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 70 }}>Spot 4</th>
-                        <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 80 }}>Minimum Measured Thickness (mm)</th>
-                        <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 60 }}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {shellRowsV.length === 0 && (
-                        <tr>
-                          <td colSpan={10} className="text-center py-6 text-muted-foreground border border-zinc-300">
-                            No rows yet. Click <strong>Add Component Row</strong> to begin — e.g. one row per direction for Shell-1 (East, West, North, South).
-                          </td>
-                        </tr>
-                      )}
-                      {shellRowsV.map((row, idx) => (
-                        <tr key={idx} className="hover:bg-muted/30">
-                          <td className="border border-zinc-300 p-1">
-                            <Input
-                              className="h-8 text-xs"
-                              list={`vutm-moc-v-${idx}`}
-                              value={row.moc}
-                              onChange={(e) => updateVutmShellRow(idx, { moc: e.target.value })}
-                              placeholder="e.g. Carbon Steel"
-                            />
-                            <datalist id={`vutm-moc-v-${idx}`}>
-                              {VUTM_MOC_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
-                            </datalist>
-                          </td>
-                          <td className="border border-zinc-300 p-1">
-                            <Input
-                              className="h-8 text-xs"
-                              list={`vutm-shell-comp-v-${idx}`}
-                              value={row.componentType}
-                              onChange={(e) => updateVutmShellRow(idx, { componentType: e.target.value })}
-                              placeholder="e.g. Shell-1 / custom"
-                            />
-                            <datalist id={`vutm-shell-comp-v-${idx}`}>
-                              {utmShellComponents.map((s) => <option key={s} value={s} />)}
-                            </datalist>
-                          </td>
-                          <td className="border border-zinc-300 p-1">
-                            <Select
-                              value={row.direction || undefined}
-                              onValueChange={(v) => updateVutmShellRow(idx, { direction: v })}
-                            >
-                              <SelectTrigger className="h-8 text-xs">
-                                <SelectValue placeholder="Select" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {VUTM_DIRECTIONS.map((d) => (
-                                  <SelectItem key={d} value={d}>{d}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </td>
-                          <td className="border border-zinc-300 p-1">
-                            <Input
-                              className="h-8 text-xs"
-                              inputMode="decimal"
-                              value={row.nominalThickness}
-                              onChange={(e) => updateVutmShellRow(idx, { nominalThickness: e.target.value })}
-                              placeholder="mm"
-                            />
-                          </td>
-                          {(["spot1", "spot2", "spot3", "spot4"] as const).map((k) => (
-                            <td key={k} className="border border-zinc-300 p-0.5">
-                              <Input
-                                className="h-8 text-xs px-1 text-center"
-                                inputMode="decimal"
-                                value={row[k]}
-                                onChange={(e) => updateVutmShellRow(idx, { [k]: e.target.value } as Partial<VutmShellRowVertical>)}
-                                placeholder="—"
-                                aria-label={`${k}`}
-                              />
-                            </td>
-                          ))}
-                          <td className="border border-zinc-300 p-1 text-center bg-zinc-50 font-mono tabular-nums font-semibold">
-                            {vutmMinOfSpots(row.spot1, row.spot2, row.spot3, row.spot4) || "—"}
-                          </td>
-                          <td className="border border-zinc-300 p-1">
-                            <div className="flex justify-center">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
-                                onClick={() => removeVutmShellRow(idx)}
-                                title="Remove row"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
-
-            {/* ─── B.2 DISH END MEASUREMENTS ─── */}
-            <div className="border-t border-zinc-200 p-4">
-              <div className="flex items-center justify-between mb-2">
-                <div>
-                  <div className="text-sm font-semibold text-zinc-700">Dish End Measurements</div>
-                  <p className="text-xs text-muted-foreground">
-                    Direction-based readings for Top Dish / Bottom Dish — one row per direction, each with Spot 1–4.
-                  </p>
-                </div>
-                <Button onClick={addVutmDishRow} size="sm" variant="outline">
-                  <Plus className="mr-1 h-4 w-4" /> Add Dish Row
-                </Button>
-              </div>
-              <div className="overflow-x-auto">
+                {/* ─── Unified clock-position table (all components) ─── */}
                 <table className="w-full text-xs border-collapse">
                   <thead className="bg-emerald-800 text-white">
                     <tr>
-                      <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 130 }}>Dish</th>
-                      <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 100 }}>Direction</th>
-                      <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 70 }}>Spot 1</th>
-                      <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 70 }}>Spot 2</th>
-                      <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 70 }}>Spot 3</th>
-                      <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 70 }}>Spot 4</th>
-                      <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 80 }}>Minimum Measured Thickness (mm)</th>
-                      <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 60 }}>Actions</th>
+                      <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 110 }}>MOC</th>
+                      <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 130 }}>Component Type</th>
+                      <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 110 }}>Component ID</th>
+                      <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 90 }}>Nominal Thickness (mm)</th>
+                      <th colSpan={4} className="border border-emerald-900 px-2 py-2 text-center">Clock-Position Readings (mm)</th>
+                      <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 80 }}>Minimum Measured Thickness (mm)</th>
+                      <th rowSpan={2} className="border border-emerald-900 px-2 py-2 text-center align-middle" style={{ minWidth: 60 }}>Actions</th>
+                    </tr>
+                    <tr>
+                      <th className="border border-emerald-900 px-2 py-1.5 text-center font-normal" style={{ minWidth: 160 }}>12 O&apos;clock</th>
+                      <th className="border border-emerald-900 px-2 py-1.5 text-center font-normal" style={{ minWidth: 160 }}>3 O&apos;clock</th>
+                      <th className="border border-emerald-900 px-2 py-1.5 text-center font-normal" style={{ minWidth: 160 }}>6 O&apos;clock</th>
+                      <th className="border border-emerald-900 px-2 py-1.5 text-center font-normal" style={{ minWidth: 160 }}>9 O&apos;clock</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {vutmDishRows.length === 0 && (
+                    {vutmShellRows.length === 0 && (
                       <tr>
-                        <td colSpan={8} className="text-center py-6 text-muted-foreground border border-zinc-300">
-                          No dish end rows yet. Click <strong>Add Dish Row</strong> to begin.
+                        <td colSpan={9} className="text-center py-6 text-muted-foreground border border-zinc-300">
+                          No rows yet. Click <strong>Add Component Row</strong> to begin.
                         </td>
                       </tr>
                     )}
-                    {vutmDishRows.map((row, idx) => (
-                      <tr key={idx} className="hover:bg-muted/30">
+                    {vutmShellRows.map((row, idx) => (
+                      <tr key={idx} className="hover:bg-muted/30 align-top">
                         <td className="border border-zinc-300 p-1">
                           <Input
                             className="h-8 text-xs"
-                            list={`vutm-dish-comp-${idx}`}
-                            value={row.component}
-                            onChange={(e) => updateVutmDishRow(idx, { component: e.target.value })}
-                            placeholder="e.g. Top Dish / custom"
+                            list={`vutm-moc-suggestions-${idx}`}
+                            value={row.moc}
+                            onChange={(e) => updateVutmShellRow(idx, { moc: e.target.value })}
+                            placeholder="e.g. Carbon Steel"
                           />
-                          <datalist id={`vutm-dish-comp-${idx}`}>
-                            {VUTM_DISH_COMPONENTS.map((s) => <option key={s} value={s} />)}
+                          <datalist id={`vutm-moc-suggestions-${idx}`}>
+                            {VUTM_MOC_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
                           </datalist>
                         </td>
                         <td className="border border-zinc-300 p-1">
-                          <Select
-                            value={row.direction || undefined}
-                            onValueChange={(v) => updateVutmDishRow(idx, { direction: v })}
-                          >
-                            <SelectTrigger className="h-8 text-xs">
-                              <SelectValue placeholder="Select" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {VUTM_DIRECTIONS.map((d) => (
-                                <SelectItem key={d} value={d}>{d}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <Input
+                            className="h-8 text-xs"
+                            list={`vutm-comp-type-${idx}`}
+                            value={row.componentType}
+                            onChange={(e) => updateVutmShellRow(idx, { componentType: e.target.value })}
+                            placeholder="e.g. Shell-1 / Top Dish / Nozzle"
+                          />
+                          <datalist id={`vutm-comp-type-${idx}`}>
+                            {VUTM_COMPONENT_TYPES.map((s) => <option key={s} value={s} />)}
+                          </datalist>
                         </td>
-                        {(["spot1", "spot2", "spot3", "spot4"] as const).map((k) => (
-                          <td key={k} className="border border-zinc-300 p-0.5">
-                            <Input
-                              className="h-8 text-xs px-1 text-center"
-                              inputMode="decimal"
-                              value={row[k]}
-                              onChange={(e) => updateVutmDishRow(idx, { [k]: e.target.value } as Partial<VutmDishRow>)}
-                              placeholder="—"
-                            />
-                          </td>
-                        ))}
-                        <td className="border border-zinc-300 p-1 text-center bg-zinc-50 font-mono tabular-nums font-semibold">
-                          {vutmMinOfSpots(row.spot1, row.spot2, row.spot3, row.spot4) || "—"}
-                        </td>
-                        <td className="border border-zinc-300 p-1">
-                          <div className="flex justify-center">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
-                              onClick={() => removeVutmDishRow(idx)}
-                              title="Remove row"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* ─── B.3 NOZZLE MEASUREMENTS ─── */}
-            <div className="border-t border-zinc-200 p-4">
-              <div className="flex items-center justify-between mb-2">
-                <div>
-                  <div className="text-sm font-semibold text-zinc-700">Nozzle Measurements</div>
-                  <p className="text-xs text-muted-foreground">
-                    One row per nozzle (N1, N2, N3, N4 or any custom nozzle ID). Spot readings give the Minimum Measured Thickness automatically.
-                  </p>
-                </div>
-                <Button onClick={addVutmNozzleRow} size="sm" variant="outline">
-                  <Plus className="mr-1 h-4 w-4" /> Add Nozzle Row
-                </Button>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs border-collapse">
-                  <thead className="bg-emerald-800 text-white">
-                    <tr>
-                      <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 90 }}>Nozzle ID</th>
-                      <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 90 }}>Nominal Thickness (mm)</th>
-                      <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 80 }}>Size</th>
-                      <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 90 }}>Schedule</th>
-                      <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 110 }}>MOC</th>
-                      <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 70 }}>Spot 1</th>
-                      <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 70 }}>Spot 2</th>
-                      <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 70 }}>Spot 3</th>
-                      <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 70 }}>Spot 4</th>
-                      <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 80 }}>Minimum Measured Thickness (mm)</th>
-                      <th className="border border-emerald-900 px-2 py-2 text-center" style={{ minWidth: 60 }}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {vutmNozzleRows.length === 0 && (
-                      <tr>
-                        <td colSpan={11} className="text-center py-6 text-muted-foreground border border-zinc-300">
-                          No nozzle rows yet. Click <strong>Add Nozzle Row</strong> to begin.
-                        </td>
-                      </tr>
-                    )}
-                    {vutmNozzleRows.map((row, idx) => (
-                      <tr key={idx} className="hover:bg-muted/30">
                         <td className="border border-zinc-300 p-1">
                           <Input
                             className="h-8 text-xs"
-                            list={`vutm-nozzle-id-${idx}`}
-                            value={row.nozzleId}
-                            onChange={(e) => updateVutmNozzleRow(idx, { nozzleId: e.target.value })}
-                            placeholder="e.g. N1 / custom"
+                            list={`vutm-comp-id-${idx}`}
+                            value={row.componentId}
+                            onChange={(e) => updateVutmShellRow(idx, { componentId: e.target.value })}
+                            placeholder="e.g. S-01 / N1"
                           />
-                          <datalist id={`vutm-nozzle-id-${idx}`}>
+                          <datalist id={`vutm-comp-id-${idx}`}>
                             {VUTM_NOZZLE_ID_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
                           </datalist>
                         </td>
@@ -6572,51 +6056,53 @@ export function PipelineReportFormView() {
                             className="h-8 text-xs"
                             inputMode="decimal"
                             value={row.nominalThickness}
-                            onChange={(e) => updateVutmNozzleRow(idx, { nominalThickness: e.target.value })}
+                            onChange={(e) => updateVutmShellRow(idx, { nominalThickness: e.target.value })}
                             placeholder="mm"
                           />
                         </td>
-                        <td className="border border-zinc-300 p-1">
-                          <Input
-                            className="h-8 text-xs"
-                            value={row.size}
-                            onChange={(e) => updateVutmNozzleRow(idx, { size: e.target.value })}
-                            placeholder='e.g. 2"'
-                          />
-                        </td>
-                        <td className="border border-zinc-300 p-1">
-                          <Input
-                            className="h-8 text-xs"
-                            value={row.schedule}
-                            onChange={(e) => updateVutmNozzleRow(idx, { schedule: e.target.value })}
-                            placeholder="e.g. SCH 40"
-                          />
-                        </td>
-                        <td className="border border-zinc-300 p-1">
-                          <Input
-                            className="h-8 text-xs"
-                            list={`vutm-nozzle-moc-${idx}`}
-                            value={row.moc}
-                            onChange={(e) => updateVutmNozzleRow(idx, { moc: e.target.value })}
-                            placeholder="e.g. Carbon Steel"
-                          />
-                          <datalist id={`vutm-nozzle-moc-${idx}`}>
-                            {VUTM_MOC_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
-                          </datalist>
-                        </td>
-                        {(["spot1", "spot2", "spot3", "spot4"] as const).map((k) => (
-                          <td key={k} className="border border-zinc-300 p-0.5">
-                            <Input
-                              className="h-8 text-xs px-1 text-center"
-                              inputMode="decimal"
-                              value={row[k]}
-                              onChange={(e) => updateVutmNozzleRow(idx, { [k]: e.target.value } as Partial<VutmNozzleRow>)}
-                              placeholder="—"
-                            />
+                        {(["c12", "c3", "c6", "c9"] as const).map((clock) => (
+                          <td key={clock} className="border border-zinc-300 p-1 align-top">
+                            <div className="space-y-1">
+                              {row[clock].map((reading, ri) => (
+                                <div key={ri} className="flex items-center gap-1">
+                                  <span className="w-8 shrink-0 text-[10px] leading-8 text-muted-foreground">
+                                    R{ri + 1}
+                                  </span>
+                                  <Input
+                                    className="h-8 flex-1 text-xs px-1 text-center"
+                                    inputMode="decimal"
+                                    value={reading}
+                                    onChange={(e) => updateVutmShellClockSpot(idx, clock, ri, e.target.value)}
+                                    placeholder="—"
+                                    aria-label={`${VUTM_CLOCK_LABELS[clock]} — reading ${ri + 1}`}
+                                  />
+                                  {row[clock].length > 1 && (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-6 w-6 p-0 text-red-600 hover:text-red-700 shrink-0"
+                                      onClick={() => removeVutmReading(idx, clock, ri)}
+                                      title="Remove this reading"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </Button>
+                                  )}
+                                </div>
+                              ))}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 w-full px-1 text-[10px]"
+                                onClick={() => addVutmReading(idx, clock)}
+                                title={`Add another reading at ${VUTM_CLOCK_LABELS[clock]}`}
+                              >
+                                <Plus className="mr-0.5 h-3 w-3" /> Add Reading
+                              </Button>
+                            </div>
                           </td>
                         ))}
                         <td className="border border-zinc-300 p-1 text-center bg-zinc-50 font-mono tabular-nums font-semibold">
-                          {vutmMinOfSpots(row.spot1, row.spot2, row.spot3, row.spot4) || "—"}
+                          {vutmMinOfSpots(row.c12, row.c3, row.c6, row.c9) || "—"}
                         </td>
                         <td className="border border-zinc-300 p-1">
                           <div className="flex justify-center">
@@ -6624,7 +6110,7 @@ export function PipelineReportFormView() {
                               size="sm"
                               variant="ghost"
                               className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
-                              onClick={() => removeVutmNozzleRow(idx)}
+                              onClick={() => removeVutmShellRow(idx)}
                               title="Remove row"
                             >
                               <Trash2 className="h-3 w-3" />
@@ -6637,13 +6123,14 @@ export function PipelineReportFormView() {
                 </table>
               </div>
             </div>
+
           </CardContent>
         </Card>
 
         <Card className="bg-zinc-50">
           <CardContent className="p-4 text-xs text-muted-foreground space-y-1">
-            <div><strong>Vessel orientation:</strong> {header.vesselOrientation === "HORIZONTAL" ? "Horizontal Vessel" : header.vesselOrientation === "VERTICAL" ? "Vertical Vessel" : "not set"} — selected when creating the report and shown on the review page and PDF.</div>
-            <div><strong>Minimum Measured Thickness:</strong> calculated automatically as the minimum of the entered spot readings on each row — it is read-only and updates as you type.</div>
+            <div><strong>Minimum Measured Thickness:</strong> calculated automatically as the minimum of ALL readings entered across the 12 / 3 / 6 / 9 o'clock positions of each row — it is read-only and updates whenever a reading is added, changed, or removed.</div>
+            <div><strong>Dynamic readings:</strong> every clock position starts with one reading input; “+ Add Reading” adds more slots for that position (no limit) and the ✕ button removes a reading again. Only the readings you actually enter appear in the report.</div>
             <div><strong>Component / Nozzle IDs:</strong> suggestions are offered (Shell-1, Top Dish, N1…) but any custom value can be typed.</div>
             <div><strong>Photographs:</strong> upload photographs taken during the UT Thickness Measurement in the next step (Findings &amp; Photos) — they appear after the readings in the review page and the generated PDF.</div>
           </CardContent>
@@ -6663,8 +6150,7 @@ export function PipelineReportFormView() {
           </Button>
         </div>
         </>
-        );
-      })()} {/* end step 2 — VESSEL UT THICKNESS MEASUREMENT */}
+      )} {/* end step 2 — VESSEL UT THICKNESS MEASUREMENT */}
 
       {/* ═══ STEP 2 (MPT): MAGNETIC PARTICLE TESTING PROCEDURE ═══ */}
       {step === 2 && header.reportType === "PIPELINE_MPT" && (

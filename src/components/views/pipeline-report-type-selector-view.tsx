@@ -10,8 +10,6 @@ import {
   ChevronRight,
   Workflow,
   Cylinder,
-  MoveHorizontal,
-  MoveVertical,
   Eye,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -102,47 +100,17 @@ const VESSEL_OPTIONS: TypeOption[] = [
   },
 ];
 
-// Vessel test types that require the orientation step (Horizontal /
-// Vertical) before the form opens. The selected orientation is saved
-// with the report and shown on the review page and in the PDF.
-//
-// NOTE: VESSEL_DPT / VESSEL_MPT already required the orientation step
-// before this update (their existing workflow — preserved unchanged).
-// VESSEL_UTM is added here by the Vessel UT Thickness Measurement update:
-// the orientation determines the readings-table structure (clock
-// positions for horizontal vessels vs East/West/North/South directions
-// for vertical vessels). VESSEL_WELD_SCAN and VESSEL_VISUAL deliberately
-// do NOT appear here — no orientation step for them.
-const VESSEL_ORIENTATION_REQUIRED = new Set<PipelineReportType>([
-  "VESSEL_DPT",
-  "VESSEL_MPT",
-  "VESSEL_UTM",
-]);
-
-// Labels used by the Step-3 breadcrumb for the orientation-stage test
-// types.
-const ORIENTATION_STAGE_TEST_LABELS: Partial<Record<PipelineReportType, string>> = {
-  VESSEL_DPT: "Dye Penetrant Testing (DPT)",
-  VESSEL_MPT: "Magnetic Particle Testing (MPT)",
-  VESSEL_UTM: "UT Thickness Measurement",
-};
-
-type Stage = "equipment" | "test" | "orientation";
+type Stage = "equipment" | "test";
 
 export function PipelineReportTypeSelectorView() {
   const { setView, openNewPipelineReportWithSelection } = useAppStore();
-  // Stage 1: Equipment Type → Stage 2: Test Type → Stage 3 (Vessel DPT,
-  // Vessel MPT and Vessel UT Thickness Measurement only): Vessel
-  // Orientation → form.
+  // Stage 1: Equipment Type → Stage 2: Test Type → form.
+  // (No orientation stage — the report form opens directly.)
   const [stage, setStage] = useState<Stage>("equipment");
   const [equipmentType, setEquipmentType] = useState<"PIPING" | "VESSEL" | null>(null);
-  // Test type picked in Stage 2. Kept so the orientation stage knows
-  // which vessel report type to open (VESSEL_DPT, VESSEL_MPT or
-  // VESSEL_UTM).
-  const [selectedTestType, setSelectedTestType] = useState<PipelineReportType | null>(null);
 
   const options = equipmentType === "VESSEL" ? VESSEL_OPTIONS : PIPING_OPTIONS;
-  const stepNumber = stage === "equipment" ? 1 : stage === "test" ? 2 : 3;
+  const stepNumber = stage === "equipment" ? 1 : 2;
 
   function pickEquipment(t: "PIPING" | "VESSEL") {
     setEquipmentType(t);
@@ -151,20 +119,7 @@ export function PipelineReportTypeSelectorView() {
 
   function pickTest(opt: TypeOption) {
     if (opt.comingSoon) return;
-    // Vessel DPT, Vessel MPT and Vessel UT Thickness Measurement require
-    // the orientation step before the form opens — it cannot be skipped.
-    if (VESSEL_ORIENTATION_REQUIRED.has(opt.type)) {
-      setSelectedTestType(opt.type);
-      setStage("orientation");
-      return;
-    }
-    openNewPipelineReportWithSelection(opt.type, equipmentType, null);
-  }
-
-  function pickOrientation(orientation: "HORIZONTAL" | "VERTICAL") {
-    if (selectedTestType) {
-      openNewPipelineReportWithSelection(selectedTestType, "VESSEL", orientation);
-    }
+    openNewPipelineReportWithSelection(opt.type, equipmentType);
   }
 
   return (
@@ -197,9 +152,7 @@ export function PipelineReportTypeSelectorView() {
           <span className="font-medium">
             {stage === "equipment"
               ? "Select Equipment Type"
-              : stage === "test"
-                ? "Select Test Type"
-                : "Select Vessel Orientation"}
+              : "Select Test Type"}
           </span>
           <span className="text-muted-foreground ml-auto">Choose one →</span>
         </div>
@@ -211,17 +164,6 @@ export function PipelineReportTypeSelectorView() {
                 ? "Vessel"
                 : "Piping"}
           </span>
-          {stage !== "equipment" && (
-            <>
-              <span>→</span>
-              <span className="font-medium">
-                {stage === "test"
-                  ? "…"
-                  : (ORIENTATION_STAGE_TEST_LABELS[selectedTestType ?? ""] ??
-                     "Selected Test Type")}
-              </span>
-            </>
-          )}
         </div>
       </div>
 
@@ -330,67 +272,11 @@ export function PipelineReportTypeSelectorView() {
         </div>
       )}
 
-      {/* ─── STAGE 3: VESSEL ORIENTATION (Vessel DPT / MPT / UT Thickness Measurement) ─── */}
-      {stage === "orientation" && (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {([
-            {
-              key: "HORIZONTAL",
-              title: "Horizontal Vessel",
-              icon: MoveHorizontal,
-              accent: "border-purple-500 bg-purple-50 hover:bg-purple-100",
-            },
-            {
-              key: "VERTICAL",
-              title: "Vertical Vessel",
-              icon: MoveVertical,
-              accent: "border-purple-500 bg-purple-50 hover:bg-purple-100",
-            },
-          ] as const).map((opt) => {
-            const Icon = opt.icon;
-            return (
-              <Card
-                key={opt.key}
-                className={`cursor-pointer border-2 transition-all hover:shadow-md ${opt.accent}`}
-                onClick={() => pickOrientation(opt.key)}
-              >
-                <CardContent className="flex h-full flex-col p-6">
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-md bg-white shrink-0">
-                      <Icon className="h-8 w-8" />
-                    </div>
-                    <div className="font-semibold text-lg">{opt.title}</div>
-                  </div>
-                  <div className="mt-4 flex items-center justify-end">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 px-2 text-xs"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        pickOrientation(opt.key);
-                      }}
-                    >
-                      Select <ChevronRight className="ml-1 h-3 w-3" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      )}
-
       {/* Back navigation between stages */}
       <div>
         {stage === "test" && (
           <Button variant="ghost" size="sm" onClick={() => setStage("equipment")}>
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to Equipment Type
-          </Button>
-        )}
-        {stage === "orientation" && (
-          <Button variant="ghost" size="sm" onClick={() => setStage("test")}>
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Test Type
           </Button>
         )}
       </div>
@@ -400,9 +286,8 @@ export function PipelineReportTypeSelectorView() {
           <strong>Common features for all report types:</strong> client / plant identification
           header, inspection photo gallery with captions, and the existing approval workflow
           (Draft → Submitted for Review → Approved / Returned for Revision → Changes Pending
-          Review). The selected equipment type, test type, and vessel orientation (for vessel
-          DPT / MPT / UT Thickness Measurement reports) are shown in the report list, detail
-          view, generated PDF, and revision history.
+          Review). The selected equipment type and test type are shown in the report list,
+          detail view, generated PDF, and revision history.
         </CardContent>
       </Card>
     </div>

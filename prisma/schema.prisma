@@ -454,11 +454,11 @@ model PipelineInspection {
   // ─── EQUIPMENT TYPE + VESSEL FIELDS ───
   // equipmentType records the selection made in the report-creation flow
   // ("PIPING" or "VESSEL"). Null for legacy rows created before this
-  // field existed. vesselOrientation is required for VESSEL_DPT and
-  // VESSEL_MPT reports ("HORIZONTAL" or "VERTICAL") and is displayed on
-  // the review page and in the generated PDF.
+  // field existed. vesselOrientation is a legacy column only — the
+  // Horizontal / Vertical selection was removed from the application and
+  // new reports never carry one (old rows keep their stored value).
   equipmentType             String?  // PIPING | VESSEL
-  vesselOrientation         String?  // HORIZONTAL | VERTICAL (VESSEL_DPT and VESSEL_MPT only)
+  vesselOrientation         String?  // LEGACY: no longer used by the UI
 
   // ─── VESSEL DPT CONSUMABLE DETAILS ───
   // Populated when reportType = VESSEL_DPT. Separate Make / Product /
@@ -552,9 +552,10 @@ model PipelineInspection {
   // Populated when reportType = VESSEL_UTM. Completely separate from the
   // Piping Thickness Measurement (reportType = PIPELINE_THICKNESS, which
   // uses the ThicknessMeasurement child table and stays untouched) and
-  // from the Vessel Weld Scan vws* fields above. The selected vessel
-  // orientation (vesselOrientation = HORIZONTAL | VERTICAL) determines
-  // the shape of the shell readings rows.
+  // from the Vessel Weld Scan vws* fields above. The readings use ONE
+  // unified clock-position row shape (12 / 3 / 6 / 9 o'clock, dynamic
+  // readings per position) stored in vutmShellRows; vutmDishRows and
+  // vutmNozzleRows are legacy columns kept for old reports.
   // Parameters — UT Thickness Measurement Parameters form:
   vutmDateOfExamination     DateTime? // Date of Examination (calendar picker)
   vutmTestingStandard       String?  // Testing Standard

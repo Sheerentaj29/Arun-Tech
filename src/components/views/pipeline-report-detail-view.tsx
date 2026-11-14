@@ -38,7 +38,7 @@ import {
 import { useAppStore } from "@/lib/store";
 import { apiFetch } from "@/lib/api-client";
 import { AuthImage } from "@/components/auth-image";
-import { vutmMinOfSpots } from "@/lib/vutm-rows";
+import { vutmMinOfSpots, vutmUnifiedRowsFromReport } from "@/lib/vutm-rows";
 import { resolveClientLogo } from "@/lib/client-logo-mapping";
 import {
   parseThicknessTablesConfig,
@@ -64,10 +64,8 @@ interface FullReport {
     | "VESSEL_MPT"
     | "VESSEL_WELD_SCAN"
     | "VESSEL_UTM";
-  // Equipment type + vessel orientation (VESSEL_DPT, VESSEL_MPT and
-  // VESSEL_UTM only)
+  // Equipment type ("PIPING" | "VESSEL") from the report-creation flow
   equipmentType?: string | null;
-  vesselOrientation?: string | null;
   clientId: string;
   plantId: string;
   inspectionArea: string | null;
@@ -834,24 +832,13 @@ export function PipelineReportDetailView() {
             ["Location", report.plant.location ?? "—"],
             ["Plant Name", report.plant.name],
             ["Inspection Area", report.inspectionArea ?? "—"],
-            // Vessel reports (VESSEL_DPT / VESSEL_MPT / VESSEL_UTM) use
-            // equipment wording with the orientation row; Vessel Weld Scan
-            // uses equipment wording without an orientation row.
-            ...(report.reportType === "VESSEL_DPT" || report.reportType === "VESSEL_MPT" || report.reportType === "VESSEL_UTM"
+            // All Vessel reports use equipment wording in the header grid.
+            ...(report.reportType === "VESSEL_DPT" || report.reportType === "VESSEL_MPT" || report.reportType === "VESSEL_UTM" || report.reportType === "VESSEL_WELD_SCAN"
               ? [
                   ["Equipment / Vessel Description", report.pipelineDescription ?? "—"],
                   ["Equipment Identification No.", report.pipelineIdentificationNumber ?? "—"],
-                  ["Vessel Orientation",
-                    report.vesselOrientation === "HORIZONTAL" ? "Horizontal Vessel"
-                    : report.vesselOrientation === "VERTICAL" ? "Vertical Vessel"
-                    : "—"],
                 ]
-              : report.reportType === "VESSEL_WELD_SCAN"
-                ? [
-                    ["Equipment / Vessel Description", report.pipelineDescription ?? "—"],
-                    ["Equipment Identification No.", report.pipelineIdentificationNumber ?? "—"],
-                  ]
-                : [
+              : [
                     ["Pipeline Description", report.pipelineDescription ?? "—"],
                     ["Pipeline Identification No.", report.pipelineIdentificationNumber ?? "—"],
                   ]),
@@ -969,16 +956,11 @@ export function PipelineReportDetailView() {
             the Inspection Tables section below. */}
         {report.reportType === "VESSEL_DPT" && (
           <div className="mt-6 space-y-6">
-            {/* Vessel orientation + equipment type */}
+            {/* Equipment type */}
             <div className="flex items-center gap-2 flex-wrap">
               <Badge variant="outline" className="border-purple-400 text-purple-700">
                 Equipment: Vessel
               </Badge>
-              {report.vesselOrientation && (
-                <Badge variant="outline" className="border-purple-400 text-purple-700">
-                  {report.vesselOrientation === "HORIZONTAL" ? "Horizontal Vessel" : "Vertical Vessel"}
-                </Badge>
-              )}
             </div>
 
             {/* 3. Dye Penetrant Testing Parameters */}
@@ -1069,16 +1051,11 @@ export function PipelineReportDetailView() {
           } catch {}
           return (
           <div className="mt-6 space-y-6">
-            {/* Vessel orientation + equipment type */}
+            {/* Equipment type */}
             <div className="flex items-center gap-2 flex-wrap">
               <Badge variant="outline" className="border-orange-400 text-orange-700">
                 Equipment: Vessel
               </Badge>
-              {report.vesselOrientation && (
-                <Badge variant="outline" className="border-orange-400 text-orange-700">
-                  {report.vesselOrientation === "HORIZONTAL" ? "Horizontal Vessel" : "Vertical Vessel"}
-                </Badge>
-              )}
             </div>
 
             {/* 3. Magnetic Particle Testing Parameters */}
@@ -1574,37 +1551,25 @@ export function PipelineReportDetailView() {
         {/* ─── VESSEL UT THICKNESS MEASUREMENT: PARAMETERS + READINGS ───
             Shown only for VESSEL_UTM reports. Renders the grouped UT
             Thickness Measurement Parameters (incl. the repeatable
-            Longitudinal Wave 0° probe grid) and the orientation-based
-            readings tables (shells at clock positions for horizontal
-            vessels / directions for vertical vessels, plus dish-end and
-            nozzle tables). Minimum Measured Thickness is recomputed from
-            the stored spot readings. Completely separate from the Piping
-            Thickness Measurement block above. */}
+            Longitudinal Wave 0° probe grid) and the unified clock-position
+            readings table (12 / 3 / 6 / 9 o'clock — every reading the user
+            entered, no empty slots). Legacy orientation-based rows
+            (horizontal / vertical / dish / nozzle shapes) are converted
+            transparently, so existing reports keep all their readings.
+            Minimum Measured Thickness is recomputed from the stored
+            readings. Completely separate from the Piping Thickness
+            Measurement block above. */}
         {report.reportType === "VESSEL_UTM" && (() => {
-          const utmIsHorizontal = report.vesselOrientation !== "VERTICAL";
           let utmProbes: Array<Record<string, string>> = [];
-          let utmShellH: Array<Record<string, string | string[]>> = [];
-          let utmShellV: Array<Record<string, string | string[]>> = [];
-          let utmDish: Array<Record<string, string | string[]>> = [];
-          let utmNozzle: Array<Record<string, string | string[]>> = [];
           try {
             const parsed = JSON.parse(report.vutmLwProbeRows ?? "[]");
             if (Array.isArray(parsed) && parsed.length > 0) utmProbes = parsed;
           } catch {}
-          try {
-            const parsed = JSON.parse(report.vutmShellRows ?? "[]");
-            if (Array.isArray(parsed)) {
-              if (utmIsHorizontal) utmShellH = parsed; else utmShellV = parsed;
-            }
-          } catch {}
-          try {
-            const parsed = JSON.parse(report.vutmDishRows ?? "[]");
-            if (Array.isArray(parsed)) utmDish = parsed;
-          } catch {}
-          try {
-            const parsed = JSON.parse(report.vutmNozzleRows ?? "[]");
-            if (Array.isArray(parsed)) utmNozzle = parsed;
-          } catch {}
+          const utmRows = vutmUnifiedRowsFromReport(
+            report.vutmShellRows,
+            report.vutmDishRows,
+            report.vutmNozzleRows,
+          );
           const utmParamGroups: Array<{ title: string; rows: Array<[string, string | null | undefined, boolean?]> }> = [
             {
               title: "General Information",
@@ -1651,16 +1616,11 @@ export function PipelineReportDetailView() {
           const minCell = (min: unknown) => (min && String(min).trim() ? String(min) : "—");
           return (
             <div className="mt-6 space-y-6">
-              {/* Equipment: Vessel + Orientation badges */}
+              {/* Equipment type badge */}
               <div className="flex items-center gap-2 flex-wrap">
                 <Badge variant="outline" className="border-emerald-400 text-emerald-700">
                   Equipment: Vessel
                 </Badge>
-                {report.vesselOrientation && (
-                  <Badge variant="outline" className="border-emerald-400 text-emerald-700">
-                    {report.vesselOrientation === "HORIZONTAL" ? "Horizontal Vessel" : "Vertical Vessel"}
-                  </Badge>
-                )}
               </div>
 
               {/* UT Thickness Measurement Parameters — grouped two-column table */}
@@ -1732,188 +1692,55 @@ export function PipelineReportDetailView() {
                 </div>
               )}
 
-              {/* UT Thickness Measurement Readings — shell table */}
+              {/* UT Thickness Measurement Readings — unified clock-position table */}
               <div>
                 <h3 className="mb-2 text-xs font-bold uppercase text-emerald-700 border-b border-emerald-300 pb-1">
-                  UT Thickness Measurement Readings — Components{" "}
-                  {utmIsHorizontal ? "(Clock Positions)" : "(Directions)"}
+                  UT Thickness Measurement Readings — Components (Clock Positions)
                 </h3>
                 <div className="overflow-x-auto">
-                  {utmIsHorizontal ? (
-                    <table className="w-full border-collapse text-xs">
-                      <thead>
-                        <tr className="bg-emerald-700 text-white">
-                          <th rowSpan={2} className="border border-emerald-800 px-2 py-2 text-center align-middle">MOC</th>
-                          <th rowSpan={2} className="border border-emerald-800 px-2 py-2 text-center align-middle">Component Type</th>
-                          <th rowSpan={2} className="border border-emerald-800 px-2 py-2 text-center align-middle">Component ID</th>
-                          <th rowSpan={2} className="border border-emerald-800 px-2 py-2 text-center align-middle">Nominal Thickness (mm)</th>
-                          <th colSpan={4} className="border border-emerald-800 px-2 py-2 text-center">12 O&apos;clock</th>
-                          <th colSpan={4} className="border border-emerald-800 px-2 py-2 text-center">3 O&apos;clock</th>
-                          <th colSpan={4} className="border border-emerald-800 px-2 py-2 text-center">6 O&apos;clock</th>
-                          <th colSpan={4} className="border border-emerald-800 px-2 py-2 text-center">9 O&apos;clock</th>
-                          <th rowSpan={2} className="border border-emerald-800 px-2 py-2 text-center align-middle">Minimum Measured Thickness (mm)</th>
-                        </tr>
-                        <tr>
-                          {(["c12", "c3", "c6", "c9"] as const).flatMap((k) =>
-                            [1, 2, 3, 4].map((s) => (
-                              <th key={`${k}-${s}`} className="border border-emerald-800 px-1 py-1.5 text-center font-normal">Spot {s}</th>
-                            )),
-                          )}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {utmShellH.length === 0 && (
-                          <tr><td colSpan={21} className="text-center py-4 text-muted-foreground border border-zinc-300">No component measurement rows recorded.</td></tr>
-                        )}
-                        {utmShellH.map((row, idx) => (
-                          <tr key={idx} className="hover:bg-muted/30">
-                            <td className="border border-zinc-300 px-2 py-1">{String(row.moc || "—")}</td>
-                            <td className="border border-zinc-300 px-2 py-1">{String(row.componentType || "—")}</td>
-                            <td className="border border-zinc-300 px-2 py-1">{String(row.componentId || "—")}</td>
-                            <td className="border border-zinc-300 px-2 py-1 text-center">{String(row.nominalThickness || "—")}</td>
-                            {(["c12", "c3", "c6", "c9"] as const).flatMap((k) =>
-                              [0, 1, 2, 3].map((si) => {
-                                const arr = Array.isArray(row[k]) ? (row[k] as string[]) : [];
-                                return (
-                                  <td key={`${k}-${si}`} className="border border-zinc-300 px-1 py-1 text-center">
-                                    {arr[si] && String(arr[si]).trim() ? String(arr[si]) : "—"}
-                                  </td>
-                                );
-                              }),
-                            )}
-                            <td className="border border-zinc-300 px-2 py-1 text-center font-mono font-semibold">
-                              {minCell(vutmMinOfSpots(row.c12, row.c3, row.c6, row.c9))}
+                  <table className="w-full border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-emerald-700 text-white">
+                        <th className="border border-emerald-800 px-2 py-2 text-center">MOC</th>
+                        <th className="border border-emerald-800 px-2 py-2 text-center">Component Type</th>
+                        <th className="border border-emerald-800 px-2 py-2 text-center">Component ID</th>
+                        <th className="border border-emerald-800 px-2 py-2 text-center">Nominal Thickness (mm)</th>
+                        <th className="border border-emerald-800 px-2 py-2 text-center">12 O&apos;clock (mm)</th>
+                        <th className="border border-emerald-800 px-2 py-2 text-center">3 O&apos;clock (mm)</th>
+                        <th className="border border-emerald-800 px-2 py-2 text-center">6 O&apos;clock (mm)</th>
+                        <th className="border border-emerald-800 px-2 py-2 text-center">9 O&apos;clock (mm)</th>
+                        <th className="border border-emerald-800 px-2 py-2 text-center">Minimum Measured Thickness (mm)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {utmRows.length === 0 && (
+                        <tr><td colSpan={9} className="text-center py-4 text-muted-foreground border border-zinc-300">No component measurement rows recorded.</td></tr>
+                      )}
+                      {utmRows.map((row, idx) => (
+                        <tr key={idx} className="hover:bg-muted/30 align-top">
+                          <td className="border border-zinc-300 px-2 py-1">{row.moc || "—"}</td>
+                          <td className="border border-zinc-300 px-2 py-1">{row.componentType || "—"}</td>
+                          <td className="border border-zinc-300 px-2 py-1">{row.componentId || "—"}</td>
+                          <td className="border border-zinc-300 px-2 py-1 text-center">{row.nominalThickness || "—"}</td>
+                          {(["c12", "c3", "c6", "c9"] as const).map((k) => (
+                            <td key={k} className="border border-zinc-300 px-2 py-1 text-center">
+                              {(() => {
+                                const readings = (row[k] as string[] | undefined)?.filter((s) => s && String(s).trim()) ?? [];
+                                return readings.length > 0 ? (
+                                  <span className="whitespace-pre-line">{readings.join("\n")}</span>
+                                ) : "—";
+                              })()}
                             </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  ) : (
-                    <table className="w-full border-collapse text-xs">
-                      <thead>
-                        <tr className="bg-emerald-700 text-white">
-                          <th className="border border-emerald-800 px-2 py-2 text-center">MOC</th>
-                          <th className="border border-emerald-800 px-2 py-2 text-center">Component Type</th>
-                          <th className="border border-emerald-800 px-2 py-2 text-center">Direction</th>
-                          <th className="border border-emerald-800 px-2 py-2 text-center">Nominal Thickness (mm)</th>
-                          <th className="border border-emerald-800 px-2 py-2 text-center">Spot 1</th>
-                          <th className="border border-emerald-800 px-2 py-2 text-center">Spot 2</th>
-                          <th className="border border-emerald-800 px-2 py-2 text-center">Spot 3</th>
-                          <th className="border border-emerald-800 px-2 py-2 text-center">Spot 4</th>
-                          <th className="border border-emerald-800 px-2 py-2 text-center">Minimum Measured Thickness (mm)</th>
+                          ))}
+                          <td className="border border-zinc-300 px-2 py-1 text-center font-mono font-semibold">
+                            {minCell(vutmMinOfSpots(row.c12, row.c3, row.c6, row.c9))}
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {utmShellV.length === 0 && (
-                          <tr><td colSpan={9} className="text-center py-4 text-muted-foreground border border-zinc-300">No component measurement rows recorded.</td></tr>
-                        )}
-                        {utmShellV.map((row, idx) => (
-                          <tr key={idx} className="hover:bg-muted/30">
-                            <td className="border border-zinc-300 px-2 py-1">{String(row.moc || "—")}</td>
-                            <td className="border border-zinc-300 px-2 py-1">{String(row.componentType || "—")}</td>
-                            <td className="border border-zinc-300 px-2 py-1 text-center">{String(row.direction || "—")}</td>
-                            <td className="border border-zinc-300 px-2 py-1 text-center">{String(row.nominalThickness || "—")}</td>
-                            {(["spot1", "spot2", "spot3", "spot4"] as const).map((k) => (
-                              <td key={k} className="border border-zinc-300 px-2 py-1 text-center">
-                                {row[k] && String(row[k]).trim() ? String(row[k]) : "—"}
-                              </td>
-                            ))}
-                            <td className="border border-zinc-300 px-2 py-1 text-center font-mono font-semibold">
-                              {minCell(vutmMinOfSpots(row.spot1, row.spot2, row.spot3, row.spot4))}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
-
-              {/* UT Thickness Measurement Readings — dish end table */}
-              {utmDish.length > 0 && (
-                <div>
-                  <h3 className="mb-2 text-xs font-bold uppercase text-emerald-700 border-b border-emerald-300 pb-1">
-                    Dish End Measurements
-                  </h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse text-xs">
-                      <thead>
-                        <tr className="bg-emerald-700 text-white">
-                          <th className="border border-emerald-800 px-2 py-2 text-center">Dish</th>
-                          <th className="border border-emerald-800 px-2 py-2 text-center">Direction</th>
-                          <th className="border border-emerald-800 px-2 py-2 text-center">Spot 1</th>
-                          <th className="border border-emerald-800 px-2 py-2 text-center">Spot 2</th>
-                          <th className="border border-emerald-800 px-2 py-2 text-center">Spot 3</th>
-                          <th className="border border-emerald-800 px-2 py-2 text-center">Spot 4</th>
-                          <th className="border border-emerald-800 px-2 py-2 text-center">Minimum Measured Thickness (mm)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {utmDish.map((row, idx) => (
-                          <tr key={idx} className="hover:bg-muted/30">
-                            <td className="border border-zinc-300 px-2 py-1">{String(row.component || "—")}</td>
-                            <td className="border border-zinc-300 px-2 py-1 text-center">{String(row.direction || "—")}</td>
-                            {(["spot1", "spot2", "spot3", "spot4"] as const).map((k) => (
-                              <td key={k} className="border border-zinc-300 px-2 py-1 text-center">
-                                {row[k] && String(row[k]).trim() ? String(row[k]) : "—"}
-                              </td>
-                            ))}
-                            <td className="border border-zinc-300 px-2 py-1 text-center font-mono font-semibold">
-                              {minCell(vutmMinOfSpots(row.spot1, row.spot2, row.spot3, row.spot4))}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* UT Thickness Measurement Readings — nozzle table */}
-              {utmNozzle.length > 0 && (
-                <div>
-                  <h3 className="mb-2 text-xs font-bold uppercase text-emerald-700 border-b border-emerald-300 pb-1">
-                    Nozzle Measurements
-                  </h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse text-xs">
-                      <thead>
-                        <tr className="bg-emerald-700 text-white">
-                          <th className="border border-emerald-800 px-2 py-2 text-center">Nozzle ID</th>
-                          <th className="border border-emerald-800 px-2 py-2 text-center">Nominal Thickness (mm)</th>
-                          <th className="border border-emerald-800 px-2 py-2 text-center">Size</th>
-                          <th className="border border-emerald-800 px-2 py-2 text-center">Schedule</th>
-                          <th className="border border-emerald-800 px-2 py-2 text-center">MOC</th>
-                          <th className="border border-emerald-800 px-2 py-2 text-center">Spot 1</th>
-                          <th className="border border-emerald-800 px-2 py-2 text-center">Spot 2</th>
-                          <th className="border border-emerald-800 px-2 py-2 text-center">Spot 3</th>
-                          <th className="border border-emerald-800 px-2 py-2 text-center">Spot 4</th>
-                          <th className="border border-emerald-800 px-2 py-2 text-center">Minimum Measured Thickness (mm)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {utmNozzle.map((row, idx) => (
-                          <tr key={idx} className="hover:bg-muted/30">
-                            <td className="border border-zinc-300 px-2 py-1 font-medium">{String(row.nozzleId || "—")}</td>
-                            <td className="border border-zinc-300 px-2 py-1 text-center">{String(row.nominalThickness || "—")}</td>
-                            <td className="border border-zinc-300 px-2 py-1 text-center">{String(row.size || "—")}</td>
-                            <td className="border border-zinc-300 px-2 py-1 text-center">{String(row.schedule || "—")}</td>
-                            <td className="border border-zinc-300 px-2 py-1">{String(row.moc || "—")}</td>
-                            {(["spot1", "spot2", "spot3", "spot4"] as const).map((k) => (
-                              <td key={k} className="border border-zinc-300 px-2 py-1 text-center">
-                                {row[k] && String(row[k]).trim() ? String(row[k]) : "—"}
-                              </td>
-                            ))}
-                            <td className="border border-zinc-300 px-2 py-1 text-center font-mono font-semibold">
-                              {minCell(vutmMinOfSpots(row.spot1, row.spot2, row.spot3, row.spot4))}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
             </div>
           );
         })()}

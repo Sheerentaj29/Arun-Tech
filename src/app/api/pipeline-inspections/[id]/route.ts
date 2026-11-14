@@ -286,18 +286,15 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       wsInstrumentRows: body.wsInstrumentRows !== undefined ? body.wsInstrumentRows : existing.wsInstrumentRows,
       wsProbeRows: body.wsProbeRows !== undefined ? body.wsProbeRows : existing.wsProbeRows,
       wsTestResultRows: body.wsTestResultRows !== undefined ? body.wsTestResultRows : existing.wsTestResultRows,
-      // ─── EQUIPMENT TYPE + VESSEL ORIENTATION ───
-      // Only updated when the form explicitly sends them; existing values
-      // are preserved otherwise. vesselOrientation stays constrained to
-      // HORIZONTAL | VERTICAL.
+      // ─── EQUIPMENT TYPE ───
+      // Only updated when the form explicitly sends it; existing values
+      // are preserved otherwise. vesselOrientation is no longer written —
+      // the Horizontal / Vertical selection was removed from the
+      // application (legacy rows keep their stored value, unused).
       equipmentType:
         body.equipmentType !== undefined
           ? (body.equipmentType === "PIPING" || body.equipmentType === "VESSEL" ? body.equipmentType : null)
           : existing.equipmentType,
-      vesselOrientation:
-        body.vesselOrientation !== undefined
-          ? (body.vesselOrientation === "HORIZONTAL" || body.vesselOrientation === "VERTICAL" ? body.vesselOrientation : null)
-          : existing.vesselOrientation,
       // ─── VESSEL DPT CONSUMABLE DETAILS (Make / Product / Batch / Expiry) ───
       vdptSolventMake: body.vdptSolventMake !== undefined ? (body.vdptSolventMake?.trim() || null) : existing.vdptSolventMake,
       vdptSolventProduct: body.vdptSolventProduct !== undefined ? (body.vdptSolventProduct?.trim() || null) : existing.vdptSolventProduct,
@@ -374,16 +371,10 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       vutmSurfaceFinish: body.vutmSurfaceFinish !== undefined ? (body.vutmSurfaceFinish?.trim() || null) : existing.vutmSurfaceFinish,
       vutmShellRows:
         body.vutmShellRows !== undefined
-          ? normalizeVutmRows(body.vutmShellRows, {
-              kind: "shell",
-              orientation:
-                (body.vesselOrientation === "HORIZONTAL" || body.vesselOrientation === "VERTICAL"
-                  ? body.vesselOrientation
-                  : (existing.vesselOrientation as "HORIZONTAL" | "VERTICAL" | null)),
-            })
+          ? normalizeVutmRows(body.vutmShellRows)
           : existing.vutmShellRows,
-      vutmDishRows: body.vutmDishRows !== undefined ? normalizeVutmRows(body.vutmDishRows, { kind: "dish" }) : existing.vutmDishRows,
-      vutmNozzleRows: body.vutmNozzleRows !== undefined ? normalizeVutmRows(body.vutmNozzleRows, { kind: "nozzle" }) : existing.vutmNozzleRows,
+      vutmDishRows: body.vutmDishRows !== undefined ? normalizeVutmRows(body.vutmDishRows) : existing.vutmDishRows,
+      vutmNozzleRows: body.vutmNozzleRows !== undefined ? normalizeVutmRows(body.vutmNozzleRows) : existing.vutmNozzleRows,
     },
   });
 

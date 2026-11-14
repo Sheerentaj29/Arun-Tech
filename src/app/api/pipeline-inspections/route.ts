@@ -155,20 +155,14 @@ export async function POST(req: NextRequest) {
       ].includes(body.reportType)
         ? body.reportType
         : "PIPELINE_THICKNESS",
-      // ─── EQUIPMENT TYPE + VESSEL ORIENTATION ───
+      // ─── EQUIPMENT TYPE ───
       // equipmentType: PIPING | VESSEL (from the selector flow).
-      // vesselOrientation: HORIZONTAL | VERTICAL — required for VESSEL_DPT,
-      // VESSEL_MPT and VESSEL_UTM, ignored for everything else.
+      // vesselOrientation was removed from the application — new reports
+      // never carry one (the column stays nullable for legacy rows).
       equipmentType: body.equipmentType === "PIPING" || body.equipmentType === "VESSEL"
         ? body.equipmentType
         : null,
-      vesselOrientation:
-        (body.reportType === "VESSEL_DPT" ||
-         body.reportType === "VESSEL_MPT" ||
-         body.reportType === "VESSEL_UTM") &&
-        (body.vesselOrientation === "HORIZONTAL" || body.vesselOrientation === "VERTICAL")
-          ? body.vesselOrientation
-          : null,
+      vesselOrientation: null,
       clientId: body.clientId,
       plantId: body.plantId,
       inspectionArea: body.inspectionArea?.trim() || null,
@@ -373,15 +367,9 @@ export async function POST(req: NextRequest) {
       vutmCouplant: body.vutmCouplant?.trim() || null,
       vutmSurfacePreparation: body.vutmSurfacePreparation?.trim() || null,
       vutmSurfaceFinish: body.vutmSurfaceFinish?.trim() || null,
-      vutmShellRows: normalizeVutmRows(body.vutmShellRows, {
-        kind: "shell",
-        orientation:
-          body.vesselOrientation === "HORIZONTAL" || body.vesselOrientation === "VERTICAL"
-            ? body.vesselOrientation
-            : null,
-      }),
-      vutmDishRows: normalizeVutmRows(body.vutmDishRows, { kind: "dish" }),
-      vutmNozzleRows: normalizeVutmRows(body.vutmNozzleRows, { kind: "nozzle" }),
+      vutmShellRows: normalizeVutmRows(body.vutmShellRows),
+      vutmDishRows: normalizeVutmRows(body.vutmDishRows),
+      vutmNozzleRows: normalizeVutmRows(body.vutmNozzleRows),
       isDemo: false,
     },
     include: {
