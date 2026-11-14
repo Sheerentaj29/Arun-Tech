@@ -1278,7 +1278,6 @@ export function PipelineReportDetailView() {
             ["Reference Level", report.wsScanningReferenceLevel],
             ["Extent of Examination", report.wsScanningExtentOfExamination],
             ["Surface Condition", report.wsScanningSurfaceCondition],
-            ["Flaw Sizing Technique", report.wsScanningFlawSizingTechnique],
           ];
           return (
             <div className="mt-6 space-y-6">

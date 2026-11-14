@@ -2245,7 +2245,6 @@ export async function generatePipelineReportPdf(
         ["", null],
         ["Reference Level", wsReport.wsScanningReferenceLevel],
         ["Surface Condition", wsReport.wsScanningSurfaceCondition],
-        ["Flaw Sizing Technique", wsReport.wsScanningFlawSizingTechnique],
       ];
       // Only render if any value is non-empty
       const hasData = scanPairs.some(([, v]) => v && String(v).trim());

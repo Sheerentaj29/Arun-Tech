@@ -445,10 +445,10 @@ model PipelineInspection {
   wsScanningCalibrationBlock        String?  // Calibration Block (typeable)
   wsScanningReferenceLevel          String?  // Reference Level (typeable)
   wsScanningExtentOfExamination     String?  // Extent of Examination (typeable)
-  wsScanningSurfaceCondition        String?  // Surface Condition (dropdown)
-  wsScanningFlawSizingTechnique     String?  // Flaw Sizing Technique (dropdown)
+  wsScanningSurfaceCondition        String?  // Surface Condition (dropdown: Clean & Smooth Surface / Rough Surface / Painted Surface)
+  wsScanningFlawSizingTechnique     String?  // Legacy: former Flaw Sizing Technique dropdown (6/12/18 dB Drop) — no longer written by the form; kept for old records
   wsInstrumentRows                  String?  // JSON: [{equipmentType, machineMake, model, mcSrNo, calibrationDueDate}]
-  wsProbeRows                       String?  // JSON: [{probeType, probeAngle, frequency, size, probeNo, range, referenceDb, scanningDb}]
+  wsProbeRows                       String?  // JSON: fixed 4-probe grid [{probeType, probeAngle, frequency, size, probeNo, range, referenceDb, scanningDb}] — type/angle structural, values user-entered
   wsTestResultRows                  String?  // JSON: [{description, identificationNo, weldType, probe, bp, sd, depth, echoHeight, length, observation, result}]
 
   // ─── EQUIPMENT TYPE + VESSEL FIELDS ───

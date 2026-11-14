@@ -528,6 +528,54 @@ function parseVwsProbes(json: string | null | undefined): VwsProbeEntry[] {
   return VWS_PROBE_GRID_DEFAULTS.map((p) => ({ ...p }));
 }
 
+// ─── PIPING WELD SCAN PROBE GRID ───
+// The Test Probe Details table on PIPELINE_WELD_SCAN is a fixed
+// structural grid: three Shear Wave probes (45° / 60° / 70°) and one
+// Longitudinal Wave probe (0°). Probe type and angle are NOT editable —
+// only the inspection values (frequency, size, probe no., range,
+// reference / scanning dB) are typed by the user. Legacy reports that
+// stored arbitrary rows are normalized to this grid: when exactly four
+// rows are present the user-entered values are kept per index; the
+// structural type / angle labels are always forced from the grid.
+interface WsProbeEntry {
+  probeType: string;
+  probeAngle: string;
+  frequency: string;
+  size: string;
+  probeNo: string;
+  range: string;
+  referenceDb: string;
+  scanningDb: string;
+  // Set when the user picked "Custom / Other" and is typing a free-text size.
+  _sizeCustom?: boolean;
+}
+const WS_PROBE_GRID_DEFAULTS: WsProbeEntry[] = [
+  { probeType: "Shear Wave", probeAngle: "45°", frequency: "", size: "", probeNo: "", range: "", referenceDb: "", scanningDb: "" },
+  { probeType: "Shear Wave", probeAngle: "60°", frequency: "", size: "", probeNo: "", range: "", referenceDb: "", scanningDb: "" },
+  { probeType: "Shear Wave", probeAngle: "70°", frequency: "", size: "", probeNo: "", range: "", referenceDb: "", scanningDb: "" },
+  { probeType: "Longitudinal Wave", probeAngle: "0°", frequency: "", size: "", probeNo: "", range: "", referenceDb: "", scanningDb: "" },
+];
+function parseWsProbeRows(json: string | null | undefined): WsProbeEntry[] {
+  try {
+    const parsed = JSON.parse(json ?? "[]");
+    if (Array.isArray(parsed) && parsed.length === WS_PROBE_GRID_DEFAULTS.length) {
+      return parsed.map((r: Record<string, unknown>, i: number) => ({
+        probeType: WS_PROBE_GRID_DEFAULTS[i].probeType,
+        probeAngle: WS_PROBE_GRID_DEFAULTS[i].probeAngle,
+        frequency: String(r.frequency ?? ""),
+        size: String(r.size ?? ""),
+        probeNo: String(r.probeNo ?? ""),
+        range: String(r.range ?? ""),
+        referenceDb: String(r.referenceDb ?? ""),
+        scanningDb: String(r.scanningDb ?? ""),
+        _sizeCustom: r._sizeCustom === true,
+      }));
+    }
+  } catch {}
+  // Fall back to the structural grid (labels only, values empty).
+  return WS_PROBE_GRID_DEFAULTS.map((p) => ({ ...p }));
+}
+
 const EMPTY_HEADER: ReportHeader = {
   reportNumber: "",
   reportType: "PIPELINE_THICKNESS", // overwritten from store on first render
@@ -636,12 +684,7 @@ const EMPTY_HEADER: ReportHeader = {
   wsScanningSurfaceCondition: "",
   wsScanningFlawSizingTechnique: "",
   wsInstrumentRows: "[]",
-  wsProbeRows: JSON.stringify([
-    { probeType: "Shear Wave", probeAngle: "45°", frequency: "", size: "", probeNo: "", range: "", referenceDb: "", scanningDb: "" },
-    { probeType: "Shear Wave", probeAngle: "60°", frequency: "", size: "", probeNo: "", range: "", referenceDb: "", scanningDb: "" },
-    { probeType: "Shear Wave", probeAngle: "70°", frequency: "", size: "", probeNo: "", range: "", referenceDb: "", scanningDb: "" },
-    { probeType: "Longitudinal Wave", probeAngle: "0°", frequency: "", size: "", probeNo: "", range: "", referenceDb: "", scanningDb: "" },
-  ]),
+  wsProbeRows: JSON.stringify(WS_PROBE_GRID_DEFAULTS),
   wsTestResultRows: "[]",
   // Vessel DPT consumable details default empty
   vdptSolventMake: "",
@@ -1265,7 +1308,7 @@ export function PipelineReportFormView() {
           wsScanningSurfaceCondition: r.wsScanningSurfaceCondition ?? "",
           wsScanningFlawSizingTechnique: r.wsScanningFlawSizingTechnique ?? "",
           wsInstrumentRows: r.wsInstrumentRows ?? "[]",
-          wsProbeRows: r.wsProbeRows ?? "[]",
+          wsProbeRows: JSON.stringify(parseWsProbeRows(r.wsProbeRows)),
           wsTestResultRows: r.wsTestResultRows ?? "[]",
           // Vessel Weld Scan fields (VESSEL_WELD_SCAN)
           vwsDateOfExamination: r.vwsDateOfExamination ? r.vwsDateOfExamination.slice(0, 10) : "",
@@ -2768,6 +2811,15 @@ export function PipelineReportFormView() {
     const probes = parseVwsProbes(header.vwsProbeDetails);
     probes[idx] = { ...probes[idx], ...patch };
     updateHeader("vwsProbeDetails", JSON.stringify(probes));
+  }
+
+  // Update one entry of the fixed 4-probe grid (Piping Weld Scan → Test
+  // Probe Details). Probe type / angle are structural — only the
+  // frequency / size / probe no. / range / dB values change.
+  function updateWsProbe(idx: number, patch: Partial<WsProbeEntry>) {
+    const probes = parseWsProbeRows(header.wsProbeRows);
+    probes[idx] = { ...probes[idx], ...patch };
+    updateHeader("wsProbeRows", JSON.stringify(probes));
   }
 
   // ─── VESSEL UT THICKNESS MEASUREMENT ROW OPERATIONS (VESSEL_UTM) ───
@@ -6943,17 +6995,18 @@ export function PipelineReportFormView() {
         </CardContent>
       </Card>
 
-      {/* 2. TEST PROBE DETAILS */}
+      {/* 2. TEST PROBE DETAILS — fixed 4-probe grid (Shear Wave 45° / 60° /
+          70° and Longitudinal Wave 0°). Probe type and angle are structural
+          labels shown as fixed text (no dropdowns, not editable); only the
+          inspection values in each row are typed by the user. */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base">Test Probe Details</CardTitle>
-            <Button onClick={() => {
-              const rows = JSON.parse(header.wsProbeRows || "[]");
-              rows.push({ probeType: "Shear Wave", probeAngle: "", frequency: "", size: "", probeNo: "", range: "", referenceDb: "", scanningDb: "" });
-              setHeader((h) => ({ ...h, wsProbeRows: JSON.stringify(rows) }));
-            }} size="sm"><Plus className="mr-1 h-4 w-4" /> Add Row</Button>
-          </div>
+          <CardTitle className="text-base">Test Probe Details</CardTitle>
+          <CardDescription>
+            Fixed probe set — Probe Type and Probe Angle cannot be changed.
+            Enter the frequency, size, probe number, range and dB values for
+            each probe.
+          </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -6973,85 +7026,53 @@ export function PipelineReportFormView() {
               </thead>
               <tbody>
                 {(() => {
-                  try {
-                    const rows = JSON.parse(header.wsProbeRows || "[]");
-                    if (rows.length === 0) return <tr><td colSpan={9} className="text-center py-4 text-muted-foreground border border-zinc-300">No probe rows. Click Add Row.</td></tr>;
-                    // Dynamic size options based on probe type
-                    const shearWaveSizes = ["8 × 9 mm", "10 × 10 mm", "14 × 14 mm", "15 × 15 mm", "20 × 20 mm", "20 × 22 mm", "20 × 25 mm", "Custom / Other"];
-                    const longWaveSizes = ["5 mm", "6 mm", "7.5 mm", "10 mm", "12 mm", "13 mm", "15 mm", "20 mm", "22 mm", "24 mm", "25 mm", "Custom / Other"];
-                    return rows.map((row: any, idx: number) => {
-                      const sizeOptions = row.probeType === "Shear Wave" ? shearWaveSizes : row.probeType === "Longitudinal Wave" ? longWaveSizes : [];
-                      return (
-                        <tr key={idx} className="hover:bg-muted/30">
-                          <td className="border border-zinc-300 p-1">
-                            <Select value={row.probeType ?? ""} onValueChange={(v) => {
-                              const n = [...rows]; n[idx] = { ...row, probeType: v, size: "" }; setHeader((h) => ({ ...h, wsProbeRows: JSON.stringify(n) }));
-                            }}>
+                  const rows = parseWsProbeRows(header.wsProbeRows);
+                  // Dynamic size options based on the (structural) probe type
+                  const shearWaveSizes = ["8 × 9 mm", "10 × 10 mm", "14 × 14 mm", "15 × 15 mm", "20 × 20 mm", "20 × 22 mm", "20 × 25 mm", "Custom / Other"];
+                  const longWaveSizes = ["5 mm", "6 mm", "7.5 mm", "10 mm", "12 mm", "13 mm", "15 mm", "20 mm", "22 mm", "24 mm", "25 mm", "Custom / Other"];
+                  return rows.map((row, idx) => {
+                    const sizeOptions = row.probeType === "Shear Wave" ? shearWaveSizes : longWaveSizes;
+                    return (
+                      <tr key={idx} className="hover:bg-muted/30">
+                        <td className="border border-zinc-300 px-2 py-1.5 text-center font-medium text-zinc-700">{row.probeType}</td>
+                        <td className="border border-zinc-300 px-2 py-1.5 text-center text-zinc-700">{row.probeAngle}</td>
+                        <td className="border border-zinc-300 p-1">
+                          <Select value={row.frequency} onValueChange={(v) => updateWsProbe(idx, { frequency: v })}>
+                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
+                            <SelectContent>
+                              {["1 MHz", "2 MHz", "2.5 MHz", "4 MHz", "5 MHz", "7.5 MHz", "10 MHz"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          <div className="flex flex-col gap-1">
+                            <Select value={row.size} onValueChange={(v) => updateWsProbe(idx, { size: v === "Custom / Other" ? "" : v, _sizeCustom: v === "Custom / Other" })}>
                               <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
                               <SelectContent>
-                                {["Shear Wave", "Longitudinal Wave"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                                {sizeOptions.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
                               </SelectContent>
                             </Select>
-                          </td>
-                          <td className="border border-zinc-300 p-1">
-                            <Select value={row.probeAngle ?? ""} onValueChange={(v) => { const n = [...rows]; n[idx] = { ...row, probeAngle: v }; setHeader((h) => ({ ...h, wsProbeRows: JSON.stringify(n) })); }}>
-                              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
-                              <SelectContent>
-                                {["45°", "60°", "70°", "0°"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
-                          </td>
-                          <td className="border border-zinc-300 p-1">
-                            <Select value={row.frequency ?? ""} onValueChange={(v) => { const n = [...rows]; n[idx] = { ...row, frequency: v }; setHeader((h) => ({ ...h, wsProbeRows: JSON.stringify(n) })); }}>
-                              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
-                              <SelectContent>
-                                {["1 MHz", "2 MHz", "2.5 MHz", "4 MHz", "5 MHz", "7.5 MHz", "10 MHz"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
-                          </td>
-                          <td className="border border-zinc-300 p-1">
-                            {sizeOptions.length > 0 ? (
-                              <div className="flex flex-col gap-1">
-                                <Select value={row.size ?? ""} onValueChange={(v) => {
-                                  const n = [...rows];
-                                  n[idx] = { ...row, size: v === "Custom / Other" ? "" : v, _sizeCustom: v === "Custom / Other" ? true : false };
-                                  setHeader((h) => ({ ...h, wsProbeRows: JSON.stringify(n) }));
-                                }}>
-                                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
-                                  <SelectContent>
-                                    {sizeOptions.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                                  </SelectContent>
-                                </Select>
-                                {row._sizeCustom && (
-                                  <Input className="h-7 text-xs" value={row.size ?? ""}
-                                    onChange={(e) => { const n = [...rows]; n[idx] = { ...row, size: e.target.value }; setHeader((h) => ({ ...h, wsProbeRows: JSON.stringify(n) })); }}
-                                    placeholder="Enter custom size" />
-                                )}
-                              </div>
-                            ) : (
-                              <p className="text-[10px] text-muted-foreground text-center py-2">Select Probe Type first</p>
+                            {row._sizeCustom && (
+                              <Input className="h-7 text-xs" value={row.size}
+                                onChange={(e) => updateWsProbe(idx, { size: e.target.value })}
+                                placeholder="Enter custom size" />
                             )}
+                          </div>
+                        </td>
+                        {(["probeNo", "range", "referenceDb", "scanningDb"] as const).map((field) => (
+                          <td key={field} className="border border-zinc-300 p-1">
+                            <Input className="h-8 text-xs" value={row[field]}
+                              onChange={(e) => updateWsProbe(idx, { [field]: e.target.value })} />
                           </td>
-                          {(["probeNo", "range", "referenceDb", "scanningDb"] as const).map((field) => (
-                            <td key={field} className="border border-zinc-300 p-1">
-                              <Input className="h-8 text-xs" value={row[field] ?? ""}
-                                onChange={(e) => { const n = [...rows]; n[idx] = { ...row, [field]: e.target.value }; setHeader((h) => ({ ...h, wsProbeRows: JSON.stringify(n) })); }} />
-                            </td>
-                          ))}
-                          <td className="border border-zinc-300 p-1 text-center">
-                            <div className="flex flex-col gap-1">
-                              <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => saveHeader()} disabled={saving} title="Save row">
-                                <Save className="h-3 w-3" />
-                              </Button>
-                              <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-600"
-                                onClick={() => { const n = rows.filter((_: any, i: number) => i !== idx); setHeader((h) => ({ ...h, wsProbeRows: JSON.stringify(n) })); }}>
-                                <Trash2 className="h-3 w-3" /></Button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    });
-                  } catch { return null; }
+                        ))}
+                        <td className="border border-zinc-300 p-1 text-center">
+                          <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={() => saveHeader()} disabled={saving} title="Save row">
+                            <Save className="h-3 w-3" />
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  });
                 })()}
               </tbody>
             </table>
@@ -7069,7 +7090,6 @@ export function PipelineReportFormView() {
                 {([
                   ["Calibration Block", "wsScanningCalibrationBlock", "text" as const, "Reference Level", "wsScanningReferenceLevel", "text" as const],
                   ["Extent of Examination", "wsScanningExtentOfExamination", "text" as const, "Surface Condition", "wsScanningSurfaceCondition", "select" as const],
-                  ["", "", "text" as const, "Flaw Sizing Technique", "wsScanningFlawSizingTechnique", "select" as const],
                 ]).map(([label1, field1, type1, label2, field2, type2], rowIdx) => (
                   <tr key={rowIdx} className="border-b border-zinc-200">
                     <td className="bg-cyan-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/5">{label1}</td>
@@ -7078,7 +7098,7 @@ export function PipelineReportFormView() {
                         <Select value={header[field1 as keyof ReportHeader] as string} onValueChange={(v) => updateHeader(field1 as keyof ReportHeader, v)}>
                           <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select" /></SelectTrigger>
                           <SelectContent>
-                            {["Clean & Smooth", "Rough Surface", "Painted Surface"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                            {["Clean & Smooth Surface", "Rough Surface", "Painted Surface"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
                           </SelectContent>
                         </Select>
                       ) : label1 ? (
@@ -7089,31 +7109,12 @@ export function PipelineReportFormView() {
                     <td className="bg-cyan-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/5">{label2}</td>
                     <td className="px-2 py-1.5 w-1/4">
                       {type2 === "select" ? (
-                        (() => {
-                          const val2 = header[field2 as keyof ReportHeader] as string;
-                          const isPreset = val2 === "6 dB Drop" || val2 === "12 dB Drop" || val2 === "18 dB Drop";
-                          return (
-                            <div className="flex flex-col gap-1">
-                              <Select value={isPreset ? val2 : "Other / Custom"} onValueChange={(v) => {
-                                if (v === "Other / Custom") {
-                                  updateHeader(field2 as keyof ReportHeader, "");
-                                } else {
-                                  updateHeader(field2 as keyof ReportHeader, v);
-                                }
-                              }}>
-                                <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select" /></SelectTrigger>
-                                <SelectContent>
-                                  {["6 dB Drop", "12 dB Drop", "18 dB Drop", "Other / Custom"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
-                              {!isPreset && (
-                                <Input className="h-7 text-sm" value={val2}
-                                  onChange={(e) => updateHeader(field2 as keyof ReportHeader, e.target.value)}
-                                  placeholder="Enter custom technique" />
-                              )}
-                            </div>
-                          );
-                        })()
+                        <Select value={header[field2 as keyof ReportHeader] as string} onValueChange={(v) => updateHeader(field2 as keyof ReportHeader, v)}>
+                          <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select" /></SelectTrigger>
+                          <SelectContent>
+                            {["Clean & Smooth Surface", "Rough Surface", "Painted Surface"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
                       ) : label2 ? (
                         <Input className="h-8 text-sm" value={header[field2 as keyof ReportHeader] as string}
                           onChange={(e) => updateHeader(field2 as keyof ReportHeader, e.target.value)} />
