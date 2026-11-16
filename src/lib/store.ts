@@ -22,7 +22,10 @@ export type ViewKey =
   | "pipeline-report-type-selector"
   | "pipeline-report-form"
   | "pipeline-report-detail"
-  | "pipe-standards"
+  // NOTE: the "pipe-standards" admin view was removed from the Admin Site.
+  // The PipeStandard table, reference data and /api/pipe-standards endpoints
+  // remain — the piping report workflow depends on them for nominal wall
+  // thickness values.
   // Admin: employee management
   | "employees"
   // Engineering drawings module

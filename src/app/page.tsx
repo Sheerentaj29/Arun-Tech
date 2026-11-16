@@ -18,7 +18,6 @@ import { PipelineReportsListView } from "@/components/views/pipeline-reports-lis
 import { PipelineReportTypeSelectorView } from "@/components/views/pipeline-report-type-selector-view";
 import { PipelineReportFormView } from "@/components/views/pipeline-report-form-view";
 import { PipelineReportDetailView } from "@/components/views/pipeline-report-detail-view";
-import { PipeStandardsView } from "@/components/views/pipe-standards-view";
 import { EmployeesView } from "@/components/views/employees-view";
 
 interface SessionUser {
@@ -100,7 +99,9 @@ export default function Home() {
           {view === "pipeline-report-type-selector" && <PipelineReportTypeSelectorView />}
           {view === "pipeline-report-form" && <PipelineReportFormView />}
           {view === "pipeline-report-detail" && <PipelineReportDetailView />}
-          {view === "pipe-standards" && <PipeStandardsView />}
+          {/* NOTE: the Pipe Standards admin view was removed. The
+              /api/pipe-standards endpoints and reference data remain for
+              the report workflow (nominal wall thickness lookup). */}
           {/* Employee management (admin only — sidebar hides it for employees) */}
           {view === "employees" && <EmployeesView />}
         </div>

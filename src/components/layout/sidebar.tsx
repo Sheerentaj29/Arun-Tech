@@ -7,7 +7,6 @@ import {
   LogOut,
   HardHat,
   History,
-  Ruler,
   Users,
 } from "lucide-react";
 import { useAppStore, type ViewKey } from "@/lib/store";
@@ -23,7 +22,13 @@ import { Badge } from "@/components/ui/badge";
 // those navigation items. The navigation contains only report-workflow
 // sections with clear, non-duplicated purposes:
 //   • Report History  — previously created / submitted / approved reports
-//   • Employees, Clients & Plants, Pipe Standards, Audit Log — admin tools
+//   • Employees, Clients & Plants, Audit Log — admin tools
+//
+// NOTE: The Pipe Standards management page was removed from the Admin Site
+// (no sidebar item, no view). The PipeStandard database table, its seeded
+// reference data and the /api/pipe-standards endpoints are PRESERVED — the
+// piping report workflow still reads nominal wall thickness values from
+// them. Do not re-add the admin navigation item.
 const NAV: Array<{
   key: ViewKey;
   label: string;
@@ -40,7 +45,6 @@ const NAV: Array<{
   // Admin-only views
   { key: "employees", label: "Employees", icon: Users, roles: ["ADMIN"] },
   { key: "clients", label: "Clients & Plants", icon: Building2, roles: ["ADMIN"] },
-  { key: "pipe-standards", label: "Pipe Standards", icon: Ruler, roles: ["ADMIN"] },
   { key: "audit-logs", label: "Audit Log", icon: ScrollText, roles: ["ADMIN"] },
 ];
 

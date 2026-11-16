@@ -322,8 +322,8 @@ export function AdminDashboardView() {
           <Badge variant="outline" className="border-amber-500 text-amber-800 bg-white">DEMO</Badge>
           <p className="text-xs text-amber-900">
             The admin dashboard aggregates reports across all employees. Use the
-            sidebar to access Report History, Employees, Clients &amp; Plants, Pipe
-            Standards (admin reference data), and the Audit Log.
+            sidebar to access Report History, Employees, Clients &amp; Plants,
+            and the Audit Log.
           </p>
         </CardContent>
       </Card>

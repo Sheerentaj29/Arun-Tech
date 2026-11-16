@@ -1,16 +1,54 @@
-// POST /api/clients/[id]/logo - upload client logo (admin only)
+// GET    /api/clients/[id]/logo - serve the client's uploaded logo file
+// POST   /api/clients/[id]/logo - upload client logo (admin only)
 // DELETE /api/clients/[id]/logo - remove client logo (admin only)
+//
+// The GET handler exists because the report form (and now the Admin
+// Clients & Plants view) render the per-client uploaded logo via
+// AuthImage with src="/api/clients/{id}/logo". Without a GET export the
+// image request would return 405 and the fallback logo would never load.
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { recordAudit } from "@/lib/audit";
-import { writeFileSync, mkdirSync, unlinkSync, existsSync } from "fs";
+import { writeFileSync, mkdirSync, unlinkSync, existsSync, readFileSync } from "fs";
 import { join } from "path";
 
 const LOGO_STORAGE_DIR = "/home/z/my-project/storage/logos";
 const MAX_LOGO_SIZE = 5 * 1024 * 1024; // 5 MB
 const ALLOWED_MIME = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"];
+
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const session = await getSession(req);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { id } = await ctx.params;
+
+  const client = await db.client.findUnique({ where: { id }, select: { logoPath: true } });
+  if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
+
+  if (!client.logoPath || !existsSync(client.logoPath)) {
+    return NextResponse.json({ error: "No logo uploaded" }, { status: 404 });
+  }
+
+  const buf = readFileSync(client.logoPath);
+  const ext = client.logoPath.split(".").pop()?.toLowerCase() || "png";
+  const mime = ext === "jpg" || ext === "jpeg"
+    ? "image/jpeg"
+    : ext === "webp"
+      ? "image/webp"
+      : ext === "gif"
+        ? "image/gif"
+        : `image/${ext}`;
+
+  return new NextResponse(buf, {
+    headers: {
+      "Content-Type": mime,
+      "Content-Disposition": `inline; filename="client-logo.${ext}"`,
+      "Content-Length": String(buf.length),
+      "Cache-Control": "private, max-age=60",
+    },
+  });
+}
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const session = await getSession(req);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Building2,
   Factory,
@@ -14,6 +14,7 @@ import {
   Mail,
   Phone,
   MapPin,
+  ImagePlus,
 } from "lucide-react";
 import {
   Card,
@@ -54,7 +55,21 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useAppStore } from "@/lib/store";
 import { apiFetch } from "@/lib/api-client";
+import { AuthImage } from "@/components/auth-image";
+import { resolveClientLogo } from "@/lib/client-logo-mapping";
 import { toast } from "sonner";
+
+// Client logo upload constraints (mirrors the server-side limits in
+// /api/clients/[id]/logo). Only the four formats required for client
+// logos are accepted by the UI; the API additionally tolerates GIF.
+const LOGO_MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+const LOGO_ACCEPT = "image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp";
+
+function isSupportedLogoFile(f: File): boolean {
+  const typeOk = f.type === "image/png" || f.type === "image/jpeg" || f.type === "image/webp";
+  const extOk = /\.(png|jpe?g|webp)$/i.test(f.name);
+  return typeOk && extOk;
+}
 
 interface PlantItem {
   id: string;
@@ -73,6 +88,10 @@ interface ClientItem {
   contactPhone: string | null;
   address: string | null;
   notes: string | null;
+  // Server-side path of the client's uploaded logo file (null when the
+  // client has no logo of its own). The path itself is not rendered —
+  // the logo is fetched via GET /api/clients/{id}/logo.
+  logoPath: string | null;
   isDemo: boolean;
   plants: PlantItem[];
   // NOTE: Equipment Master was removed from the application. The clients
@@ -136,6 +155,23 @@ export function ClientsView() {
   const [plantForm, setPlantForm] = useState<PlantForm>(EMPTY_PLANT);
   const [savingPlant, setSavingPlant] = useState(false);
 
+  // Client logo (per-client upload) — New/Edit dialog state.
+  //   logoFile        the pending File selected in this dialog session
+  //                   (not yet uploaded; persisted only after save)
+  //   logoPreview     object URL for the immediate preview of logoFile
+  //   dialogLogoPath  mirror of the client's stored logo (edit mode);
+  //                   cleared when the logo is removed while the dialog
+  //                   is open
+  //   logoVersion     bumped after every upload/removal so AuthImage
+  //                   re-fetches the logo instead of showing a stale one
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [dialogLogoPath, setDialogLogoPath] = useState<string | null>(null);
+  const [logoBusy, setLogoBusy] = useState(false);
+  const [logoVersion, setLogoVersion] = useState(0);
+  const logoFileInputRef = useRef<HTMLInputElement | null>(null);
+  const logoPreviewRef = useRef<string | null>(null);
+
   const load = useCallback(() => {
     setLoading(true);
     apiFetch<{ items: ClientItem[] }>("/api/clients")
@@ -166,6 +202,8 @@ export function ClientsView() {
   // ---------- Client handlers ----------
   function openNewClient() {
     setClientForm(EMPTY_CLIENT);
+    clearLogoSelection();
+    setDialogLogoPath(null);
     setClientOpen(true);
   }
   function openEditClient(c: ClientItem) {
@@ -179,8 +217,96 @@ export function ClientsView() {
       address: c.address ?? "",
       notes: c.notes ?? "",
     });
+    clearLogoSelection();
+    setDialogLogoPath(c.logoPath ?? null);
     setClientOpen(true);
   }
+
+  // ---------- Client logo helpers ----------
+  /** Revoke the pending preview URL and clear the pending selection. */
+  function clearLogoSelection() {
+    if (logoPreviewRef.current) {
+      URL.revokeObjectURL(logoPreviewRef.current);
+      logoPreviewRef.current = null;
+    }
+    setLogoFile(null);
+    setLogoPreview(null);
+  }
+
+  /** Validate + stage a newly selected logo file with instant preview. */
+  function handleLogoFileSelected(f: File | null | undefined) {
+    if (!f) return;
+    if (!isSupportedLogoFile(f)) {
+      toast.error("Unsupported logo file — please choose a PNG, JPG, JPEG or WebP image");
+      return;
+    }
+    if (f.size > LOGO_MAX_BYTES) {
+      toast.error("Logo file too large — the maximum size is 5 MB");
+      return;
+    }
+    if (logoPreviewRef.current) URL.revokeObjectURL(logoPreviewRef.current);
+    const url = URL.createObjectURL(f);
+    logoPreviewRef.current = url;
+    setLogoFile(f);
+    setLogoPreview(url);
+  }
+
+  /**
+   * Remove the logo:
+   *  - a pending (not yet saved) selection is simply cleared;
+   *  - an already-stored logo is deleted on the server immediately
+   *    (the rest of the client record stays intact).
+   */
+  async function removeClientLogo() {
+    if (logoFile) {
+      clearLogoSelection();
+      return;
+    }
+    if (!clientForm.id || !dialogLogoPath) return;
+    setLogoBusy(true);
+    try {
+      await apiFetch(`/api/clients/${clientForm.id}/logo`, { method: "DELETE" });
+      setDialogLogoPath(null);
+      setLogoVersion((v) => v + 1);
+      toast.success("Client logo removed");
+      load();
+    } catch (e) {
+      const err = e as { message?: string };
+      toast.error(err.message ?? "Failed to remove logo");
+    } finally {
+      setLogoBusy(false);
+    }
+  }
+
+  /** POST the staged logo file to the server (multipart form upload). */
+  async function uploadClientLogo(clientId: string, file: File) {
+    const token =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem("ira_session_token")
+        : null;
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch(`/api/clients/${clientId}/logo`, {
+      method: "POST",
+      body: fd,
+      credentials: "include",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      let msg = `Upload failed (${res.status})`;
+      try {
+        const j = await res.json();
+        if (j?.error) msg = String(j.error);
+      } catch { /* keep default message */ }
+      throw new Error(msg);
+    }
+  }
+
+  // Revoke the preview object URL when the view unmounts.
+  useEffect(() => () => {
+    if (logoPreviewRef.current) URL.revokeObjectURL(logoPreviewRef.current);
+  }, []);
+
   async function saveClient() {
     if (!clientForm.name.trim()) {
       toast.error("Client name is required");
@@ -188,6 +314,7 @@ export function ClientsView() {
     }
     setSavingClient(true);
     try {
+      let savedId = clientForm.id;
       if (clientForm.id) {
         await apiFetch(`/api/clients/${clientForm.id}`, {
           method: "PUT",
@@ -195,11 +322,25 @@ export function ClientsView() {
         });
         toast.success("Client updated");
       } else {
-        await apiFetch("/api/clients", {
+        const created = await apiFetch<{ id: string }>("/api/clients", {
           method: "POST",
           body: JSON.stringify(clientForm),
         });
+        savedId = created.id;
         toast.success("Client created");
+      }
+      // Persist the staged logo against the (new or existing) client record.
+      if (logoFile && savedId) {
+        try {
+          await uploadClientLogo(savedId, logoFile);
+          toast.success("Client logo saved");
+        } catch (e) {
+          // The client record itself is saved — only the logo failed.
+          const err = e as { message?: string };
+          toast.error(`Client saved, but the logo upload failed: ${err.message ?? "unknown error"}`);
+        }
+        clearLogoSelection();
+        setLogoVersion((v) => v + 1);
       }
       setClientOpen(false);
       refresh();
@@ -299,6 +440,13 @@ export function ClientsView() {
       <div className="space-y-3">
         {clients.map((c) => {
           const isOpen = expanded.has(c.id);
+          // Logo resolution for this client — same precedence as the
+          // report form banner: the client's own uploaded logo first,
+          // then the system logo library, then a clean placeholder.
+          const uploadedLogoUrl = c.logoPath
+            ? `/api/clients/${c.id}/logo?v=${logoVersion}`
+            : null;
+          const mappedLogoFile = resolveClientLogo(c.name);
           return (
             <Card key={c.id}>
               <Collapsible open={isOpen} onOpenChange={() => toggle(c.id)}>
@@ -311,8 +459,22 @@ export function ClientsView() {
                         ) : (
                           <ChevronRight className="h-4 w-4 text-muted-foreground" />
                         )}
-                        <div className="flex h-10 w-10 items-center justify-center rounded-md bg-zinc-100 text-zinc-700">
-                          <Building2 className="h-5 w-5" />
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-zinc-100 text-zinc-700">
+                          {uploadedLogoUrl ? (
+                            <AuthImage
+                              src={uploadedLogoUrl}
+                              alt={`${c.name} logo`}
+                              className="max-h-[36px] max-w-[36px] h-auto w-auto object-contain"
+                            />
+                          ) : mappedLogoFile ? (
+                            <AuthImage
+                              src={`/api/client-logo/${encodeURIComponent(mappedLogoFile)}`}
+                              alt={`${c.name} logo`}
+                              className="max-h-[36px] max-w-[36px] h-auto w-auto object-contain"
+                            />
+                          ) : (
+                            <Building2 className="h-5 w-5" />
+                          )}
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
@@ -360,11 +522,41 @@ export function ClientsView() {
                 </CardHeader>
                 <CollapsibleContent>
                   <CardContent className="space-y-3">
-                    {/* Contact info */}
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      <InfoItem icon={MapPin} label="Address" value={c.address} />
-                      <InfoItem icon={Mail} label="Email" value={c.contactEmail} />
-                      <InfoItem icon={Phone} label="Phone" value={c.contactPhone} />
+                    {/* Client logo + contact info.
+                        The logo keeps its original aspect ratio
+                        (object-contain) — it is never stretched. */}
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                      <div className="flex shrink-0 flex-col items-center gap-1">
+                        <div className="flex h-[70px] w-[140px] items-center justify-center overflow-hidden rounded-md border bg-white">
+                          {uploadedLogoUrl ? (
+                            <AuthImage
+                              src={uploadedLogoUrl}
+                              alt={`${c.name} logo`}
+                              className="max-h-[62px] max-w-[132px] h-auto w-auto object-contain"
+                            />
+                          ) : mappedLogoFile ? (
+                            <AuthImage
+                              src={`/api/client-logo/${encodeURIComponent(mappedLogoFile)}`}
+                              alt={`${c.name} logo`}
+                              className="max-h-[62px] max-w-[132px] h-auto w-auto object-contain"
+                            />
+                          ) : (
+                            <span className="px-2 text-center text-[10px] leading-tight text-zinc-400">
+                              {c.name.length > 20 ? c.name.slice(0, 20) + "…" : c.name}
+                              <br />
+                              No logo
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                          Client Logo
+                        </span>
+                      </div>
+                      <div className="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                        <InfoItem icon={MapPin} label="Address" value={c.address} />
+                        <InfoItem icon={Mail} label="Email" value={c.contactEmail} />
+                        <InfoItem icon={Phone} label="Phone" value={c.contactPhone} />
+                      </div>
                     </div>
                     {c.notes && (
                       <div className="rounded-md border bg-muted/40 p-3 text-xs">
@@ -460,6 +652,90 @@ export function ClientsView() {
             <div className="sm:col-span-2 space-y-2">
               <Label>Notes</Label>
               <Textarea rows={2} value={clientForm.notes} onChange={(e) => setClientForm((f) => ({ ...f, notes: e.target.value }))} />
+            </div>
+            {/* Client Logo — upload with instant preview, replace or remove.
+                A newly selected file is uploaded to the server when the
+                client is saved, so the logo is stored persistently on the
+                client record (never only as a browser preview). */}
+            <div className="sm:col-span-2 space-y-2">
+              <Label>Client Logo</Label>
+              <div className="flex flex-col gap-3 rounded-md border p-3 sm:flex-row sm:items-start">
+                <div className="flex h-[70px] w-[140px] shrink-0 items-center justify-center overflow-hidden rounded-md border bg-white">
+                  {logoPreview ? (
+                    // Immediate local preview of the staged file.
+                    <img
+                      src={logoPreview}
+                      alt="Client logo preview"
+                      className="max-h-[62px] max-w-[132px] h-auto w-auto object-contain"
+                    />
+                  ) : dialogLogoPath ? (
+                    // Logo already stored on the client record.
+                    <AuthImage
+                      src={`/api/clients/${clientForm.id}/logo?v=${logoVersion}`}
+                      alt="Client logo"
+                      className="max-h-[62px] max-w-[132px] h-auto w-auto object-contain"
+                    />
+                  ) : resolveClientLogo(clientForm.name) ? (
+                    // No uploaded logo, but a system library logo exists.
+                    <AuthImage
+                      src={`/api/client-logo/${encodeURIComponent(resolveClientLogo(clientForm.name) as string)}`}
+                      alt="Client logo (library)"
+                      className="max-h-[62px] max-w-[132px] h-auto w-auto object-contain"
+                    />
+                  ) : (
+                    <span className="px-2 text-center text-[10px] leading-tight text-zinc-400">
+                      No logo<br />uploaded
+                    </span>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="flex flex-wrap gap-2">
+                    <input
+                      ref={logoFileInputRef}
+                      type="file"
+                      accept={LOGO_ACCEPT}
+                      className="hidden"
+                      onChange={(e) => {
+                        handleLogoFileSelected(e.target.files?.[0]);
+                        e.target.value = "";
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => logoFileInputRef.current?.click()}
+                    >
+                      <ImagePlus className="mr-2 h-4 w-4" />
+                      {logoFile || dialogLogoPath ? "Replace Logo" : "Upload Logo"}
+                    </Button>
+                    {(logoFile || dialogLogoPath) && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="text-red-600 hover:text-red-700"
+                        onClick={removeClientLogo}
+                        disabled={logoBusy}
+                      >
+                        {logoBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                        {logoFile ? "Remove Selection" : "Remove Logo"}
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    PNG, JPG, JPEG or WebP · up to 5 MB. The logo keeps its
+                    original aspect ratio and is stored with the client record.
+                  </p>
+                  {!dialogLogoPath && !logoFile && resolveClientLogo(clientForm.name) && (
+                    <p className="text-xs text-muted-foreground">
+                      This client currently uses a logo from the system logo
+                      library. Uploading a logo here stores this client&apos;s own
+                      logo image.
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
           <DialogFooter>
