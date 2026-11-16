@@ -765,9 +765,6 @@ export function PipelineReportDetailView() {
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to list
         </Button>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => downloadPdf("landscape")}>
-            <Download className="mr-2 h-4 w-4" /> PDF (Landscape)
-          </Button>
           <Button variant="outline" size="sm" onClick={() => downloadPdf("portrait")}>
             <Download className="mr-2 h-4 w-4" /> PDF (Portrait)
           </Button>
@@ -1419,9 +1416,10 @@ export function PipelineReportDetailView() {
             if (Array.isArray(parsed)) wsProbeRows = parsed;
           } catch {}
           const wsScanPairs: Array<[string, string | null | undefined]> = [
-            ["Calibration Block", report.wsScanningCalibrationBlock],
+            ["Calibration Block (DAC Block)", report.wsScanningCalibrationBlock],
             ["Reference Level", report.wsScanningReferenceLevel],
             ["Extent of Examination", report.wsScanningExtentOfExamination],
+            ["Flaw Sizing Technique", report.wsScanningFlawSizingTechnique],
             ["Surface Condition", report.wsScanningSurfaceCondition],
           ];
           return (
@@ -1436,7 +1434,7 @@ export function PipelineReportDetailView() {
                     <table className="w-full border-collapse text-xs">
                       <thead>
                         <tr className="bg-cyan-700 text-white">
-                          <th className="border border-cyan-800 px-2 py-2 text-center">Equipment Type</th>
+                          <th className="border border-cyan-800 px-2 py-2 text-center">Instrument Type</th>
                           <th className="border border-cyan-800 px-2 py-2 text-center">Machine Make</th>
                           <th className="border border-cyan-800 px-2 py-2 text-center">Model</th>
                           <th className="border border-cyan-800 px-2 py-2 text-center">M/c Sr. No.</th>
