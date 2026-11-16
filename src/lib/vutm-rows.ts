@@ -302,8 +302,11 @@ function clockRowFromDirectionRow(r: Record<string, unknown>): VutmClockRow {
     : legacySpotsToReadings(r);
   const row: VutmClockRow = {
     moc: toStr(r.moc),
-    componentType: toStr(r.componentType) || toStr(r.component),
-    componentId: toStr(r.componentId),
+    componentType: toStr(r.componentType) || toStr(r.component) ||
+      // Legacy nozzle rows carry the ID in `nozzleId` (normalizeClockRow
+      // maps it the same way — the custom ID must never be dropped).
+      (r.nozzleId !== undefined ? "Nozzle" : ""),
+    componentId: toStr(r.componentId) || toStr(r.nozzleId),
     nominalThickness: toStr(r.nominalThickness),
     size: toStr(r.size),
     schedule: toStr(r.schedule),

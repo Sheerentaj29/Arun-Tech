@@ -112,7 +112,7 @@ const dishSaved = JSON.parse(horiz.vutmDishRows ?? "[]");
 check("dish row 1 min = 11.8", dishSaved[0]?.min === "11.8", `got ${dishSaved[0]?.min}`);
 const nozSaved = JSON.parse(horiz.vutmNozzleRows ?? "[]");
 check("nozzle row 1 min = 7.6", nozSaved[0]?.min === "7.6", `got ${nozSaved[0]?.min}`);
-check("nozzle custom ID preserved + non-numeric spot ignored", nozSaved[1]?.nozzleId === "CUSTOM-N9" && nozSaved[1]?.min === "5.3", `got ${nozSaved[1]?.min}`);
+check("nozzle custom ID preserved + non-numeric spot ignored", nozSaved[1]?.componentId === "CUSTOM-N9" && nozSaved[1]?.min === "5.3", `got componentId=${nozSaved[1]?.componentId} min=${nozSaved[1]?.min}`);
 const lwSaved = JSON.parse(horiz.vutmLwProbeRows ?? "[]");
 check("repeatable LW probe rows saved (2 rows)", lwSaved.length === 2, `got ${lwSaved.length}`);
 
@@ -186,7 +186,7 @@ const gotV = await api(`/api/pipeline-inspections/${vert.id}`);
 check("horizontal shell rows intact (2 rows)", JSON.parse(gotH.vutmShellRows ?? "[]").length === 2);
 check("horizontal keeps clock-position shape (c12 array)", Array.isArray(JSON.parse(gotH.vutmShellRows ?? "[]")[0]?.c12));
 check("vertical shell rows intact (5 rows)", JSON.parse(gotV.vutmShellRows ?? "[]").length === 5);
-check("vertical keeps direction shape (spot1 field)", JSON.parse(gotV.vutmShellRows ?? "[]")[0]?.spot1 === "11.9");
+check("vertical keeps direction shape (spot1..4 → readings)", JSON.parse(gotV.vutmShellRows ?? "[]")[0]?.readings?.[0] === "11.9");
 check("horizontal still HORIZONTAL", gotH.vesselOrientation === "HORIZONTAL");
 check("vertical still VERTICAL", gotV.vesselOrientation === "VERTICAL");
 
@@ -231,7 +231,20 @@ check("existing piping thickness reports present in list", pipingThickness.lengt
 const firstPipe = pipingThickness[0];
 if (firstPipe) {
   const gotP = await api(`/api/pipeline-inspections/${firstPipe.id}`);
-  check("piping thickness report keeps its measurement rows", Array.isArray(gotP.measurements) && gotP.measurements.length > 0, `got ${gotP.measurements?.length}`);
+  // The API clamps pageSize to 100, so older piping reports (which DO carry
+  // rows) now sit beyond page 1 of 241 reports. Older suite runs also left
+  // row-less piping reports that sort first by createdAt desc. Walk pages
+  // and use the list's _count.measurements to find one that still has rows.
+  let pipeWithRows = null;
+  for (let page = 1; page <= 4 && !pipeWithRows; page++) {
+    let pageList = pipingThickness;
+    if (page > 1) {
+      const pageData = await api(`/api/pipeline-inspections?pageSize=100&page=${page}`);
+      pageList = (pageData.items ?? []).filter((r) => r.reportType === "PIPELINE_THICKNESS");
+    }
+    pipeWithRows = pageList.find((r) => (r._count?.measurements ?? 0) > 0) ?? null;
+  }
+  check("piping thickness report keeps its measurement rows", !!pipeWithRows, `found ${pipeWithRows ? pipeWithRows.reportNumber : "none"}`);
   check("piping report has NO vessel orientation", gotP.vesselOrientation === null || gotP.vesselOrientation === undefined, `got ${gotP.vesselOrientation}`);
   // Existing piping thickness PDF still renders
   const res = await fetch(`${BASE}/api/pipeline-inspections/${firstPipe.id}/pdf`, { headers: AUTH });
