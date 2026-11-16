@@ -25,6 +25,7 @@
 
 import PDFDocument from "pdfkit";
 import type { Writable } from "stream";
+import { PassThrough } from "stream";
 import type {
   PipelineInspection,
   ThicknessMeasurement,
@@ -54,8 +55,6 @@ import {
 import {
   parseThicknessTablesConfig,
   DEFAULT_TABLE_ID,
-  thicknessSectionHeading,
-  thicknessTableHeading,
   type ThicknessTableConfig,
 } from "@/lib/thickness-tables";
 import { fmtMeasurement } from "@/lib/measurement-utils";
@@ -72,6 +71,21 @@ const GEIST_MEDIUM = "/home/z/my-project/node_modules/geist/dist/fonts/geist-san
 // Fall back to Helvetica if Geist TTFs are not found (shouldn't happen)
 const FONT_REGULAR = existsSync(GEIST_REGULAR) ? "GeistSans" : "Helvetica";
 const FONT_BOLD = existsSync(GEIST_BOLD) ? "GeistSans-Bold" : "Helvetica-Bold";
+
+// ─── Heading hierarchy: main section headings 16pt, subsection/table-group
+// headings 14pt. Table headings and table contents keep their established
+// compact engineering sizes (see the individual table helpers).
+const FONT_SIZE_MAIN = 16;
+const FONT_SIZE_SUB = 14;
+const FONT_SIZE_BODY = 12;
+
+// ─── Table of Contents entries (collected during the first render pass) ───
+interface TocEntry {
+  num: string;      // "1", "2.1", ...
+  title: string;
+  page: number;     // absolute page number where the heading is drawn
+  level: 1 | 2;     // 1 = main section, 2 = subsection
+}
 
 // Service company logo path (uploaded by admin via /api/settings/service-logo)
 function findServiceLogo(): string | null {
@@ -354,6 +368,25 @@ function readImageBuffer(filePath: string): Buffer | null {
   }
 }
 
+// Load an image file as a buffer pdfkit can embed. PNG/JPEG pass through
+// untouched; other formats (e.g. webp — which pdfkit cannot embed and would
+// otherwise render as "[Image Unreadable]") are rasterized to PNG via sharp.
+async function loadEmbeddableImage(filePath: string): Promise<Buffer | null> {
+  const buf = readImageBuffer(filePath);
+  if (!buf) return null;
+  const ext = (filePath.split(".").pop() ?? "").toLowerCase();
+  if (ext === "png" || ext === "jpg" || ext === "jpeg") return buf;
+  try {
+    const mod = await import("sharp");
+    // sharp's CJS/ESM interop: the callable factory may sit on .default
+    type SharpFn = (b: Buffer) => { png: () => { toBuffer: () => Promise<Buffer> } };
+    const sharp = (((mod as unknown as { default?: SharpFn }).default ?? mod) as unknown) as SharpFn;
+    return await sharp(buf).png().toBuffer();
+  } catch {
+    return buf; // fall back to the raw buffer; embed failure is handled by the caller
+  }
+}
+
 /**
  * Compute the (width, height) at which to draw an image inside a
  * bounding box, preserving aspect ratio (no stretching, no cropping).
@@ -429,6 +462,32 @@ export async function generatePipelineReportPdf(
   input: PdfReportInput,
   out: Writable,
   orientation: "landscape" | "portrait" = "landscape",
+): Promise<void> {
+  // ── Two-pass generation (accurate Table of Contents page numbers) ──
+  //   Pass 1 renders the whole report into a discard sink with the TOC page
+  //   reserved (one page, heading only) and records the exact page number of
+  //   every section heading along the way. Pass 2 re-renders with the
+  //   collected entries written onto the reserved TOC page — the body layout
+  //   is identical in both passes, so the recorded page numbers are exact.
+  const collected: TocEntry[] = [];
+  {
+    const sink = new PassThrough();
+    sink.resume();
+    await new Promise<void>((resolve, reject) => {
+      sink.on("finish", () => resolve());
+      sink.on("error", reject);
+      runGeneration(input, sink, orientation, null, collected).catch(reject);
+    });
+  }
+  await runGeneration(input, out, orientation, collected, []);
+}
+
+async function runGeneration(
+  input: PdfReportInput,
+  out: Writable,
+  orientation: "landscape" | "portrait",
+  tocData: TocEntry[] | null,
+  collected: TocEntry[],
 ): Promise<void> {
   const pageSize = PAGE_SIZES[orientation];
   const pageW = pageSize[0];
@@ -520,6 +579,40 @@ export async function generatePipelineReportPdf(
     });
     drawFooter();
   };
+
+  // ── TOC registration (fills `collected` during both passes) ──
+  // `pageNo` is maintained by drawFooter() — it is the exact page number
+  // printed in the footer, which is what the TOC must show.
+  let tocMainCount = 0;
+  const tocSubCounts = new Map<number, number>();
+  const tocMainEntry = (title: string): number => {
+    const num = ++tocMainCount;
+    collected.push({ num: String(num), title, page: pageNo, level: 1 });
+    return num;
+  };
+  const tocSubEntry = (mainNum: number, title: string): string => {
+    const sub = (tocSubCounts.get(mainNum) ?? 0) + 1;
+    tocSubCounts.set(mainNum, sub);
+    collected.push({ num: `${mainNum}.${sub}`, title, page: pageNo, level: 2 });
+    return `${mainNum}.${sub}`;
+  };
+  // A test-type branch registers its main section lazily (at the page where
+  // its first subsection heading is drawn) and exposes `sub()` returning the
+  // rendered "3.1"-style number so drawn headings always match the TOC.
+  const makeTocBranch = (title: string) => {
+    let mainNum: number | null = null;
+    const main = (): number => {
+      if (mainNum === null) mainNum = tocMainEntry(title);
+      return mainNum;
+    };
+    return {
+      main,
+      sub: (subTitle: string): string => tocSubEntry(main(), subTitle),
+    };
+  };
+  // The test-type branch currently being rendered — the shared photo gallery
+  // registers itself as a subsection of it.
+  let currentTestBranch: ReturnType<typeof makeTocBranch> | null = null;
 
   // Footer for page 1
   drawFooter();
@@ -781,23 +874,17 @@ export async function generatePipelineReportPdf(
     //   signOffY      = top of the sign-off block (anchored to page bottom)
     //   cursorY       = bottom of the client details grid
     //   12pt gap      = breathing room above the sign-off separator line
-    //   20pt label    = "Primary Inspection Photo" heading height
-    //   8pt margin    = small gap below the heading before the image
-    const labelH = 20;
+    //   (the "Primary Inspection Photo" heading is intentionally NOT drawn
+    //   per report spec — the photograph itself stays on the front page)
+    //   8pt margin    = small gap above the image
     const gapAboveSignOff = 14;
     const gapBelowLabel = 8;
-    const photoAvailH = signOffY - gapAboveSignOff - cursorY - labelH - gapBelowLabel;
+    const photoAvailH = signOffY - gapAboveSignOff - cursorY - gapBelowLabel;
 
     if (photoAvailH > 40) {
       try {
-        const photoBuf = readFileSync(primaryPhotoPath);
-
-        // Draw the label heading
-        doc.font(FONT_BOLD).fontSize(10).fillColor("#000");
-        doc.text("Primary Inspection Photo", MARGIN, cursorY + 4, {
-          width: usableW, align: "left",
-        });
-        cursorY += labelH;
+        const photoBuf = await loadEmbeddableImage(primaryPhotoPath);
+        if (!photoBuf) throw new Error("primary photo unreadable");
 
         // Available area for the image
         const photoAvailW = usableW;
@@ -911,34 +998,70 @@ export async function generatePipelineReportPdf(
     }
   }
 
-  // After the first page (header + sign-off), start a new page for
-  // the remaining sections.
-  // Declare y here (before the findings sections use it) to avoid the
-  // temporal dead zone. It gets properly initialized by startBodyOnFreshPage
-  // for the measurement table, and set to MARGIN for the findings sections.
-  let y: number = 0;
+  // ── TOC entry 1: General Information (the front page just rendered) ──
+  tocMainEntry("General Information");
 
-  // Only create a new page for findings if there IS findings content to
-  // render. If all four findings fields are empty AND there are drawings
-  // (which each get their own page), creating a blank page here would
-  // leave an empty page between the cover and the first drawing.
-  // So we check whether any findings text exists before calling addNewPage().
-  const hasFindingsContent =
-    !!((report as any).inspectionDescription && report.inspectionDescription!.trim()) ||
-    !!((report as any).siteObservationSummary && (report as any).siteObservationSummary.trim()) ||
-    !!((report as any).results && (report as any).results.trim()) ||
-    !!((report as any).conclusion && (report as any).conclusion.trim());
-  if (hasFindingsContent) {
-    addNewPage();
-    // Initialize y for the findings sections
-    y = MARGIN;
-  } else {
-    // No findings content — y stays at 0. The drawings section and
-    // startBodyOnFreshPage will create pages as needed. If there are
-    // no drawings either, startBodyOnFreshPage will create a page for
-    // the body content (measurement table, DPT observations, etc.).
-    y = 0;
+  // ═══════════════════════════════════════════════════════════════
+  // TABLE OF CONTENTS — page 2, immediately after the front page.
+  // Pass 1 draws only the heading (the page is reserved so every body
+  // page number is already final); pass 2 fills in the collected section
+  // entries with their exact page numbers.
+  // ═══════════════════════════════════════════════════════════════
+  addNewPage();
+  {
+    let ty = MARGIN;
+    doc.font(FONT_BOLD).fontSize(FONT_SIZE_MAIN).fillColor("#000");
+    doc.text("TABLE OF CONTENTS", MARGIN, ty, { width: usableW });
+    ty += 28;
+    doc.moveTo(MARGIN, ty - 8).lineTo(pageW - MARGIN, ty - 8).stroke(TABLE_OUTER_BORDER);
+    ty += 8;
+    if (tocData) {
+      for (const e of tocData) {
+        const isMain = e.level === 1;
+        const indent = isMain ? 0 : 18;
+        const label = isMain ? `${e.num}. ${e.title}` : `${e.num}  ${e.title}`;
+        const pageStr = String(e.page);
+        const pageStrW = doc.widthOfString(pageStr);
+        // Manual truncation keeps every entry on one line (drawing without
+        // `width` avoids pdfkit's LineWrapper and any phantom page breaks).
+        const maxLabelW = pageW - 2 * MARGIN - indent - pageStrW - 30;
+        let label2 = label;
+        if (doc.widthOfString(label2) > maxLabelW) {
+          const keep = Math.floor((maxLabelW / Math.max(1, doc.widthOfString(label2))) * label2.length);
+          label2 = label2.slice(0, Math.max(1, keep - 1)) + "…";
+        }
+        doc.font(isMain ? FONT_BOLD : FONT_REGULAR).fontSize(FONT_SIZE_BODY).fillColor("#000");
+        const labelX = MARGIN + indent;
+        doc.text(label2, labelX, ty, { lineBreak: false });
+        // Dotted leader between the title and the right-aligned page number.
+        const dotStart = labelX + doc.widthOfString(label2) + 6;
+        const dotEnd = pageW - MARGIN - pageStrW - 6;
+        if (dotEnd > dotStart + 8) {
+          doc.font(FONT_REGULAR).fontSize(FONT_SIZE_BODY).fillColor("#9ca3af");
+          const dot = " .";
+          const dotW = doc.widthOfString(dot);
+          for (let dx = dotStart; dx + dotW < dotEnd; dx += dotW) {
+            doc.text(dot, dx, ty, { lineBreak: false });
+          }
+          doc.fillColor("#000");
+        }
+        doc.font(isMain ? FONT_BOLD : FONT_REGULAR).fontSize(FONT_SIZE_BODY).fillColor("#000");
+        doc.text(pageStr, pageW - MARGIN - pageStrW, ty, { lineBreak: false });
+        ty += isMain ? 22 : 17;
+      }
+    }
+    doc.fillColor("#000");
   }
+
+  // After the first page (header + sign-off) and the reserved TOC page,
+  // start a new page for the remaining sections.
+  // The TOC page (page 2) is RESERVED for the table of contents itself — the
+  // report body always starts on a fresh page, whether or not findings content
+  // exists. (Before the TOC existed, `y = 0` acted as a "no page yet" sentinel
+  // that let startBodyOnFreshPage create the body page lazily; with the TOC
+  // page as the current page that sentinel drew body content ON TOP of the TOC.)
+  addNewPage();
+  let y: number = MARGIN;
 
   // ═══════════════════════════════════════════════════════════════
   // SECTION ORDER (per latest spec):
@@ -984,8 +1107,9 @@ export async function generatePipelineReportPdf(
     bodyText: string,
     gapBefore = 8,
     gapAfter = 14,
-    headingFontSize = 9,
-    bodyFontSize = 8,
+    headingFontSize = FONT_SIZE_SUB,
+    bodyFontSize = FONT_SIZE_BODY,
+    onPage?: () => void,
   ) => {
     if (!bodyText || !bodyText.trim()) return;
     const usableW = pageW - 2 * MARGIN;
@@ -1008,6 +1132,9 @@ export async function generatePipelineReportPdf(
       addNewPage();
       y = MARGIN;
     }
+    // TOC registration — AFTER the page-break decision, so the recorded
+    // page number is the page the heading actually lands on.
+    if (onPage) onPage();
     // Draw heading
     y += gapBefore;
     doc.font(FONT_BOLD).fontSize(headingFontSize).fillColor("#000");
@@ -1025,6 +1152,14 @@ export async function generatePipelineReportPdf(
     doc.fillColor("#000");
   };
 
+  // Findings sections share one TOC main section ("Inspection Details");
+  // it is registered lazily at the first drawn findings heading.
+  let inspectionDetailsMain: number | null = null;
+  const detailsMain = (): number => {
+    if (inspectionDetailsMain === null) inspectionDetailsMain = tocMainEntry("Inspection Details");
+    return inspectionDetailsMain;
+  };
+
   // ── 1. INSPECTION DESCRIPTION ──
   if (report.inspectionDescription) {
     drawHeadingAndBody(
@@ -1032,8 +1167,9 @@ export async function generatePipelineReportPdf(
       report.inspectionDescription,
       10,  // larger gap before this section
       14,
-      9,
-      8,
+      FONT_SIZE_SUB,
+      FONT_SIZE_BODY,
+      () => tocSubEntry(detailsMain(), "Inspection Description"),
     );
   }
 
@@ -1046,8 +1182,9 @@ export async function generatePipelineReportPdf(
         text,
         8,
         14,
-        9,
-        8,
+        FONT_SIZE_SUB,
+        FONT_SIZE_BODY,
+        () => tocSubEntry(detailsMain(), "Summary Of Site Observations"),
       );
     }
   }
@@ -1061,8 +1198,9 @@ export async function generatePipelineReportPdf(
         text,
         8,
         14,
-        9,
-        8,
+        FONT_SIZE_SUB,
+        FONT_SIZE_BODY,
+        () => tocSubEntry(detailsMain(), "Results"),
       );
     }
   }
@@ -1076,8 +1214,9 @@ export async function generatePipelineReportPdf(
         text,
         8,
         14,
-        9,
-        8,
+        FONT_SIZE_SUB,
+        FONT_SIZE_BODY,
+        () => tocSubEntry(detailsMain(), "Conclusion"),
       );
     }
   }
@@ -1095,6 +1234,13 @@ export async function generatePipelineReportPdf(
   // ═══════════════════════════════════════════════════════════════
   const includeDrawings = !NO_DRAWINGS_REPORT_TYPES.includes(reportType);
   if (includeDrawings) {
+    let drawingsRegistered = false;
+    const registerDrawingsToc = () => {
+      if (!drawingsRegistered) {
+        drawingsRegistered = true;
+        tocMainEntry("Engineering Drawings");
+      }
+    };
     for (const drawing of linkedDrawings) {
       const ext = (drawing.fileExtension || "").toLowerCase();
       const filePath = drawing.filePath;
@@ -1103,6 +1249,7 @@ export async function generatePipelineReportPdf(
         // Missing file — still emit a placeholder page so the structure
         // is visible
         addNewPage();
+        registerDrawingsToc();
         drawDrawingPlaceholder(
           doc, drawing,
           `[File missing on disk: ${drawing.fileName}]\n\nThe drawing file could not be found.`,
@@ -1128,6 +1275,7 @@ export async function generatePipelineReportPdf(
         // One output page per source PDF page
         for (let p = 0; p < pageBuffers.length; p++) {
           addNewPage();
+          registerDrawingsToc();
           drawDrawingImagePage(doc, drawing, pageBuffers[p], p + 1, pageBuffers.length, pageW, pageH);
         }
       } else if (
@@ -1146,10 +1294,12 @@ export async function generatePipelineReportPdf(
           continue;
         }
         addNewPage();
+        registerDrawingsToc();
         drawDrawingImagePage(doc, drawing, imgBuf, 1, 1, pageW, pageH);
       } else {
         // DWG / DXF / unsupported — show a placeholder
         addNewPage();
+        registerDrawingsToc();
         drawDrawingPlaceholder(
           doc, drawing,
           `[${ext.toUpperCase()} File: ${drawing.fileName}]\n\n` +
@@ -1221,10 +1371,12 @@ export async function generatePipelineReportPdf(
       (report as PipelineInspection & { thicknessTablesConfig?: string | null }).thicknessTablesConfig ?? null,
     );
 
-    // ── Draw the parent section heading: "7. Thickness Measurement" ──
+    const thicknessBranch = makeTocBranch("Thickness Measurement");
+
+    // ── Draw the parent section heading: "<N>. Thickness Measurement" ──
+    // (N is the dynamically assigned TOC section number)
     {
-      const parentHeading = thicknessSectionHeading();
-      const parentH = 20;
+      const parentH = 24;
       // Ensure the parent heading + index list + at least one table header
       // + one row all fit; otherwise start on a fresh page.
       const indexRowH = 14;
@@ -1233,8 +1385,10 @@ export async function generatePipelineReportPdf(
       if (y + neededH > pageMaxY) {
         addNewPage();
       }
-      doc.font(FONT_BOLD).fontSize(12).fillColor("#1f2937");
-      doc.text(parentHeading, MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
+      const thMain = thicknessBranch.main();
+      currentTestBranch = thicknessBranch;
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_MAIN).fillColor("#1f2937");
+      doc.text(`${thMain}. Thickness Measurement`, MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
       y += parentH;
       // Thin divider under the parent heading.
       doc.moveTo(MARGIN, y - 6).lineTo(pageW - MARGIN, y - 6).stroke("#374151");
@@ -1246,7 +1400,7 @@ export async function generatePipelineReportPdf(
     {
       const indexRowH = 14;
       for (let i = 0; i < tables.length; i++) {
-        const entry = thicknessTableHeading(i + 1, tables[i].label);
+        const entry = `${thicknessBranch.main()}.${i + 1} – ${tables[i].label}`;
         if (y + indexRowH > pageMaxY) {
           addNewPage();
         }
@@ -1264,7 +1418,7 @@ export async function generatePipelineReportPdf(
     // ── Render each table with its numbered heading ──
     for (let tIdx = 0; tIdx < tables.length; tIdx++) {
       const table = tables[tIdx];
-      const tableNumberedHeading = thicknessTableHeading(tIdx + 1, table.label);
+      const tableNumberedHeading = `${thicknessBranch.main()}.${tIdx + 1} – ${table.label}`;
       // Partition measurements into THIS table.
       const tableMeasurements = measurements.filter(
         (m) => (m.tableGroup ?? DEFAULT_TABLE_ID) === table.id,
@@ -1277,7 +1431,8 @@ export async function generatePipelineReportPdf(
         if (y + 18 + tableHeaderH + rowH2 > pageMaxY) {
           addNewPage();
         }
-        doc.font(FONT_BOLD).fontSize(11).fillColor("#1f2937");
+        tocSubEntry(thicknessBranch.main(), table.label);
+        doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#1f2937");
         doc.text(tableNumberedHeading, MARGIN, y, { width: pageW - 2 * MARGIN, align: "left" });
         y += 18;
         // Thin divider under the heading.
@@ -1314,7 +1469,7 @@ export async function generatePipelineReportPdf(
             addNewPage();
             // Re-emit the numbered heading + table header on the new page
             // so the reader knows which table the continuation belongs to.
-            doc.font(FONT_BOLD).fontSize(10).fillColor("#1f2937");
+            doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#1f2937");
             doc.text(`${tableNumberedHeading} (continued)`, MARGIN, MARGIN, { width: pageW - 2 * MARGIN, align: "left" });
             doc.fillColor("#000");
             drawTableHeader(doc, allCols, colWidths, MARGIN + 16, pageW);
@@ -1352,7 +1507,14 @@ export async function generatePipelineReportPdf(
       { key: "vComments",    header: "Inspector\nComments",  width: 0 },
     ];
     const visColWidths = calcColumnWidths(visCols, pageW);
+    const visualBranch = makeTocBranch("Visual Inspection");
+    currentTestBranch = visualBranch;
     startBodyOnFreshPage(tableHeaderH + rowH2);
+    doc.font(FONT_BOLD).fontSize(FONT_SIZE_MAIN).fillColor("#1f2937");
+    doc.text(`${visualBranch.main()}. Visual Inspection Observations`, MARGIN, y,
+      { width: pageW - 2 * MARGIN, align: "left" });
+    y += 28;
+    tocSubEntry(visualBranch.main(), "Visual Observations Table");
     drawVisualTableHeader(doc, visCols, visColWidths, y, pageW);
     y += tableHeaderH;
     for (const o of visualObservations) {
@@ -1376,8 +1538,11 @@ export async function generatePipelineReportPdf(
     }
   } else if (reportType === "PIPELINE_CONDITION") {
     // ─── CONDITION ASSESSMENT FIELDS ───
+    const conditionBranch = makeTocBranch("Condition Assessment");
+    currentTestBranch = conditionBranch;
     startBodyOnFreshPage(80);
-    y = drawConditionAssessment(doc, report as any, y, pageW, pageH, MARGIN, pageMaxY, addNewPage);
+    y = drawConditionAssessment(doc, report as any, y, pageW, pageH, MARGIN, pageMaxY, addNewPage,
+      () => conditionBranch.main());
   } else if (reportType === "PIPELINE_DPT") {
     // ─── DPT / DPPT REPORT BODY ───
     // Renders, in this order:
@@ -1393,6 +1558,8 @@ export async function generatePipelineReportPdf(
     startBodyOnFreshPage(160);
 
     const dptReport = report as any;
+    const pdptBranch = makeTocBranch("Dye Penetrant Testing");
+    currentTestBranch = pdptBranch;
 
     // ─── 3. DYE PENETRANT PROCEDURE ───
     // Two-column table: left = field name (bold), right = value.
@@ -1402,8 +1569,8 @@ export async function generatePipelineReportPdf(
       const procRowH_local = 18;
       if (y + 24 + procRowH_local > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 6;
-      doc.font(FONT_BOLD).fontSize(11).fillColor("#3a1d4a");
-      doc.text("3. DYE PENETRANT PROCEDURE", MARGIN, y);
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#3a1d4a");
+      doc.text(`{pdptBranch.sub("Dye Penetrant Procedure") + " DYE PENETRANT PROCEDURE"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 18;
 
@@ -1478,8 +1645,8 @@ export async function generatePipelineReportPdf(
       const consRowH_local = 18;
       if (y + 24 + consRowH_local > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 4;
-      doc.font(FONT_BOLD).fontSize(11).fillColor("#3a1d4a");
-      doc.text("Consumable Details", MARGIN, y);
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#3a1d4a");
+      doc.text(`{pdptBranch.sub("Consumable Details") + " Consumable Details"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 18;
 
@@ -1555,8 +1722,8 @@ export async function generatePipelineReportPdf(
     // (a heading must never appear alone at the bottom of a page).
     if (y + 24 + dptHeaderH + dptRowH > pageMaxY) { addNewPage(); y = MARGIN; }
     y += 4;
-    doc.font(FONT_BOLD).fontSize(11).fillColor("#3a1d4a");
-    doc.text("DPT Inspection Results", MARGIN, y);
+    doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#3a1d4a");
+    doc.text(`{pdptBranch.sub("DPT Inspection Results") + " DPT Inspection Results"}`, MARGIN, y);
     doc.fillColor("#000");
     y += 16;
 
@@ -1599,14 +1766,16 @@ export async function generatePipelineReportPdf(
     startBodyOnFreshPage(160);
 
     const vdptReport = report as any;
+    const vdptBranch = makeTocBranch("Dye Penetrant Testing");
+    currentTestBranch = vdptBranch;
 
     // ─── 1. DYE PENETRANT TESTING PARAMETERS ───
     {
       const procRowH = 18;
       if (y + 24 + procRowH > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 6;
-      doc.font(FONT_BOLD).fontSize(11).fillColor("#3a1d4a");
-      doc.text("Dye Penetrant Testing Parameters", MARGIN, y);
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#3a1d4a");
+      doc.text(`{vdptBranch.sub("Dye Penetrant Testing Parameters") + " Dye Penetrant Testing Parameters"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 18;
 
@@ -1668,8 +1837,8 @@ export async function generatePipelineReportPdf(
       const consRowH = 18;
       if (y + 24 + consHeaderH + consRowH > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 4;
-      doc.font(FONT_BOLD).fontSize(11).fillColor("#3a1d4a");
-      doc.text("Consumable Details", MARGIN, y);
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#3a1d4a");
+      doc.text(`{vdptBranch.sub("Consumable Details") + " Consumable Details"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 18;
 
@@ -1740,8 +1909,8 @@ export async function generatePipelineReportPdf(
 
       if (y + 24 + vHeaderH + vRowH > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 4;
-      doc.font(FONT_BOLD).fontSize(11).fillColor("#3a1d4a");
-      doc.text("Dye Penetrant Testing Details", MARGIN, y);
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#3a1d4a");
+      doc.text(`{vdptBranch.sub("Dye Penetrant Testing Details") + " Dye Penetrant Testing Details"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 16;
 
@@ -1808,14 +1977,16 @@ export async function generatePipelineReportPdf(
     startBodyOnFreshPage(160);
 
     const vmptReport = report as any;
+    const vmptBranch = makeTocBranch("Magnetic Particle Testing");
+    currentTestBranch = vmptBranch;
 
     // ─── 1. MAGNETIC PARTICLE TESTING PARAMETERS ───
     {
       const procRowH = 18;
       if (y + 24 + procRowH > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 6;
-      doc.font(FONT_BOLD).fontSize(11).fillColor("#7c2d12");
-      doc.text("Magnetic Particle Testing Parameters", MARGIN, y);
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#7c2d12");
+      doc.text(`{vmptBranch.sub("Magnetic Particle Testing Parameters") + " Magnetic Particle Testing Parameters"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 18;
 
@@ -1879,8 +2050,8 @@ export async function generatePipelineReportPdf(
       const consRowH = 18;
       if (y + 24 + consHeaderH + consRowH > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 4;
-      doc.font(FONT_BOLD).fontSize(11).fillColor("#7c2d12");
-      doc.text("Consumable Details", MARGIN, y);
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#7c2d12");
+      doc.text(`{vmptBranch.sub("Consumable Details") + " Consumable Details"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 18;
 
@@ -1953,8 +2124,8 @@ export async function generatePipelineReportPdf(
 
       if (y + 24 + vHeaderH + vRowH > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 4;
-      doc.font(FONT_BOLD).fontSize(11).fillColor("#7c2d12");
-      doc.text("Magnetic Particle Testing Details", MARGIN, y);
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#7c2d12");
+      doc.text(`{vmptBranch.sub("Magnetic Particle Testing Details") + " Magnetic Particle Testing Details"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 16;
 
@@ -2018,14 +2189,16 @@ export async function generatePipelineReportPdf(
     startBodyOnFreshPage(160);
 
     const mptReport = report as any;
+    const pmptBranch = makeTocBranch("Magnetic Particle Testing");
+    currentTestBranch = pmptBranch;
 
     // ─── 5.1 MAGNETIC PARTICLE TESTING PARAMETERS ───
     {
       const procRowH = 18;
       if (y + 24 + procRowH > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 6;
-      doc.font(FONT_BOLD).fontSize(11).fillColor("#7c2d12");
-      doc.text("5.1 Magnetic Particle Testing Parameters", MARGIN, y);
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#7c2d12");
+      doc.text(`{pmptBranch.sub("Magnetic Particle Testing Parameters") + " Magnetic Particle Testing Parameters"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 18;
 
@@ -2087,8 +2260,8 @@ export async function generatePipelineReportPdf(
       const consRowH = 18;
       if (y + 24 + consRowH > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 4;
-      doc.font(FONT_BOLD).fontSize(11).fillColor("#7c2d12");
-      doc.text("Consumable Details", MARGIN, y);
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#7c2d12");
+      doc.text(`{pmptBranch.sub("Consumable Details") + " Consumable Details"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 18;
 
@@ -2151,8 +2324,8 @@ export async function generatePipelineReportPdf(
       // Section heading — ensure heading + table header + first row fit together
       if (y + 24 + headerH + rowH > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 4;
-      doc.font(FONT_BOLD).fontSize(11).fillColor("#7c2d12");
-      doc.text("MPT Inspection Results", MARGIN, y);
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#7c2d12");
+      doc.text(`{pmptBranch.sub("MPT Inspection Results") + " MPT Inspection Results"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 16;
 
@@ -2185,14 +2358,21 @@ export async function generatePipelineReportPdf(
     startBodyOnFreshPage(200);
 
     const wsReport = report as any;
+    const pwsBranch = makeTocBranch("Weld Scan");
+    currentTestBranch = pwsBranch;
     const usableW = pageW - 2 * MARGIN;
 
     // Helper: draw a multi-column data table from JSON rows
-    const drawWsMultiColTable = (heading: string, headers: string[], rowFields: string[], jsonStr: string, dateFields: string[] = []) => {
+    const drawWsMultiColTable = (heading: string, headers: string[], rowFields: string[], jsonStr: string, dateFields: string[] = [], tocBranch?: { sub: (t: string) => string }, colRatios?: number[]) => {
       const headerH = 28;
       const rowH = 22;
       const colCount = headers.length;
-      const colW = usableW / colCount;
+      const colW = colRatios
+        ? usableW / colRatios.reduce((a, b) => a + b, 0)
+        : usableW / colCount;
+      const colWidths = colRatios
+        ? colRatios.map((r) => (usableW / colRatios.reduce((a, b) => a + b, 0)) * r)
+        : headers.map(() => colW);
       // Only render if there are rows
       let dataRows: any[] = [];
       try { const parsed = JSON.parse(jsonStr || "[]"); if (Array.isArray(parsed)) dataRows = parsed; } catch {}
@@ -2200,10 +2380,11 @@ export async function generatePipelineReportPdf(
 
       if (y + 24 + headerH + rowH > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 6;
-      doc.font(FONT_BOLD).fontSize(10).fillColor("#000");
-      doc.text(heading, MARGIN, y);
+      const headingLabel = tocBranch ? `${tocBranch.sub(heading)} ${heading}` : heading;
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#000");
+      doc.text(headingLabel, MARGIN, y);
       doc.fillColor("#000");
-      y += 16;
+      y += 20;
 
       const drawHeader = (headerY: number) => {
         doc.rect(MARGIN, headerY, usableW, headerH).fill(TABLE_HEADER_BG);
@@ -2212,8 +2393,8 @@ export async function generatePipelineReportPdf(
         doc.font(FONT_BOLD).fontSize(6).fillColor(TABLE_HEADER_FG);
         for (let i = 0; i < headers.length; i++) {
           if (i > 0) doc.moveTo(x, headerY).lineTo(x, headerY + headerH).stroke(TABLE_INNER_BORDER);
-          doc.text(headers[i], x + 2, headerY + 8, { width: colW - 4, align: "center" });
-          x += colW;
+          doc.text(headers[i], x + 2, headerY + 8, { width: colWidths[i] - 4, align: "center" });
+          x += colWidths[i];
         }
         doc.fillColor("#000");
       };
@@ -2230,6 +2411,7 @@ export async function generatePipelineReportPdf(
         let x = MARGIN;
         for (let i = 0; i < headers.length; i++) {
           if (i > 0) doc.moveTo(x, y).lineTo(x, y + rowH).stroke(TABLE_INNER_BORDER);
+          const colW = colWidths[i];
           let val = "";
           if (i === 0 && heading.includes("Test Results")) {
             val = String(r + 1);
@@ -2257,17 +2439,22 @@ export async function generatePipelineReportPdf(
       y += 6;
     };
 
-    // Helper: draw a two-column scanning details table
+    // Helper: draw the Scanning Details table — two (label | value) pairs
+    // per row, matching the reference form:
+    //   row 1: Calibration Block (DAC Block) | Reference Level
+    //   row 2: Extent of Examination         | Flaw Sizing Technique
+    //   row 3: Surface Condition             | —
     const drawWsScanningDetails = () => {
       const rowH = 18;
       const labelW = usableW * 0.25;
       const valueW = (usableW - 2 * labelW) / 2;
       const scanPairs: Array<[string, string | null]> = [
-        ["Calibration Block", wsReport.wsScanningCalibrationBlock],
-        ["Extent of Examination", wsReport.wsScanningExtentOfExamination],
-        ["", null],
+        ["Calibration Block (DAC Block)", wsReport.wsScanningCalibrationBlock],
         ["Reference Level", wsReport.wsScanningReferenceLevel],
+        ["Extent of Examination", wsReport.wsScanningExtentOfExamination],
+        ["Flaw Sizing Technique", wsReport.wsScanningFlawSizingTechnique],
         ["Surface Condition", wsReport.wsScanningSurfaceCondition],
+        ["", null],
       ];
       // Only render if any value is non-empty
       const hasData = scanPairs.some(([, v]) => v && String(v).trim());
@@ -2275,9 +2462,10 @@ export async function generatePipelineReportPdf(
 
       if (y + 24 + rowH * 3 > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 4;
-      doc.font(FONT_BOLD).fontSize(10).fillColor("#000");
-      doc.text("Scanning Details", MARGIN, y);
-      y += 16;
+      const scanNum = pwsBranch.sub("Scanning Details");
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#000");
+      doc.text(`${scanNum} Scanning Details`, MARGIN, y);
+      y += 20;
 
       for (let i = 0; i < scanPairs.length; i += 2) {
         if (y + rowH > pageMaxY) { addNewPage(); y = MARGIN; }
@@ -2287,14 +2475,14 @@ export async function generatePipelineReportPdf(
         doc.font(FONT_BOLD).fontSize(7).fillColor("#000");
         doc.text(left[0], MARGIN + 3, y + 5, { width: labelW - 6 });
         doc.rect(MARGIN + labelW, y, valueW, rowH).fill("#ffffff");
-        doc.font(FONT_REGULAR).fontSize(7);
+        doc.font(FONT_REGULAR).fontSize(7).fillColor("#000");
         const lv = left[1] && String(left[1]).trim() ? String(left[1]).trim() : "";
         doc.text(lv, MARGIN + labelW + 3, y + 5, { width: valueW - 6 });
         doc.rect(MARGIN + labelW + valueW, y, labelW, rowH).fill("#ecfeff");
-        doc.font(FONT_BOLD).fontSize(7);
+        doc.font(FONT_BOLD).fontSize(7).fillColor("#000");
         doc.text(right[0], MARGIN + labelW + valueW + 3, y + 5, { width: labelW - 6 });
         doc.rect(MARGIN + 2 * labelW + valueW, y, valueW, rowH).fill("#ffffff");
-        doc.font(FONT_REGULAR).fontSize(7);
+        doc.font(FONT_REGULAR).fontSize(7).fillColor("#000");
         const rv = right[1] && String(right[1]).trim() ? String(right[1]).trim() : "";
         doc.text(rv, MARGIN + 2 * labelW + valueW + 3, y + 5, { width: valueW - 6 });
         doc.rect(MARGIN, y, usableW, rowH).stroke(TABLE_OUTER_BORDER);
@@ -2307,13 +2495,14 @@ export async function generatePipelineReportPdf(
       y += 4;
     };
 
-    // 1. Instrument Details
+    // 1. Instrument Details (column renamed per spec: Instrument Type)
     drawWsMultiColTable(
       "Instrument Details",
-      ["Equipment Type", "Machine Make", "Model", "M/c Sr. No.", "Calibration Due Date"],
+      ["Instrument Type", "Machine Make", "Model", "M/c Sr. No.", "Calibration Due Date"],
       ["equipmentType", "machineMake", "model", "mcSrNo", "calibrationDueDate"],
       wsReport.wsInstrumentRows ?? "[]",
       ["calibrationDueDate"],
+      pwsBranch,
     );
 
     // 2. Test Probe Details
@@ -2322,17 +2511,23 @@ export async function generatePipelineReportPdf(
       ["Probe Type", "Probe Angle", "Frequency", "Size", "Probe No.", "Range", "Ref dB", "Scan dB"],
       ["probeType", "probeAngle", "frequency", "size", "probeNo", "range", "referenceDb", "scanningDb"],
       wsReport.wsProbeRows ?? "[]",
+      [],
+      pwsBranch,
+      [1.4, 1, 1.1, 1.2, 0.9, 0.9, 0.8, 0.9],
     );
 
     // 3. Scanning Details
     drawWsScanningDetails();
 
-    // 4. Test Results
+    // 4. Test Results — headings carry the full forms and measurement units
     drawWsMultiColTable(
       "Test Results",
-      ["Sl. No", "Description", "Identification No.", "Weld Type", "Probe", "BP", "SD", "Depth", "Echo Height", "Length", "Observation", "Result"],
+      ["Sl. No", "Description", "Identification No.", "Weld Type", "Probe", "Beam Path (BP) (mm)", "Skip Distance (SD) (mm)", "Depth (mm)", "Echo Height (%)", "Length (mm)", "Observation", "Result"],
       ["description", "identificationNo", "weldType", "probe", "bp", "sd", "depth", "echoHeight", "length", "observation", "result"],
       wsReport.wsTestResultRows ?? "[]",
+      [],
+      pwsBranch,
+      [0.5, 1.35, 1.2, 0.9, 0.9, 1.1, 1.2, 0.9, 1.05, 0.95, 1.35, 0.9],
     );
   } else if (reportType === "VESSEL_WELD_SCAN") {
     // ─── VESSEL WELD SCAN REPORT BODY ───
@@ -2354,6 +2549,8 @@ export async function generatePipelineReportPdf(
     startBodyOnFreshPage(200);
 
     const vwsReport = report as any;
+    const vwsBranch = makeTocBranch("Weld Scan");
+    currentTestBranch = vwsBranch;
     const vwsUsableW = pageW - 2 * MARGIN;
     const vwsAccent = "#155e75"; // cyan-800 — matches the Vessel Weld Scan UI accent
 
@@ -2398,8 +2595,8 @@ export async function generatePipelineReportPdf(
     {
       if (y + 24 + vwsRowH > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 6;
-      doc.font(FONT_BOLD).fontSize(11).fillColor(vwsAccent);
-      doc.text("Weld Scan Testing Parameters", MARGIN, y);
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(vwsAccent);
+      doc.text(`{vwsBranch.sub("Weld Scan Testing Parameters") + " Weld Scan Testing Parameters"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 18;
 
@@ -2453,8 +2650,8 @@ export async function generatePipelineReportPdf(
 
       if (y + 24 + pHeaderH + pRowH > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 4;
-      doc.font(FONT_BOLD).fontSize(11).fillColor(vwsAccent);
-      doc.text("Probe Details", MARGIN, y);
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(vwsAccent);
+      doc.text(`{vwsBranch.sub("Probe Details") + " Probe Details"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 16;
 
@@ -2528,8 +2725,8 @@ export async function generatePipelineReportPdf(
 
       if (y + 24 + dHeaderH + dRowH > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 4;
-      doc.font(FONT_BOLD).fontSize(11).fillColor(vwsAccent);
-      doc.text("Weld Scan Testing Details", MARGIN, y);
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(vwsAccent);
+      doc.text(`{vwsBranch.sub("Weld Scan Testing Details") + " Weld Scan Testing Details"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 16;
 
@@ -2618,6 +2815,8 @@ export async function generatePipelineReportPdf(
     startBodyOnFreshPage(240);
 
     const utmReport = report as any;
+    const vutmBranch = makeTocBranch("UT Thickness Measurement");
+    currentTestBranch = vutmBranch;
     // The orientation (VESSEL_UTM only) decides the readings-table
     // structure: VERTICAL → direction rows, otherwise clock rows.
     const utmIsVertical = utmReport.vesselOrientation === "VERTICAL";
@@ -2682,8 +2881,8 @@ export async function generatePipelineReportPdf(
     {
       if (y + 24 + utmRowH > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 6;
-      doc.font(FONT_BOLD).fontSize(11).fillColor(utmAccent);
-      doc.text("UT Thickness Measurement Parameters", MARGIN, y);
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(utmAccent);
+      doc.text(`{vutmBranch.sub("UT Thickness Measurement Parameters") + " UT Thickness Measurement Parameters"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 18;
 
@@ -2732,8 +2931,8 @@ export async function generatePipelineReportPdf(
 
       if (y + 24 + pHeaderH + pRowH > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 4;
-      doc.font(FONT_BOLD).fontSize(11).fillColor(utmAccent);
-      doc.text("Probe Details — Longitudinal Wave (0°)", MARGIN, y);
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(utmAccent);
+      doc.text(`{vutmBranch.sub("Probe Details — Longitudinal Wave (0°)") + " Probe Details — Longitudinal Wave (0°)"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 16;
 
@@ -2801,8 +3000,8 @@ export async function generatePipelineReportPdf(
 
       if (y + 24 + 30 > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 4;
-      doc.font(FONT_BOLD).fontSize(11).fillColor(utmAccent);
-      doc.text("UT Thickness Measurement Readings", MARGIN, y);
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(utmAccent);
+      doc.text(`{vutmBranch.sub("UT Thickness Measurement Readings") + " UT Thickness Measurement Readings"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 16;
 
@@ -3071,6 +3270,8 @@ export async function generatePipelineReportPdf(
     startBodyOnFreshPage(160);
 
     const tdptReport = report as any;
+    const tdptBranch = makeTocBranch("Dye Penetrant Testing");
+    currentTestBranch = tdptBranch;
     const tdptAccent = "#86198f"; // fuchsia-800 — matches the Tank DPT UI accent
 
     // ─── 1. DYE PENETRANT TESTING PARAMETERS ───
@@ -3078,8 +3279,8 @@ export async function generatePipelineReportPdf(
       const procRowH = 18;
       if (y + 24 + procRowH > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 6;
-      doc.font(FONT_BOLD).fontSize(11).fillColor(tdptAccent);
-      doc.text("Dye Penetrant Testing Parameters", MARGIN, y);
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(tdptAccent);
+      doc.text(`{tdptBranch.sub("Dye Penetrant Testing Parameters") + " Dye Penetrant Testing Parameters"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 18;
 
@@ -3138,8 +3339,8 @@ export async function generatePipelineReportPdf(
       const consRowH = 18;
       if (y + 24 + consHeaderH + consRowH > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 4;
-      doc.font(FONT_BOLD).fontSize(11).fillColor(tdptAccent);
-      doc.text("Consumable Details", MARGIN, y);
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(tdptAccent);
+      doc.text(`{tdptBranch.sub("Consumable Details") + " Consumable Details"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 18;
 
@@ -3212,8 +3413,8 @@ export async function generatePipelineReportPdf(
 
       if (y + 24 + vHeaderH + vRowH > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 4;
-      doc.font(FONT_BOLD).fontSize(11).fillColor(tdptAccent);
-      doc.text("Dye Penetrant Testing Details", MARGIN, y);
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(tdptAccent);
+      doc.text(`{tdptBranch.sub("Dye Penetrant Testing Details") + " Dye Penetrant Testing Details"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 16;
 
@@ -3278,6 +3479,8 @@ export async function generatePipelineReportPdf(
     startBodyOnFreshPage(160);
 
     const tmptReport = report as any;
+    const tmptBranch = makeTocBranch("Magnetic Particle Testing");
+    currentTestBranch = tmptBranch;
     const tmptAccent = "#92400e"; // amber-800 — matches the Tank MPT UI accent
 
     // ─── 1. MAGNETIC PARTICLE TESTING PARAMETERS ───
@@ -3285,8 +3488,8 @@ export async function generatePipelineReportPdf(
       const procRowH = 18;
       if (y + 24 + procRowH > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 6;
-      doc.font(FONT_BOLD).fontSize(11).fillColor(tmptAccent);
-      doc.text("Magnetic Particle Testing Parameters", MARGIN, y);
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(tmptAccent);
+      doc.text(`{tmptBranch.sub("Magnetic Particle Testing Parameters") + " Magnetic Particle Testing Parameters"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 18;
 
@@ -3347,8 +3550,8 @@ export async function generatePipelineReportPdf(
       const consRowH = 18;
       if (y + 24 + consHeaderH + consRowH > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 4;
-      doc.font(FONT_BOLD).fontSize(11).fillColor(tmptAccent);
-      doc.text("Consumable Details", MARGIN, y);
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(tmptAccent);
+      doc.text(`{tmptBranch.sub("Consumable Details") + " Consumable Details"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 18;
 
@@ -3420,8 +3623,8 @@ export async function generatePipelineReportPdf(
 
       if (y + 24 + vHeaderH + vRowH > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 4;
-      doc.font(FONT_BOLD).fontSize(11).fillColor(tmptAccent);
-      doc.text("Magnetic Particle Testing Details", MARGIN, y);
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(tmptAccent);
+      doc.text(`{tmptBranch.sub("Magnetic Particle Testing Details") + " Magnetic Particle Testing Details"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 16;
 
@@ -3488,6 +3691,8 @@ export async function generatePipelineReportPdf(
     startBodyOnFreshPage(200);
 
     const twsReport = report as any;
+    const twsBranch = makeTocBranch("Weld Scan");
+    currentTestBranch = twsBranch;
     const twsUsableW = pageW - 2 * MARGIN;
     const twsAccent = "#0369a1"; // sky-700 — matches the Tank Weld Scan UI accent
 
@@ -3532,8 +3737,8 @@ export async function generatePipelineReportPdf(
     {
       if (y + 24 + twsRowH > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 6;
-      doc.font(FONT_BOLD).fontSize(11).fillColor(twsAccent);
-      doc.text("Weld Scan Testing Parameters", MARGIN, y);
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(twsAccent);
+      doc.text(`{twsBranch.sub("Weld Scan Testing Parameters") + " Weld Scan Testing Parameters"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 18;
 
@@ -3587,8 +3792,8 @@ export async function generatePipelineReportPdf(
 
       if (y + 24 + pHeaderH + pRowH > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 4;
-      doc.font(FONT_BOLD).fontSize(11).fillColor(twsAccent);
-      doc.text("Probe Details", MARGIN, y);
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(twsAccent);
+      doc.text(`{twsBranch.sub("Probe Details") + " Probe Details"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 16;
 
@@ -3662,8 +3867,8 @@ export async function generatePipelineReportPdf(
 
       if (y + 24 + dHeaderH + dRowH > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 4;
-      doc.font(FONT_BOLD).fontSize(11).fillColor(twsAccent);
-      doc.text("Weld Scan Testing Details", MARGIN, y);
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(twsAccent);
+      doc.text(`{twsBranch.sub("Weld Scan Testing Details") + " Weld Scan Testing Details"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 16;
 
@@ -3744,6 +3949,8 @@ export async function generatePipelineReportPdf(
     startBodyOnFreshPage(240);
 
     const tutmReport = report as any;
+    const tutmBranch = makeTocBranch("UT Thickness Measurement");
+    currentTestBranch = tutmBranch;
     const tutmUsableW = pageW - 2 * MARGIN;
     const tutmAccent = "#115e59"; // teal-800 — matches the Tank UT Thickness UI accent
 
@@ -3800,8 +4007,8 @@ export async function generatePipelineReportPdf(
     {
       if (y + 24 + tutmRowH > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 6;
-      doc.font(FONT_BOLD).fontSize(11).fillColor(tutmAccent);
-      doc.text("UT Thickness Measurement Parameters", MARGIN, y);
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(tutmAccent);
+      doc.text(`{tutmBranch.sub("UT Thickness Measurement Parameters") + " UT Thickness Measurement Parameters"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 18;
 
@@ -3850,8 +4057,8 @@ export async function generatePipelineReportPdf(
 
       if (y + 24 + pHeaderH + pRowH > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 4;
-      doc.font(FONT_BOLD).fontSize(11).fillColor(tutmAccent);
-      doc.text("Probe Details — Longitudinal Wave (0°)", MARGIN, y);
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(tutmAccent);
+      doc.text(`{tutmBranch.sub("Probe Details — Longitudinal Wave (0°)") + " Probe Details — Longitudinal Wave (0°)"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 16;
 
@@ -3914,8 +4121,8 @@ export async function generatePipelineReportPdf(
 
       if (y + 24 + 30 > pageMaxY) { addNewPage(); y = MARGIN; }
       y += 4;
-      doc.font(FONT_BOLD).fontSize(11).fillColor(tutmAccent);
-      doc.text("UT Thickness Measurement Readings", MARGIN, y);
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(tutmAccent);
+      doc.text(`{tutmBranch.sub("UT Thickness Measurement Readings") + " UT Thickness Measurement Readings"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 16;
 
@@ -4064,77 +4271,83 @@ export async function generatePipelineReportPdf(
   // ENTIRE photo (image + caption) to the next page — never split.
   // ═══════════════════════════════════════════════════════════════
   if (allPhotos.length > 0) {
-    // PHOTO GALLERY HEADING — ensure heading + first photo row fit together
-    // (a heading must never appear alone at the bottom of a page).
-    // First photo row needs: cellH (photo + caption) + small gap.
-    const photoW_forCalc = orientation === "landscape" ? 180 : 140;
-    const photoH_forCalc = orientation === "landscape" ? 120 : 95;
-    const captionH_forCalc = 16;
-    const cellH_forCalc = photoH_forCalc + captionH_forCalc;
-    const headingH_photos = 22; // heading line + small gap below
-    // Need: heading + first row of photos
-    if (y + headingH_photos + cellH_forCalc + 10 > pageMaxY) {
-      addNewPage();
-      y = MARGIN;
+    // ═══════════════════════════════════════════════════════════════
+    // PHOTO GALLERY — EXACTLY 6 photographs per page in a 2-column ×
+    // 3-row grid (per spec). Every photograph keeps its original aspect
+    // ratio inside its own bordered cell (drawPhotoCell uses fit, never
+    // stretch). Captions/filenames sit underneath each photograph.
+    // More than 6 photos → additional pages with the same layout.
+    // Fewer than 6 on the last page → only the available photographs are
+    // drawn (no empty placeholder boxes). No photo is ever dropped.
+    // ═══════════════════════════════════════════════════════════════
+    // Pre-load every photo ONCE (converting unsupported formats to PNG via
+    // sharp) so each gallery page renders real photographs, never placeholders.
+    const photoBufs: Array<Buffer | null> = [];
+    for (const ph of allPhotos) {
+      photoBufs.push(await loadEmbeddableImage(ph.filePath));
     }
-    y += 10;
-    doc.font(FONT_BOLD).fontSize(10).fillColor("#000");
-    // Report-type-specific gallery heading. The Vessel UT Thickness
-    // Measurement report names the section per the reference layout;
-    // every other report type keeps the existing heading.
-    doc.text(
+
+    const PHOTOS_PER_PAGE = 6;
+    const GRID_COLS = 2;
+    const GRID_ROWS = 3;
+    const gapX = 12;
+    const gapY = 12;
+    const captionH_photos = 16; // caption strip below each photo box
+    const headingH_photos = 20; // heading line + gap below
+
+    // Grid geometry: 3 rows must ALWAYS fit on a fresh page below the
+    // heading, so every gallery page uses the identical layout. The 8pt
+    // pre-heading gap is subtracted so row 3 (and its caption) can never
+    // cross the page boundary — a caption drawn with `width` would
+    // otherwise trigger pdfkit's LineWrapper page-break and orphan itself
+    // onto the next page.
+    const preHeadingGap = 8;
+    const gridAvailH = pageMaxY - MARGIN - headingH_photos - preHeadingGap;
+    const rowH_photos = Math.floor((gridAvailH - (GRID_ROWS - 1) * gapY) / GRID_ROWS);
+    const cellW_photos = Math.floor((pageW - 2 * MARGIN - (GRID_COLS - 1) * gapX) / GRID_COLS);
+    const photoBoxH = rowH_photos - captionH_photos;
+
+    // Gallery heading — registered in the TOC as a subsection of the
+    // report's test-type section.
+    const photoTitle =
       reportType === "VESSEL_UTM"
         ? "Photographs – During UT Thickness Measurement"
-        : "Inspection Photographs",
-      MARGIN, y,
-    );
-    y += 20;
+        : "Inspection Photographs";
 
-    // Fixed thumbnail size — consistent across all photos
-    const photoW = photoW_forCalc;
-    const photoH = photoH_forCalc;
-    const captionH = captionH_forCalc; // space reserved for caption below each photo
-    const cellH = cellH_forCalc; // total height per photo cell
-    const gap = 10;
-    const photosPerRow = Math.max(1, Math.floor((pageW - 2 * MARGIN + gap) / (photoW + gap)));
-
-    let currentCol = 0;
-    let currentRowY = y;
-
-    for (let i = 0; i < allPhotos.length; i++) {
-      const photo = allPhotos[i];
-      const px = MARGIN + currentCol * (photoW + gap);
-      const py = currentRowY;
-
-      // Check if this photo + caption fits on the current page.
-      // If not, move to a new page and reset column + row.
-      if (py + cellH > pageMaxY) {
-        addNewPage();
-        currentCol = 0;
-        currentRowY = MARGIN;
-        const newPx = MARGIN;
-        const newPy = currentRowY;
-        drawPhotoCell(doc, photo, newPx, newPy, photoW, photoH, FONT_REGULAR);
-        currentCol++;
-        if (currentCol >= photosPerRow) {
-          currentCol = 0;
-          currentRowY += cellH + gap;
+    for (let start = 0; start < allPhotos.length; start += PHOTOS_PER_PAGE) {
+      if (start === 0) {
+        // First gallery page: keep heading + full grid together.
+        if (y + headingH_photos + GRID_ROWS * rowH_photos + (GRID_ROWS - 1) * gapY > pageMaxY) {
+          addNewPage();
+          y = MARGIN;
         }
-        continue;
+        y += preHeadingGap;
+        if (currentTestBranch) {
+          doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#000");
+          doc.text(`${currentTestBranch.sub(photoTitle)} ${photoTitle}`, MARGIN, y);
+        } else {
+          doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#000");
+          doc.text(photoTitle, MARGIN, y);
+        }
+        y += headingH_photos;
+      } else {
+        // Continuation page: same 2×3 grid, nothing but photos.
+        addNewPage();
+        y = MARGIN;
       }
 
-      // Draw the photo cell (image + border + caption)
-      drawPhotoCell(doc, photo, px, py, photoW, photoH, FONT_REGULAR);
-
-      currentCol++;
-      if (currentCol >= photosPerRow) {
-        currentCol = 0;
-        currentRowY += cellH + gap;
+      const group = allPhotos.slice(start, start + PHOTOS_PER_PAGE);
+      for (let g = 0; g < group.length; g++) {
+        const col = g % GRID_COLS;
+        const row = Math.floor(g / GRID_COLS);
+        const px = MARGIN + col * (cellW_photos + gapX);
+        const py = y + row * (rowH_photos + gapY);
+        // drawPhotoCell fits the image inside (px, py, cellW, photoBox)
+        // preserving aspect ratio and draws the caption below the box.
+        drawPhotoCell(doc, group[g], px, py, cellW_photos, photoBoxH, FONT_REGULAR, photoBufs[start + g]);
       }
+      y += GRID_ROWS * rowH_photos + (GRID_ROWS - 1) * gapY + 8;
     }
-
-    // Update y to after the last row
-    y = currentRowY + (currentCol > 0 ? cellH + gap : 0);
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -4149,6 +4362,7 @@ export async function generatePipelineReportPdf(
   if (certificates.length > 0) {
     const equipCerts = certificates.filter((c) => c.category === "EQUIPMENT");
     const personnelCerts = certificates.filter((c) => c.category === "PERSONNEL");
+    const certBranchRef: { current: ReturnType<typeof makeTocBranch> | null } = { current: null };
 
     // Helper: render a certificate on the current page (assumes a new page
     // has already been created). Returns nothing — each cert is on its own page.
@@ -4217,10 +4431,14 @@ export async function generatePipelineReportPdf(
       // heading is never alone at the bottom of the measurement table page.
       addNewPage();
       // Draw "Certification" heading + sub-heading at the top of this page
-      doc.font(FONT_BOLD).fontSize(14).fillColor("#000");
-      doc.text("Certification", MARGIN, MARGIN, { width: usableW });
-      doc.font(FONT_BOLD).fontSize(11);
-      doc.text(`Instrument Calibration (${equipCerts.length})`, MARGIN, MARGIN + 20, { width: usableW });
+      if (certBranchRef.current === null) {
+        certBranchRef.current = makeTocBranch("Certification");
+      }
+      const certBranch = certBranchRef.current;
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_MAIN).fillColor("#000");
+      doc.text(`${certBranch.main()}. Certification`, MARGIN, MARGIN, { width: usableW });
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB);
+      doc.text(`${certBranch.sub("Instrument Calibration")} Instrument Calibration (${equipCerts.length})`, MARGIN, MARGIN + 26, { width: usableW });
 
       // First certificate on THIS page (below the headings)
       // Subsequent certificates on new pages
@@ -4289,8 +4507,11 @@ export async function generatePipelineReportPdf(
     if (orderedPersonnelCerts.length > 0) {
       // Always start on a new page
       addNewPage();
-      doc.font(FONT_BOLD).fontSize(11).fillColor("#000");
-      doc.text(`Inspector Certificates (${orderedPersonnelCerts.length})`, MARGIN, MARGIN, { width: usableW });
+      if (certBranchRef.current === null) {
+        certBranchRef.current = makeTocBranch("Certification");
+      }
+      doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#000");
+      doc.text(`${certBranchRef.current.sub("Inspector Certificates")} Inspector Certificates (${orderedPersonnelCerts.length})`, MARGIN, MARGIN, { width: usableW });
 
       // First certificate on THIS page (below the heading)
       for (let i = 0; i < orderedPersonnelCerts.length; i++) {
@@ -4381,6 +4602,7 @@ function drawPhotoCell(
   photoW: number,
   photoH: number,
   fontRegular: string,
+  preBuf?: Buffer | null,
 ) {
   // 1. Fill the cell with white first — handles transparent PNGs and gives
   //    a consistent background regardless of the image's own background.
@@ -4388,9 +4610,10 @@ function drawPhotoCell(
 
   // 2. Embed the image (fitted, centered, aspect ratio preserved).
   //    The image is drawn inside a 2pt inset so the border stays crisp.
-  if (photo.filePath && existsSync(photo.filePath)) {
+  if (photo.filePath && (preBuf !== undefined ? preBuf : existsSync(photo.filePath))) {
     try {
-      const imgBuf = readFileSync(photo.filePath);
+      const imgBuf = preBuf !== undefined ? preBuf : readFileSync(photo.filePath);
+      if (!imgBuf) throw new Error("unreadable");
       doc.image(imgBuf, x + 2, y + 2, {
         fit: [photoW - 4, photoH - 4],
         align: "center",
@@ -4418,7 +4641,7 @@ function drawPhotoCell(
   // 4. Draw caption below the photo (within the cell's allocated caption
   //    space). Truncate to fit the cell width so long captions don't bleed
   //    into neighbouring cells.
-  doc.font(fontRegular).fontSize(7).fillColor("#333");
+  doc.font(fontRegular).fontSize(FONT_SIZE_BODY).fillColor("#333");
   let caption = photo.caption || photo.fileName || "";
   const maxCaptionW = photoW;
   if (doc.widthOfString(caption) > maxCaptionW) {
@@ -4427,7 +4650,12 @@ function drawPhotoCell(
     );
     caption = caption.slice(0, Math.max(1, charsToKeep - 1)) + "…";
   }
-  doc.text(caption, x, y + photoH + 2, { width: photoW, align: "center" });
+  // Center manually and draw WITHOUT `width`/LineWrapper: a caption near the
+  // page bottom must never trigger pdfkit's automatic page-break (which
+  // would silently move the current page and misplace the following cells).
+  const capW = doc.widthOfString(caption);
+  const capX = capW >= maxCaptionW ? x : x + (maxCaptionW - capW) / 2;
+  doc.text(caption, capX, y + photoH + 2, { lineBreak: false });
   doc.fillColor("#000");
 }
 
@@ -4630,12 +4858,14 @@ function drawConditionAssessment(
   margin: number,
   maxRowY: number,
   addNewPage: () => void,
+  registerMain?: () => void,
 ): number {
   let y = startY;
 
   // Section heading
   if (y + 20 > maxRowY) { addNewPage(); y = margin; }
-  doc.font(FONT_BOLD).fontSize(11).fillColor("#000");
+  if (registerMain) registerMain();
+  doc.font(FONT_BOLD).fontSize(FONT_SIZE_MAIN).fillColor("#000");
   doc.text("Condition Assessment", margin, y, { width: pageW - 2 * margin, align: "left" });
   y += 22;
 

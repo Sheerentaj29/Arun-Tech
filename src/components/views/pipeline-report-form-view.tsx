@@ -9193,7 +9193,7 @@ export function PipelineReportFormView() {
             <table className="w-full text-xs">
               <thead className="bg-cyan-700 text-white">
                 <tr>
-                  <th className="border border-cyan-800 px-2 py-2 text-center">Equipment Type</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center">Instrument Type</th>
                   <th className="border border-cyan-800 px-2 py-2 text-center">Machine Make</th>
                   <th className="border border-cyan-800 px-2 py-2 text-center">Model</th>
                   <th className="border border-cyan-800 px-2 py-2 text-center">M/c Sr. No.</th>
@@ -9340,15 +9340,27 @@ export function PipelineReportFormView() {
 
       {/* 3. SCANNING DETAILS */}
       <Card>
-        <CardHeader><CardTitle className="text-base">Scanning Details</CardTitle></CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <CardTitle className="text-base">Scanning Details</CardTitle>
+          {/* Common Save button — persists ALL Scanning Details fields together
+              (PUT /api/pipeline-inspections/[id]); no per-field saves needed. */}
+          <Button size="sm" variant="outline" onClick={saveHeader} disabled={saving}>
+            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            Save
+          </Button>
+        </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <table className="w-full text-sm border-collapse">
               <tbody>
                 {([
-                  ["Calibration Block", "wsScanningCalibrationBlock", "text" as const, "Reference Level", "wsScanningReferenceLevel", "text" as const],
-                  ["Extent of Examination", "wsScanningExtentOfExamination", "text" as const, "Surface Condition", "wsScanningSurfaceCondition", "select" as const],
-                ]).map(([label1, field1, type1, label2, field2, type2], rowIdx) => (
+                  // Field arrangement per reference: row 1 Calibration Block |
+                  // Reference Level, row 2 Extent of Examination | Flaw Sizing
+                  // Technique, row 3 Surface Condition.
+                  ["Calibration Block (DAC Block)", "wsScanningCalibrationBlock", "text" as const, [] as string[], "Reference Level", "wsScanningReferenceLevel", "text" as const, [] as string[]],
+                  ["Extent of Examination", "wsScanningExtentOfExamination", "text" as const, [] as string[], "Flaw Sizing Technique", "wsScanningFlawSizingTechnique", "select" as const, ["6 dB Drop", "12 dB Drop", "18 dB Drop"] as string[]],
+                  ["Surface Condition", "wsScanningSurfaceCondition", "select" as const, ["Clean & Smooth Surface", "Rough Surface", "Painted Surface"] as string[], "", "", "text" as const, [] as string[]],
+                ]).map(([label1, field1, type1, opts1, label2, field2, type2, opts2], rowIdx) => (
                   <tr key={rowIdx} className="border-b border-zinc-200">
                     <td className="bg-cyan-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/5">{label1}</td>
                     <td className="px-2 py-1.5 border-r border-zinc-200 w-1/4">
@@ -9356,7 +9368,7 @@ export function PipelineReportFormView() {
                         <Select value={header[field1 as keyof ReportHeader] as string} onValueChange={(v) => updateHeader(field1 as keyof ReportHeader, v)}>
                           <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select" /></SelectTrigger>
                           <SelectContent>
-                            {["Clean & Smooth Surface", "Rough Surface", "Painted Surface"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                            {(opts1 as string[]).map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
                           </SelectContent>
                         </Select>
                       ) : label1 ? (
@@ -9370,7 +9382,7 @@ export function PipelineReportFormView() {
                         <Select value={header[field2 as keyof ReportHeader] as string} onValueChange={(v) => updateHeader(field2 as keyof ReportHeader, v)}>
                           <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select" /></SelectTrigger>
                           <SelectContent>
-                            {["Clean & Smooth Surface", "Rough Surface", "Painted Surface"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                            {(opts2 as string[]).map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
                           </SelectContent>
                         </Select>
                       ) : label2 ? (
@@ -9408,11 +9420,11 @@ export function PipelineReportFormView() {
                   <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 80 }}>Identification No.</th>
                   <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 70 }}>Weld Type</th>
                   <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 60 }}>Probe</th>
-                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 40 }}>BP</th>
-                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 40 }}>SD</th>
-                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 50 }}>Depth</th>
-                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 60 }}>Echo Height</th>
-                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 50 }}>Length</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 60 }}>Beam Path (BP) (mm)</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 70 }}>Skip Distance (SD) (mm)</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 60 }}>Depth (mm)</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 70 }}>Echo Height (%)</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 60 }}>Length (mm)</th>
                   <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 80 }}>Observation</th>
                   <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 60 }}>Result</th>
                   <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 50 }}>Actions</th>
