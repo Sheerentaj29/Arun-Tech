@@ -578,6 +578,29 @@ async function runGeneration(
       margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
     });
     drawFooter();
+
+    // ── COMPACT REPEATED HEADER (every page after page 1) ──
+    // Same 3-element layout as the front page, sized down so content still
+    // has room: [ArunTech logo (left)] [company + report title (center)]
+    // [client logo (right)]. Uniform size/position on all continuation
+    // pages — including certificate pages (Req: compact version so two
+    // certificates still fit on one page).
+    const cLogoH = 34;
+    const cLogoW = 92;
+    const cPad = 8;
+    const company = "ARUN TECH INDUSTRIAL SERVICES PVT LTD";
+    const cCenterX = MARGIN + cLogoW + cPad;
+    const cCenterW = usableW - 2 * (cLogoW + cPad);
+    doc.font(FONT_BOLD).fontSize(8).fillColor("#000");
+    doc.text(company, cCenterX, MARGIN + 3, { width: cCenterW, align: "center" });
+    doc.font(FONT_BOLD).fontSize(10).fillColor("#000");
+    doc.text(titleText, cCenterX, MARGIN + 15, { width: cCenterW, align: "center" });
+    doc.fillColor("#000");
+    drawLogoInBox(serviceLogoPath, MARGIN, MARGIN, cLogoW, cLogoH, "ARUNTECH\nLogo");
+    drawLogoInBox(clientLogoPath, pageW - MARGIN - cLogoW, MARGIN, cLogoW, cLogoH, "Client\nLogo");
+
+    contentTopY = MARGIN + cLogoH + 6;  // content starts below the header band
+    return contentTopY;
   };
 
   // ── TOC registration (fills `collected` during both passes) ──
@@ -626,39 +649,42 @@ async function runGeneration(
   // ═══════════════════════════════════════════════════════════════
   const usableW = pageW - 2 * MARGIN;
   let cursorY = MARGIN;
+  // Y where page content may start on the CURRENT page. Page 1 content
+  // flows from cursorY after the full header; every page created by
+  // addNewPage() draws the compact repeated header and moves this down.
+  let contentTopY = MARGIN;
 
   // Logo box dimensions — shared by both header styles below so the
-  // centered title block can stay clear of the two logo boxes.
+  // centered title block can stay clear of the two logo boxes. Portrait
+  // narrows the boxes so the 16pt company name fits between them
+  // (measured: Geist Bold 16pt company name ≈ 341pt; usableW ≈ 539pt →
+  // center column at logoW 92 + 5pt pad = 345pt ≥ 341pt).
   const logoH = 70;
-  const logoW = 130;
+  const logoW = orientation === "landscape" ? 130 : 92;
 
-  if (reportType === "PIPELINE_WELD_SCAN") {
-    // ── WELD SCAN HEADER: one horizontal row ──
-    //   [ArunTech logo (left)] [company name + report title (center)] [client logo (right)]
-    // The Report No / Rev / Date / Status metadata line is intentionally NOT
-    // drawn on the weld-scan PDF header — the fields remain in the database
-    // and in the internal report records (approval / revision workflow
-    // untouched). The centered text is confined to the gap between the two
-    // logo boxes so it can never underlap them; the shared LOGOS block below
-    // draws the two boxes on this same line (same cursorY, same heights),
-    // keeping all three elements vertically aligned in one row.
+  // ── PAGE-1 HEADER: one horizontal row, ALL report types ──
+  //   [ArunTech logo (left)] [company name + report title (center)] [client logo (right)]
+  // Company name 16 pt bold, report title 14 pt bold, both centre-aligned
+  // and vertically aligned with the two logo boxes drawn by the LOGOS block
+  // below on this same band. The centered text is confined to the gap
+  // between the two logo boxes so it can never underlap them.
+  // For PIPELINE_WELD_SCAN the Report No / Rev / Date / Status metadata line
+  // is intentionally NOT drawn anywhere in the header — the fields remain in
+  // the database and internal report records (approval / revision workflow
+  // untouched). Other report types keep their subtitle line below the
+  // header band.
+  {
     const companyName = "ARUN TECH INDUSTRIAL SERVICES PVT LTD";
-    const centerX = MARGIN + logoW + 14;
-    const centerW = usableW - 2 * (logoW + 14);
-    doc.font(FONT_BOLD).fontSize(10).fillColor("#000");
-    doc.text(companyName, centerX, cursorY + 13, { width: centerW, align: "center" });
-    doc.font(FONT_BOLD).fontSize(15).fillColor("#000");
-    doc.text(titleText, centerX, cursorY + 27, { width: centerW, align: "center" });
+    const hPad = orientation === "landscape" ? 14 : 5;
+    const centerX = MARGIN + logoW + hPad;
+    const centerW = usableW - 2 * (logoW + hPad);
+    doc.font(FONT_BOLD).fontSize(16).fillColor("#000");   // company name: 16 pt bold
+    doc.text(companyName, centerX, cursorY + 6, { width: centerW, align: "center" });
+    doc.font(FONT_BOLD).fontSize(14).fillColor("#000");   // report title: 14 pt bold
+    doc.text(titleText, centerX, cursorY + 30, { width: centerW, align: "center" });
     doc.fillColor("#000");
     // cursorY intentionally unchanged — the LOGOS block below draws the two
     // logo boxes on this same horizontal band.
-  } else {
-    // ── TITLE ── (all non-weld-scan reports: unchanged layout)
-    const titleFontSize = orientation === "landscape" ? 14 : 12;
-    doc.font(FONT_BOLD).fontSize(titleFontSize).fillColor("#000");
-    const titleHeight = doc.heightOfString(titleText, { width: usableW, align: "center" });
-    doc.text(titleText, MARGIN, cursorY, { width: usableW, align: "center" });
-    cursorY += titleHeight + 8;  // explicit 8pt gap below title
   }
 
   // ── SUBTITLE (Report No | Rev | Date Range | Status) ── (non-weld-scan only)
@@ -674,12 +700,6 @@ async function runGeneration(
     `Report No: ${report.reportNumber}    |    Rev: ${report.revisionNumber}    |    ` +
     `Date: ${dateRange}    |    ` +
     `Status: ${report.status}`;
-  if (reportType !== "PIPELINE_WELD_SCAN") {
-    doc.font(FONT_REGULAR).fontSize(subtitleFontSize).fillColor("#333");
-    const subtitleHeight = doc.heightOfString(subtitleText, { width: usableW, align: "center" });
-    doc.text(subtitleText, MARGIN, cursorY, { width: usableW, align: "center" });
-    cursorY += subtitleHeight + 10;  // explicit 10pt gap below subtitle
-  }
 
   // ── LOGOS (positioned strictly below subtitle) ──
   // Left: Aruntech service company logo — permanently fixed.
@@ -764,6 +784,16 @@ async function runGeneration(
 
   cursorY += logoH + 10;  // explicit 10pt gap below logos
 
+  // ── SUBTITLE (Report No | Rev | Date Range | Status) ──
+  // Non-weld-scan reports keep their metadata line directly below the
+  // header band; weld-scan reports omit it (fields stay in the DB).
+  if (reportType !== "PIPELINE_WELD_SCAN") {
+    doc.font(FONT_REGULAR).fontSize(subtitleFontSize).fillColor("#333");
+    const subtitleHeight = doc.heightOfString(subtitleText, { width: usableW, align: "center" });
+    doc.text(subtitleText, MARGIN, cursorY, { width: usableW, align: "center" });
+    cursorY += subtitleHeight + 10;  // explicit 10pt gap below subtitle
+  }
+
   // ── HEADER INFO GRID ──
   // Larger, easy-to-read client details for senior reviewers.
   // Client Name and Plant Name are rendered in a larger bold font.
@@ -787,7 +817,7 @@ async function runGeneration(
       ? [
           ["Equipment / Vessel Description", report.pipelineDescription],
           ["Equipment Identification No.", report.pipelineIdentificationNumber],
-          ["Isometric Drawing No.", report.isometricDrawingNumber],
+          ["Report No.", report.reportNumber],
           // (Tank wording handled in the tank branch below)
           ...(reportType === "VESSEL_UTM"
             ? [["Vessel Orientation",
@@ -799,12 +829,12 @@ async function runGeneration(
       ? [
           ["Equipment / Tank Description", report.pipelineDescription],
           ["Equipment Identification No.", report.pipelineIdentificationNumber],
-          ["Isometric Drawing No.", report.isometricDrawingNumber],
+          ["Report No.", report.reportNumber],
         ] as Array<[string, string | null | undefined]>
       : [
             ["Pipeline Description", report.pipelineDescription],
             ["Pipeline Identification No.", report.pipelineIdentificationNumber],
-            ["Isometric Drawing No.", report.isometricDrawingNumber],
+            ["Report No.", report.reportNumber],
           ] as Array<[string, string | null | undefined]>),
     ["Material of Construction (MOC)", report.materialOfConstruction],
     ["Applicable Standard",
@@ -1034,9 +1064,9 @@ async function runGeneration(
   // page number is already final); pass 2 fills in the collected section
   // entries with their exact page numbers.
   // ═══════════════════════════════════════════════════════════════
-  addNewPage();
+  const tocTopY = addNewPage();
   {
-    let ty = MARGIN;
+    let ty = tocTopY;
     doc.font(FONT_BOLD).fontSize(FONT_SIZE_MAIN).fillColor("#000");
     doc.text("TABLE OF CONTENTS", MARGIN, ty, { width: usableW });
     ty += 28;
@@ -1087,8 +1117,7 @@ async function runGeneration(
   // exists. (Before the TOC existed, `y = 0` acted as a "no page yet" sentinel
   // that let startBodyOnFreshPage create the body page lazily; with the TOC
   // page as the current page that sentinel drew body content ON TOP of the TOC.)
-  addNewPage();
-  let y: number = MARGIN;
+  let y: number = addNewPage();
 
   // ═══════════════════════════════════════════════════════════════
   // SECTION ORDER (per latest spec):
@@ -1156,8 +1185,7 @@ async function runGeneration(
     const totalNeeded = gapBefore + headingH + gapAfter + bodyH + 6;
     const needed = bodyH > pageMaxY - MARGIN ? minNeeded : totalNeeded;
     if (y + needed > pageMaxY) {
-      addNewPage();
-      y = MARGIN;
+      y = addNewPage();
     }
     // TOC registration — AFTER the page-break decision, so the recorded
     // page number is the page the heading actually lands on.
@@ -1280,7 +1308,7 @@ async function runGeneration(
         drawDrawingPlaceholder(
           doc, drawing,
           `[File missing on disk: ${drawing.fileName}]\n\nThe drawing file could not be found.`,
-          pageW, pageH,
+          pageW, pageH, contentTopY,
         );
         continue;
       }
@@ -1295,7 +1323,7 @@ async function runGeneration(
             `[Could not rasterize PDF: ${drawing.fileName}]\n\n` +
             `The PDF could not be converted to images. The file may be corrupted ` +
             `or the conversion tool is unavailable.`,
-            pageW, pageH,
+            pageW, pageH, contentTopY,
           );
           continue;
         }
@@ -1303,7 +1331,7 @@ async function runGeneration(
         for (let p = 0; p < pageBuffers.length; p++) {
           addNewPage();
           registerDrawingsToc();
-          drawDrawingImagePage(doc, drawing, pageBuffers[p], p + 1, pageBuffers.length, pageW, pageH);
+          drawDrawingImagePage(doc, drawing, pageBuffers[p], p + 1, pageBuffers.length, pageW, pageH, contentTopY);
         }
       } else if (
         ext === ".png" || ext === ".jpg" || ext === ".jpeg" ||
@@ -1316,13 +1344,13 @@ async function runGeneration(
           drawDrawingPlaceholder(
             doc, drawing,
             `[Could not read image: ${drawing.fileName}]`,
-            pageW, pageH,
+            pageW, pageH, contentTopY,
           );
           continue;
         }
         addNewPage();
         registerDrawingsToc();
-        drawDrawingImagePage(doc, drawing, imgBuf, 1, 1, pageW, pageH);
+        drawDrawingImagePage(doc, drawing, imgBuf, 1, 1, pageW, pageH, contentTopY);
       } else {
         // DWG / DXF / unsupported — show a placeholder
         addNewPage();
@@ -1332,7 +1360,7 @@ async function runGeneration(
           `[${ext.toUpperCase()} File: ${drawing.fileName}]\n\n` +
           `Preview is not available for native CAD formats. The original file ` +
           `is preserved on disk and can be downloaded separately.`,
-          pageW, pageH,
+          pageW, pageH, contentTopY,
         );
       }
     }
@@ -1363,14 +1391,11 @@ async function runGeneration(
   const startBodyOnFreshPage = (neededSpace: number) => {
     if (y === 0) {
       // No page exists after the first page — create one now.
-      addNewPage();
-      y = MARGIN;
+      y = addNewPage();
     } else if (includeDrawings && linkedDrawings.length > 0) {
-      addNewPage();
-      y = MARGIN;
+      y = addNewPage();
     } else if (y + neededSpace > pageMaxY) {
-      addNewPage();
-      y = MARGIN;
+      y = addNewPage();
     } else {
       y += 10;
     }
@@ -1477,8 +1502,8 @@ async function runGeneration(
         // Empty table — draw a single "no rows" row.
         if (y + rowH2 > pageMaxY) {
           addNewPage();
-          drawTableHeader(doc, allCols, colWidths, MARGIN, pageW);
-          y = MARGIN + tableHeaderH;
+          drawTableHeader(doc, allCols, colWidths, contentTopY, pageW);
+          y = contentTopY + tableHeaderH;
         }
         // Render a single merged cell with the empty message.
         doc.rect(MARGIN, y, pageW - 2 * MARGIN, rowH2).stroke(TABLE_OUTER_BORDER);
@@ -1500,7 +1525,7 @@ async function runGeneration(
             doc.text(`${tableNumberedHeading} (continued)`, MARGIN, MARGIN, { width: pageW - 2 * MARGIN, align: "left" });
             doc.fillColor("#000");
             drawTableHeader(doc, allCols, colWidths, MARGIN + 16, pageW);
-            y = MARGIN + 16 + tableHeaderH;
+            y = contentTopY + 16 + tableHeaderH;
           }
           drawMeasurementRow(doc, m, allCols, colWidths, y, report, customCols);
           y += rowH2;
@@ -1547,8 +1572,8 @@ async function runGeneration(
     for (const o of visualObservations) {
       if (y + rowH2 > pageMaxY) {
         addNewPage();
-        drawVisualTableHeader(doc, visCols, visColWidths, MARGIN, pageW);
-        y = MARGIN + tableHeaderH;
+        drawVisualTableHeader(doc, visCols, visColWidths, contentTopY, pageW);
+        y = contentTopY + tableHeaderH;
       }
       drawVisualObservationRow(doc, o, visCols, visColWidths, y);
       y += rowH2;
@@ -1594,7 +1619,7 @@ async function runGeneration(
     // PAGE-BREAK RULE: ensure heading + first row fit together.
     {
       const procRowH_local = 18;
-      if (y + 24 + procRowH_local > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + procRowH_local > pageMaxY) { y = addNewPage(); }
       y += 6;
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#3a1d4a");
       doc.text(`{pdptBranch.sub("Dye Penetrant Procedure") + " DYE PENETRANT PROCEDURE"}`, MARGIN, y);
@@ -1636,7 +1661,7 @@ async function runGeneration(
       const procUsableW = pageW - 2 * MARGIN;
 
       for (const [label, value] of procedureRows) {
-        if (y + procRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+        if (y + procRowH > pageMaxY) { y = addNewPage(); }
         // Fill label cell (left) — light purple-tinted background
         doc.rect(MARGIN, y, procLabelW, procRowH).fill("#f3e8fb");
         // Fill value cell (right) — white background
@@ -1670,7 +1695,7 @@ async function runGeneration(
     // PAGE-BREAK RULE: ensure heading + first row fit together.
     {
       const consRowH_local = 18;
-      if (y + 24 + consRowH_local > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + consRowH_local > pageMaxY) { y = addNewPage(); }
       y += 4;
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#3a1d4a");
       doc.text(`{pdptBranch.sub("Consumable Details") + " Consumable Details"}`, MARGIN, y);
@@ -1689,7 +1714,7 @@ async function runGeneration(
       const consUsableW = pageW - 2 * MARGIN;
 
       for (const [label, value] of consumableRows) {
-        if (y + consRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+        if (y + consRowH > pageMaxY) { y = addNewPage(); }
         // Fill label cell (left)
         doc.rect(MARGIN, y, consLabelW, consRowH).fill("#f3e8fb");
         // Fill value cell (right)
@@ -1747,7 +1772,7 @@ async function runGeneration(
 
     // Section heading — ensure heading + table header + first row fit together
     // (a heading must never appear alone at the bottom of a page).
-    if (y + 24 + dptHeaderH + dptRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+    if (y + 24 + dptHeaderH + dptRowH > pageMaxY) { y = addNewPage(); }
     y += 4;
     doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#3a1d4a");
     doc.text(`{pdptBranch.sub("DPT Inspection Results") + " DPT Inspection Results"}`, MARGIN, y);
@@ -1755,7 +1780,7 @@ async function runGeneration(
     y += 16;
 
     // Draw header
-    if (y + dptHeaderH + dptRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+    if (y + dptHeaderH + dptRowH > pageMaxY) { y = addNewPage(); }
     drawDptTableHeader(doc, dptColHeaders, dptColWidths, y, pageW);
     y += dptHeaderH;
 
@@ -1763,8 +1788,8 @@ async function runGeneration(
     for (const obs of dptObs) {
       if (y + dptRowH > pageMaxY) {
         addNewPage();
-        drawDptTableHeader(doc, dptColHeaders, dptColWidths, MARGIN, pageW);
-        y = MARGIN + dptHeaderH;
+        drawDptTableHeader(doc, dptColHeaders, dptColWidths, contentTopY, pageW);
+        y = contentTopY + dptHeaderH;
       }
       drawDptRow(doc, obs, dptColHeaders, dptColWidths, y, dptCustomCols);
       y += dptRowH;
@@ -1799,7 +1824,7 @@ async function runGeneration(
     // ─── 1. DYE PENETRANT TESTING PARAMETERS ───
     {
       const procRowH = 18;
-      if (y + 24 + procRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + procRowH > pageMaxY) { y = addNewPage(); }
       y += 6;
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#3a1d4a");
       doc.text(`{vdptBranch.sub("Dye Penetrant Testing Parameters") + " Dye Penetrant Testing Parameters"}`, MARGIN, y);
@@ -1833,7 +1858,7 @@ async function runGeneration(
       const procUsableW = pageW - 2 * MARGIN;
 
       for (const [label, value] of procedureRows) {
-        if (y + procRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+        if (y + procRowH > pageMaxY) { y = addNewPage(); }
         doc.rect(MARGIN, y, procLabelW, procRowH).fill("#f3e8fb");
         doc.rect(MARGIN + procLabelW, y, procValueW, procRowH).fill("#ffffff");
         doc.rect(MARGIN, y, procUsableW, procRowH).stroke(TABLE_OUTER_BORDER);
@@ -1862,7 +1887,7 @@ async function runGeneration(
       // the same amount so the first data row never overlaps the header.
       const consHeaderH = 36;
       const consRowH = 18;
-      if (y + 24 + consHeaderH + consRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + consHeaderH + consRowH > pageMaxY) { y = addNewPage(); }
       y += 4;
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#3a1d4a");
       doc.text(`{vdptBranch.sub("Consumable Details") + " Consumable Details"}`, MARGIN, y);
@@ -1887,8 +1912,8 @@ async function runGeneration(
       for (const row of consumableRows) {
         if (y + consRowH > pageMaxY) {
           addNewPage();
-          drawDptTableHeader(doc, consHeaders, consColWidths, MARGIN, pageW);
-          y = MARGIN + consHeaderH;
+          drawDptTableHeader(doc, consHeaders, consColWidths, contentTopY, pageW);
+          y = contentTopY + consHeaderH;
         }
         // Draw one bordered row of cells
         doc.rect(MARGIN, y, consUsable, consRowH).stroke(TABLE_OUTER_BORDER);
@@ -1934,22 +1959,22 @@ async function runGeneration(
       const vColWidths = [vSlW, vPartW, vWeldW, vSizeW, vObsW];
       const vHeaders = ["Sl.\nNo", "Part Details", "Type of\nWeld", "Size of Indication\nApprox. (mm)", "Observation & Result"];
 
-      if (y + 24 + vHeaderH + vRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + vHeaderH + vRowH > pageMaxY) { y = addNewPage(); }
       y += 4;
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#3a1d4a");
       doc.text(`{vdptBranch.sub("Dye Penetrant Testing Details") + " Dye Penetrant Testing Details"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 16;
 
-      if (y + vHeaderH + vRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + vHeaderH + vRowH > pageMaxY) { y = addNewPage(); }
       drawDptTableHeader(doc, vHeaders, vColWidths, y, pageW);
       y += vHeaderH;
 
       for (const obs of vdptObs) {
         if (y + vRowH > pageMaxY) {
           addNewPage();
-          drawDptTableHeader(doc, vHeaders, vColWidths, MARGIN, pageW);
-          y = MARGIN + vHeaderH;
+          drawDptTableHeader(doc, vHeaders, vColWidths, contentTopY, pageW);
+          y = contentTopY + vHeaderH;
         }
         // Bordered row with 5 cells
         doc.rect(MARGIN, y, vUsable, vRowH).stroke(TABLE_OUTER_BORDER);
@@ -2010,7 +2035,7 @@ async function runGeneration(
     // ─── 1. MAGNETIC PARTICLE TESTING PARAMETERS ───
     {
       const procRowH = 18;
-      if (y + 24 + procRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + procRowH > pageMaxY) { y = addNewPage(); }
       y += 6;
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#7c2d12");
       doc.text(`{vmptBranch.sub("Magnetic Particle Testing Parameters") + " Magnetic Particle Testing Parameters"}`, MARGIN, y);
@@ -2046,7 +2071,7 @@ async function runGeneration(
       const procUsableW = pageW - 2 * MARGIN;
 
       for (const [label, value] of procedureRows) {
-        if (y + procRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+        if (y + procRowH > pageMaxY) { y = addNewPage(); }
         doc.rect(MARGIN, y, procLabelW, procRowH).fill("#fff7ed");
         doc.rect(MARGIN + procLabelW, y, procValueW, procRowH).fill("#ffffff");
         doc.rect(MARGIN, y, procUsableW, procRowH).stroke(TABLE_OUTER_BORDER);
@@ -2075,7 +2100,7 @@ async function runGeneration(
       // the same amount so the first data row never overlaps the header.
       const consHeaderH = 36;
       const consRowH = 18;
-      if (y + 24 + consHeaderH + consRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + consHeaderH + consRowH > pageMaxY) { y = addNewPage(); }
       y += 4;
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#7c2d12");
       doc.text(`{vmptBranch.sub("Consumable Details") + " Consumable Details"}`, MARGIN, y);
@@ -2099,8 +2124,8 @@ async function runGeneration(
       for (const row of consumableRows) {
         if (y + consRowH > pageMaxY) {
           addNewPage();
-          drawDptTableHeader(doc, consHeaders, consColWidths, MARGIN, pageW);
-          y = MARGIN + consHeaderH;
+          drawDptTableHeader(doc, consHeaders, consColWidths, contentTopY, pageW);
+          y = contentTopY + consHeaderH;
         }
         // Draw one bordered row of cells
         doc.rect(MARGIN, y, consUsable, consRowH).stroke(TABLE_OUTER_BORDER);
@@ -2149,14 +2174,14 @@ async function runGeneration(
       const vColWidths = [vSlW, vPartW, vIdW, vDimW, vSizeW, vObsW];
       const vHeaders = ["Sl.\nNo", "Part Details", "ID", "Weld\nDimension", "Size of Indication\nApprox. (mm)", "Observation & Result"];
 
-      if (y + 24 + vHeaderH + vRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + vHeaderH + vRowH > pageMaxY) { y = addNewPage(); }
       y += 4;
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#7c2d12");
       doc.text(`{vmptBranch.sub("Magnetic Particle Testing Details") + " Magnetic Particle Testing Details"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 16;
 
-      if (y + vHeaderH + vRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + vHeaderH + vRowH > pageMaxY) { y = addNewPage(); }
       drawDptTableHeader(doc, vHeaders, vColWidths, y, pageW);
       y += vHeaderH;
 
@@ -2164,8 +2189,8 @@ async function runGeneration(
         const obs = vmptObs[ri];
         if (y + vRowH > pageMaxY) {
           addNewPage();
-          drawDptTableHeader(doc, vHeaders, vColWidths, MARGIN, pageW);
-          y = MARGIN + vHeaderH;
+          drawDptTableHeader(doc, vHeaders, vColWidths, contentTopY, pageW);
+          y = contentTopY + vHeaderH;
         }
         // Bordered row with 6 cells
         doc.rect(MARGIN, y, vUsable, vRowH).stroke(TABLE_OUTER_BORDER);
@@ -2222,7 +2247,7 @@ async function runGeneration(
     // ─── 5.1 MAGNETIC PARTICLE TESTING PARAMETERS ───
     {
       const procRowH = 18;
-      if (y + 24 + procRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + procRowH > pageMaxY) { y = addNewPage(); }
       y += 6;
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#7c2d12");
       doc.text(`{pmptBranch.sub("Magnetic Particle Testing Parameters") + " Magnetic Particle Testing Parameters"}`, MARGIN, y);
@@ -2261,7 +2286,7 @@ async function runGeneration(
       const usableW = pageW - 2 * MARGIN;
 
       for (const [label, value] of mptParams) {
-        if (y + procRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+        if (y + procRowH > pageMaxY) { y = addNewPage(); }
         doc.rect(MARGIN, y, labelW, procRowH).fill("#fff7ed");
         doc.rect(MARGIN + labelW, y, valueW, procRowH).fill("#ffffff");
         doc.rect(MARGIN, y, usableW, procRowH).stroke(TABLE_OUTER_BORDER);
@@ -2285,7 +2310,7 @@ async function runGeneration(
     // ─── CONSUMABLE DETAILS ───
     {
       const consRowH = 18;
-      if (y + 24 + consRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + consRowH > pageMaxY) { y = addNewPage(); }
       y += 4;
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#7c2d12");
       doc.text(`{pmptBranch.sub("Consumable Details") + " Consumable Details"}`, MARGIN, y);
@@ -2302,7 +2327,7 @@ async function runGeneration(
       const usableW = pageW - 2 * MARGIN;
 
       for (const [label, value] of consumableRows) {
-        if (y + consRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+        if (y + consRowH > pageMaxY) { y = addNewPage(); }
         doc.rect(MARGIN, y, labelW, consRowH).fill("#fff7ed");
         doc.rect(MARGIN + labelW, y, valueW, consRowH).fill("#ffffff");
         doc.rect(MARGIN, y, usableW, consRowH).stroke(TABLE_OUTER_BORDER);
@@ -2349,22 +2374,22 @@ async function runGeneration(
       const colHeaders = ["Sl.\nNo", "Description", "Weld\nType", "Indication\nSize\n(mm)", "Result", ...mptCustomCols.map(c => c.name + (c.unit ? `\n(${c.unit})` : "")), "Remarks"];
 
       // Section heading — ensure heading + table header + first row fit together
-      if (y + 24 + headerH + rowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + headerH + rowH > pageMaxY) { y = addNewPage(); }
       y += 4;
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#7c2d12");
       doc.text(`{pmptBranch.sub("MPT Inspection Results") + " MPT Inspection Results"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 16;
 
-      if (y + headerH + rowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + headerH + rowH > pageMaxY) { y = addNewPage(); }
       drawDptTableHeader(doc, colHeaders, colWidths, y, pageW);
       y += headerH;
 
       for (const obs of mptObs) {
         if (y + rowH > pageMaxY) {
           addNewPage();
-          drawDptTableHeader(doc, colHeaders, colWidths, MARGIN, pageW);
-          y = MARGIN + headerH;
+          drawDptTableHeader(doc, colHeaders, colWidths, contentTopY, pageW);
+          y = contentTopY + headerH;
         }
         drawDptRow(doc, obs, colHeaders, colWidths, y, mptCustomCols);
         y += rowH;
@@ -2391,8 +2416,7 @@ async function runGeneration(
 
     // Helper: draw a multi-column data table from JSON rows
     const drawWsMultiColTable = (heading: string, headers: string[], rowFields: string[], jsonStr: string, dateFields: string[] = [], tocBranch?: { sub: (t: string) => string }, colRatios?: number[]) => {
-      const headerH = 28;
-      const rowH = 22;
+      const rowH = 24;
       const colCount = headers.length;
       const colW = colRatios
         ? usableW / colRatios.reduce((a, b) => a + b, 0)
@@ -2400,12 +2424,22 @@ async function runGeneration(
       const colWidths = colRatios
         ? colRatios.map((r) => (usableW / colRatios.reduce((a, b) => a + b, 0)) * r)
         : headers.map(() => colW);
+      // Header height adapts to the TALLEST wrapped heading so multi-line
+      // headings (e.g. "Skip Distance (SD) (mm)") never overlap the border
+      // or the first data row. Headings wrap naturally within their column.
+      doc.font(FONT_BOLD).fontSize(6);
+      let maxHeadH = 0;
+      for (let i = 0; i < headers.length; i++) {
+        const hh = doc.heightOfString(headers[i], { width: colWidths[i] - 6 });
+        if (hh > maxHeadH) maxHeadH = hh;
+      }
+      const headerH = Math.max(30, Math.ceil(maxHeadH) + 12);
       // Only render if there are rows
       let dataRows: any[] = [];
       try { const parsed = JSON.parse(jsonStr || "[]"); if (Array.isArray(parsed)) dataRows = parsed; } catch {}
       if (dataRows.length === 0) return; // Skip empty tables
 
-      if (y + 24 + headerH + rowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + headerH + rowH > pageMaxY) { y = addNewPage(); }
       y += 6;
       const headingLabel = tocBranch ? `${tocBranch.sub(heading)} ${heading}` : heading;
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#000");
@@ -2420,7 +2454,9 @@ async function runGeneration(
         doc.font(FONT_BOLD).fontSize(6).fillColor(TABLE_HEADER_FG);
         for (let i = 0; i < headers.length; i++) {
           if (i > 0) doc.moveTo(x, headerY).lineTo(x, headerY + headerH).stroke(TABLE_INNER_BORDER);
-          doc.text(headers[i], x + 2, headerY + 8, { width: colWidths[i] - 4, align: "center" });
+          // Wrap within the column and center the text block vertically
+          const th = doc.heightOfString(headers[i], { width: colWidths[i] - 6 });
+          doc.text(headers[i], x + 3, headerY + Math.max(3, (headerH - th) / 2), { width: colWidths[i] - 6, align: "center" });
           x += colWidths[i];
         }
         doc.fillColor("#000");
@@ -2430,8 +2466,7 @@ async function runGeneration(
 
       for (let r = 0; r < dataRows.length; r++) {
         if (y + rowH > pageMaxY) {
-          addNewPage();
-          y = MARGIN;
+          y = addNewPage();
           drawHeader(y);
           y += headerH;
         }
@@ -2457,7 +2492,7 @@ async function runGeneration(
             const c = Math.floor((colW - 4) / Math.max(1, doc.widthOfString(disp)) * disp.length);
             disp = disp.slice(0, Math.max(1, c - 1)) + "…";
           }
-          doc.text(disp, x + 2, y + 7, { width: colW - 4, align: "center" });
+          doc.text(disp, x + 2, y + 8, { width: colW - 4, align: "center" });
           x += colW;
         }
         doc.rect(MARGIN, y, usableW, rowH).stroke(TABLE_OUTER_BORDER);
@@ -2487,7 +2522,7 @@ async function runGeneration(
       const hasData = scanPairs.some(([, v]) => v && String(v).trim());
       if (!hasData) return;
 
-      if (y + 24 + rowH * 3 > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + rowH * 3 > pageMaxY) { y = addNewPage(); }
       y += 4;
       const scanNum = pwsBranch.sub("Scanning Details");
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#000");
@@ -2495,7 +2530,7 @@ async function runGeneration(
       y += 20;
 
       for (let i = 0; i < scanPairs.length; i += 2) {
-        if (y + rowH > pageMaxY) { addNewPage(); y = MARGIN; }
+        if (y + rowH > pageMaxY) { y = addNewPage(); }
         const left = scanPairs[i];
         const right = scanPairs[i + 1] ?? ["", null];
         doc.rect(MARGIN, y, labelW, rowH).fill("#ecfeff");
@@ -2587,7 +2622,7 @@ async function runGeneration(
     const vwsLabelW = vwsUsableW * 0.38;
     const vwsValueW = vwsUsableW - vwsLabelW;
     const drawVwsGroupHeader = (title: string) => {
-      if (y + vwsRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + vwsRowH > pageMaxY) { y = addNewPage(); }
       doc.rect(MARGIN, y, vwsUsableW, vwsRowH).fill("#ecfeff");
       doc.rect(MARGIN, y, vwsUsableW, vwsRowH).stroke(TABLE_OUTER_BORDER);
       doc.font(FONT_BOLD).fontSize(8.5).fillColor(vwsAccent);
@@ -2596,7 +2631,7 @@ async function runGeneration(
       y += vwsRowH;
     };
     const drawVwsParamRow = (label: string, value: string | null | undefined, isDate = false) => {
-      if (y + vwsRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + vwsRowH > pageMaxY) { y = addNewPage(); }
       doc.rect(MARGIN, y, vwsLabelW, vwsRowH).fill("#f8fafc");
       doc.rect(MARGIN + vwsLabelW, y, vwsValueW, vwsRowH).fill("#ffffff");
       doc.rect(MARGIN, y, vwsUsableW, vwsRowH).stroke(TABLE_OUTER_BORDER);
@@ -2620,7 +2655,7 @@ async function runGeneration(
 
     // ─── 1. WELD SCAN TESTING PARAMETERS ───
     {
-      if (y + 24 + vwsRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + vwsRowH > pageMaxY) { y = addNewPage(); }
       y += 6;
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(vwsAccent);
       doc.text(`{vwsBranch.sub("Weld Scan Testing Parameters") + " Weld Scan Testing Parameters"}`, MARGIN, y);
@@ -2675,7 +2710,7 @@ async function runGeneration(
         : [130, 65, 95, 95, Math.max(90, pUsable - 130 - 65 - 95 - 95)];
       const pHeaders = ["Probe", "Probe Angle", "Frequency", "Probe Size", "Serial Number"];
 
-      if (y + 24 + pHeaderH + pRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + pHeaderH + pRowH > pageMaxY) { y = addNewPage(); }
       y += 4;
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(vwsAccent);
       doc.text(`{vwsBranch.sub("Probe Details") + " Probe Details"}`, MARGIN, y);
@@ -2701,7 +2736,7 @@ async function runGeneration(
         if (y + pRowH > pageMaxY) {
           addNewPage();
           drawProbeHeader(MARGIN);
-          y = MARGIN + pHeaderH;
+          y = contentTopY + pHeaderH;
         }
         doc.rect(MARGIN, y, pUsable, pRowH).stroke(TABLE_OUTER_BORDER);
         const cells = [
@@ -2750,7 +2785,7 @@ async function runGeneration(
       const dColWidths = [dSlW, dCompW, dWeldW, dDimW, dAngleW, dFreqW, dObsW];
       const dHeaders = ["Sl.\nNo", "Component", "Plate / Weld ID", "Weld Dimension", "Probe\nAngle", "Probe Frequency", "Observation & Result"];
 
-      if (y + 24 + dHeaderH + dRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + dHeaderH + dRowH > pageMaxY) { y = addNewPage(); }
       y += 4;
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(vwsAccent);
       doc.text(`{vwsBranch.sub("Weld Scan Testing Details") + " Weld Scan Testing Details"}`, MARGIN, y);
@@ -2779,7 +2814,7 @@ async function runGeneration(
           // readable, then continue with the current row.
           addNewPage();
           drawDetailsHeader(MARGIN);
-          y = MARGIN + dHeaderH;
+          y = contentTopY + dHeaderH;
         }
         doc.rect(MARGIN, y, dUsable, dRowH).stroke(TABLE_OUTER_BORDER);
         const cells: string[] = [
@@ -2854,7 +2889,7 @@ async function runGeneration(
     const utmLabelW = utmUsableW * 0.38;
     const utmValueW = utmUsableW - utmLabelW;
     const drawUtmGroupHeader = (title: string) => {
-      if (y + utmRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + utmRowH > pageMaxY) { y = addNewPage(); }
       doc.rect(MARGIN, y, utmUsableW, utmRowH).fill("#ecfdf5");
       doc.rect(MARGIN, y, utmUsableW, utmRowH).stroke(TABLE_OUTER_BORDER);
       doc.font(FONT_BOLD).fontSize(8.5).fillColor(utmAccent);
@@ -2863,7 +2898,7 @@ async function runGeneration(
       y += utmRowH;
     };
     const drawUtmParamRow = (label: string, value: string | null | undefined, isDate = false) => {
-      if (y + utmRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + utmRowH > pageMaxY) { y = addNewPage(); }
       doc.rect(MARGIN, y, utmLabelW, utmRowH).fill("#f8fafc");
       doc.rect(MARGIN + utmLabelW, y, utmValueW, utmRowH).fill("#ffffff");
       doc.rect(MARGIN, y, utmUsableW, utmRowH).stroke(TABLE_OUTER_BORDER);
@@ -2896,7 +2931,7 @@ async function runGeneration(
         `Orientation: ${utmIsVertical ? "Vertical" : "Horizontal"}`,
       ];
       for (const line of lines) {
-        if (y + 14 > pageMaxY) { addNewPage(); y = MARGIN; }
+        if (y + 14 > pageMaxY) { y = addNewPage(); }
         doc.font(FONT_BOLD).fontSize(9).fillColor(utmAccent);
         doc.text(line, MARGIN, y);
         doc.fillColor("#000");
@@ -2906,7 +2941,7 @@ async function runGeneration(
 
     // ─── 2. UT THICKNESS MEASUREMENT PARAMETERS ───
     {
-      if (y + 24 + utmRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + utmRowH > pageMaxY) { y = addNewPage(); }
       y += 6;
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(utmAccent);
       doc.text(`{vutmBranch.sub("UT Thickness Measurement Parameters") + " UT Thickness Measurement Parameters"}`, MARGIN, y);
@@ -2956,7 +2991,7 @@ async function runGeneration(
         : [120, 55, 90, 85, Math.max(85, pUsable - 120 - 55 - 90 - 85)];
       const pHeaders = ["Probe", "Probe Angle", "Frequency", "Size", "S.No."];
 
-      if (y + 24 + pHeaderH + pRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + pHeaderH + pRowH > pageMaxY) { y = addNewPage(); }
       y += 4;
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(utmAccent);
       doc.text(`{vutmBranch.sub("Probe Details — Longitudinal Wave (0°)") + " Probe Details — Longitudinal Wave (0°)"}`, MARGIN, y);
@@ -2982,7 +3017,7 @@ async function runGeneration(
         if (y + pRowH > pageMaxY) {
           addNewPage();
           drawUtmProbeHeader(MARGIN);
-          y = MARGIN + pHeaderH;
+          y = contentTopY + pHeaderH;
         }
         doc.rect(MARGIN, y, pUsable, pRowH).stroke(TABLE_OUTER_BORDER);
         const cells = [
@@ -3025,7 +3060,7 @@ async function runGeneration(
         (utmIsVertical ? "VERTICAL" : "HORIZONTAL") as VesselOrientation,
       );
 
-      if (y + 24 + 30 > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + 30 > pageMaxY) { y = addNewPage(); }
       y += 4;
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(utmAccent);
       doc.text(`{vutmBranch.sub("UT Thickness Measurement Readings") + " UT Thickness Measurement Readings"}`, MARGIN, y);
@@ -3092,7 +3127,7 @@ async function runGeneration(
           doc.fillColor("#000");
         };
 
-        if (y + 24 + vHeaderH + vMinRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+        if (y + 24 + vHeaderH + vMinRowH > pageMaxY) { y = addNewPage(); }
         y += 6;
         doc.font(FONT_BOLD).fontSize(9.5).fillColor(utmAccent);
         doc.text("Component Measurements (Directions)", MARGIN, y);
@@ -3111,7 +3146,7 @@ async function runGeneration(
           if (y + rowH > pageMaxY) {
             addNewPage();
             drawVtmRowsHeader(MARGIN);
-            y = MARGIN + vHeaderH;
+            y = contentTopY + vHeaderH;
           }
           doc.rect(MARGIN, y, utmUsableW, rowH).stroke(TABLE_OUTER_BORDER);
           const infoCells: Array<[string, number, "left" | "center", boolean]> = [
@@ -3204,7 +3239,7 @@ async function runGeneration(
           doc.fillColor("#000");
         };
 
-        if (y + 24 + uHeaderH + uMinRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+        if (y + 24 + uHeaderH + uMinRowH > pageMaxY) { y = addNewPage(); }
         y += 6;
         doc.font(FONT_BOLD).fontSize(9.5).fillColor(utmAccent);
         doc.text("Component Measurements (Clock Positions)", MARGIN, y);
@@ -3228,7 +3263,7 @@ async function runGeneration(
           if (y + rowH > pageMaxY) {
             addNewPage();
             drawUtmRowsHeader(MARGIN);
-            y = MARGIN + uHeaderH;
+            y = contentTopY + uHeaderH;
           }
           doc.rect(MARGIN, y, utmUsableW, rowH).stroke(TABLE_OUTER_BORDER);
           const infoCells: Array<[string, number, "left" | "center", boolean]> = [
@@ -3304,7 +3339,7 @@ async function runGeneration(
     // ─── 1. DYE PENETRANT TESTING PARAMETERS ───
     {
       const procRowH = 18;
-      if (y + 24 + procRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + procRowH > pageMaxY) { y = addNewPage(); }
       y += 6;
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(tdptAccent);
       doc.text(`{tdptBranch.sub("Dye Penetrant Testing Parameters") + " Dye Penetrant Testing Parameters"}`, MARGIN, y);
@@ -3338,7 +3373,7 @@ async function runGeneration(
       const procUsableW = pageW - 2 * MARGIN;
 
       for (const [label, value] of procedureRows) {
-        if (y + procRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+        if (y + procRowH > pageMaxY) { y = addNewPage(); }
         doc.rect(MARGIN, y, procLabelW, procRowH).fill("#fdf4ff");
         doc.rect(MARGIN + procLabelW, y, procValueW, procRowH).fill("#ffffff");
         doc.rect(MARGIN, y, procUsableW, procRowH).stroke(TABLE_OUTER_BORDER);
@@ -3364,7 +3399,7 @@ async function runGeneration(
     {
       const consHeaderH = 36;
       const consRowH = 18;
-      if (y + 24 + consHeaderH + consRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + consHeaderH + consRowH > pageMaxY) { y = addNewPage(); }
       y += 4;
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(tdptAccent);
       doc.text(`{tdptBranch.sub("Consumable Details") + " Consumable Details"}`, MARGIN, y);
@@ -3389,8 +3424,8 @@ async function runGeneration(
       for (const row of consumableRows) {
         if (y + consRowH > pageMaxY) {
           addNewPage();
-          drawDptTableHeader(doc, consHeaders, consColWidths, MARGIN, pageW);
-          y = MARGIN + consHeaderH;
+          drawDptTableHeader(doc, consHeaders, consColWidths, contentTopY, pageW);
+          y = contentTopY + consHeaderH;
         }
         doc.rect(MARGIN, y, consUsable, consRowH).stroke(TABLE_OUTER_BORDER);
         let cx = MARGIN;
@@ -3438,14 +3473,14 @@ async function runGeneration(
       const vColWidths = [vSlW, vPartW, vIdW, vDimW, vSizeW, vObsW];
       const vHeaders = ["Sl.\nNo", "Part Details", "ID", "Weld\nDimension", "Size of Indication\nApprox. (mm)", "Observation & Result"];
 
-      if (y + 24 + vHeaderH + vRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + vHeaderH + vRowH > pageMaxY) { y = addNewPage(); }
       y += 4;
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(tdptAccent);
       doc.text(`{tdptBranch.sub("Dye Penetrant Testing Details") + " Dye Penetrant Testing Details"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 16;
 
-      if (y + vHeaderH + vRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + vHeaderH + vRowH > pageMaxY) { y = addNewPage(); }
       drawDptTableHeader(doc, vHeaders, vColWidths, y, pageW);
       y += vHeaderH;
 
@@ -3453,8 +3488,8 @@ async function runGeneration(
         const obs = tdptObs[ri];
         if (y + vRowH > pageMaxY) {
           addNewPage();
-          drawDptTableHeader(doc, vHeaders, vColWidths, MARGIN, pageW);
-          y = MARGIN + vHeaderH;
+          drawDptTableHeader(doc, vHeaders, vColWidths, contentTopY, pageW);
+          y = contentTopY + vHeaderH;
         }
         doc.rect(MARGIN, y, vUsable, vRowH).stroke(TABLE_OUTER_BORDER);
         const cells: string[] = [
@@ -3513,7 +3548,7 @@ async function runGeneration(
     // ─── 1. MAGNETIC PARTICLE TESTING PARAMETERS ───
     {
       const procRowH = 18;
-      if (y + 24 + procRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + procRowH > pageMaxY) { y = addNewPage(); }
       y += 6;
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(tmptAccent);
       doc.text(`{tmptBranch.sub("Magnetic Particle Testing Parameters") + " Magnetic Particle Testing Parameters"}`, MARGIN, y);
@@ -3549,7 +3584,7 @@ async function runGeneration(
       const procUsableW = pageW - 2 * MARGIN;
 
       for (const [label, value] of procedureRows) {
-        if (y + procRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+        if (y + procRowH > pageMaxY) { y = addNewPage(); }
         doc.rect(MARGIN, y, procLabelW, procRowH).fill("#fffbeb");
         doc.rect(MARGIN + procLabelW, y, procValueW, procRowH).fill("#ffffff");
         doc.rect(MARGIN, y, procUsableW, procRowH).stroke(TABLE_OUTER_BORDER);
@@ -3575,7 +3610,7 @@ async function runGeneration(
     {
       const consHeaderH = 36;
       const consRowH = 18;
-      if (y + 24 + consHeaderH + consRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + consHeaderH + consRowH > pageMaxY) { y = addNewPage(); }
       y += 4;
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(tmptAccent);
       doc.text(`{tmptBranch.sub("Consumable Details") + " Consumable Details"}`, MARGIN, y);
@@ -3599,8 +3634,8 @@ async function runGeneration(
       for (const row of consumableRows) {
         if (y + consRowH > pageMaxY) {
           addNewPage();
-          drawDptTableHeader(doc, consHeaders, consColWidths, MARGIN, pageW);
-          y = MARGIN + consHeaderH;
+          drawDptTableHeader(doc, consHeaders, consColWidths, contentTopY, pageW);
+          y = contentTopY + consHeaderH;
         }
         doc.rect(MARGIN, y, consUsable, consRowH).stroke(TABLE_OUTER_BORDER);
         let cx = MARGIN;
@@ -3648,14 +3683,14 @@ async function runGeneration(
       const vColWidths = [vSlW, vPartW, vIdW, vDimW, vSizeW, vObsW];
       const vHeaders = ["Sl.\nNo", "Part Details", "ID", "Weld\nDimension", "Size of Indication\nApprox. (mm)", "Observation & Result"];
 
-      if (y + 24 + vHeaderH + vRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + vHeaderH + vRowH > pageMaxY) { y = addNewPage(); }
       y += 4;
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(tmptAccent);
       doc.text(`{tmptBranch.sub("Magnetic Particle Testing Details") + " Magnetic Particle Testing Details"}`, MARGIN, y);
       doc.fillColor("#000");
       y += 16;
 
-      if (y + vHeaderH + vRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + vHeaderH + vRowH > pageMaxY) { y = addNewPage(); }
       drawDptTableHeader(doc, vHeaders, vColWidths, y, pageW);
       y += vHeaderH;
 
@@ -3663,8 +3698,8 @@ async function runGeneration(
         const obs = tmptObs[ri];
         if (y + vRowH > pageMaxY) {
           addNewPage();
-          drawDptTableHeader(doc, vHeaders, vColWidths, MARGIN, pageW);
-          y = MARGIN + vHeaderH;
+          drawDptTableHeader(doc, vHeaders, vColWidths, contentTopY, pageW);
+          y = contentTopY + vHeaderH;
         }
         doc.rect(MARGIN, y, vUsable, vRowH).stroke(TABLE_OUTER_BORDER);
         const cells: string[] = [
@@ -3729,7 +3764,7 @@ async function runGeneration(
     const twsLabelW = twsUsableW * 0.38;
     const twsValueW = twsUsableW - twsLabelW;
     const drawTwsGroupHeader = (title: string) => {
-      if (y + twsRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + twsRowH > pageMaxY) { y = addNewPage(); }
       doc.rect(MARGIN, y, twsUsableW, twsRowH).fill("#f0f9ff");
       doc.rect(MARGIN, y, twsUsableW, twsRowH).stroke(TABLE_OUTER_BORDER);
       doc.font(FONT_BOLD).fontSize(8.5).fillColor(twsAccent);
@@ -3738,7 +3773,7 @@ async function runGeneration(
       y += twsRowH;
     };
     const drawTwsParamRow = (label: string, value: string | null | undefined, isDate = false) => {
-      if (y + twsRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + twsRowH > pageMaxY) { y = addNewPage(); }
       doc.rect(MARGIN, y, twsLabelW, twsRowH).fill("#f8fafc");
       doc.rect(MARGIN + twsLabelW, y, twsValueW, twsRowH).fill("#ffffff");
       doc.rect(MARGIN, y, twsUsableW, twsRowH).stroke(TABLE_OUTER_BORDER);
@@ -3762,7 +3797,7 @@ async function runGeneration(
 
     // ─── 1. WELD SCAN TESTING PARAMETERS ───
     {
-      if (y + 24 + twsRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + twsRowH > pageMaxY) { y = addNewPage(); }
       y += 6;
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(twsAccent);
       doc.text(`{twsBranch.sub("Weld Scan Testing Parameters") + " Weld Scan Testing Parameters"}`, MARGIN, y);
@@ -3817,7 +3852,7 @@ async function runGeneration(
         : [130, 65, 95, 95, Math.max(90, pUsable - 130 - 65 - 95 - 95)];
       const pHeaders = ["Probe", "Probe Angle", "Frequency", "Probe Size", "Serial Number"];
 
-      if (y + 24 + pHeaderH + pRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + pHeaderH + pRowH > pageMaxY) { y = addNewPage(); }
       y += 4;
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(twsAccent);
       doc.text(`{twsBranch.sub("Probe Details") + " Probe Details"}`, MARGIN, y);
@@ -3843,7 +3878,7 @@ async function runGeneration(
         if (y + pRowH > pageMaxY) {
           addNewPage();
           drawTwsProbeHeader(MARGIN);
-          y = MARGIN + pHeaderH;
+          y = contentTopY + pHeaderH;
         }
         doc.rect(MARGIN, y, pUsable, pRowH).stroke(TABLE_OUTER_BORDER);
         const cells = [
@@ -3892,7 +3927,7 @@ async function runGeneration(
       const dColWidths = [dSlW, dCompW, dWeldW, dDimW, dAngleW, dFreqW, dObsW];
       const dHeaders = ["Sl.\nNo", "Course / Plate", "Weld Seam ID", "Weld Dimension", "Probe\nAngle", "Probe Frequency", "Observation & Result"];
 
-      if (y + 24 + dHeaderH + dRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + dHeaderH + dRowH > pageMaxY) { y = addNewPage(); }
       y += 4;
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(twsAccent);
       doc.text(`{twsBranch.sub("Weld Scan Testing Details") + " Weld Scan Testing Details"}`, MARGIN, y);
@@ -3919,7 +3954,7 @@ async function runGeneration(
         if (y + dRowH > pageMaxY) {
           addNewPage();
           drawTwsDetailsHeader(MARGIN);
-          y = MARGIN + dHeaderH;
+          y = contentTopY + dHeaderH;
         }
         doc.rect(MARGIN, y, dUsable, dRowH).stroke(TABLE_OUTER_BORDER);
         const cells: string[] = [
@@ -3985,7 +4020,7 @@ async function runGeneration(
     const tutmLabelW = tutmUsableW * 0.38;
     const tutmValueW = tutmUsableW - tutmLabelW;
     const drawTutmGroupHeader = (title: string) => {
-      if (y + tutmRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + tutmRowH > pageMaxY) { y = addNewPage(); }
       doc.rect(MARGIN, y, tutmUsableW, tutmRowH).fill("#f0fdfa");
       doc.rect(MARGIN, y, tutmUsableW, tutmRowH).stroke(TABLE_OUTER_BORDER);
       doc.font(FONT_BOLD).fontSize(8.5).fillColor(tutmAccent);
@@ -3994,7 +4029,7 @@ async function runGeneration(
       y += tutmRowH;
     };
     const drawTutmParamRow = (label: string, value: string | null | undefined, isDate = false) => {
-      if (y + tutmRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + tutmRowH > pageMaxY) { y = addNewPage(); }
       doc.rect(MARGIN, y, tutmLabelW, tutmRowH).fill("#f8fafc");
       doc.rect(MARGIN + tutmLabelW, y, tutmValueW, tutmRowH).fill("#ffffff");
       doc.rect(MARGIN, y, tutmUsableW, tutmRowH).stroke(TABLE_OUTER_BORDER);
@@ -4022,7 +4057,7 @@ async function runGeneration(
         "Inspection: UT Thickness Measurement",
       ];
       for (const line of lines) {
-        if (y + 14 > pageMaxY) { addNewPage(); y = MARGIN; }
+        if (y + 14 > pageMaxY) { y = addNewPage(); }
         doc.font(FONT_BOLD).fontSize(9).fillColor(tutmAccent);
         doc.text(line, MARGIN, y);
         doc.fillColor("#000");
@@ -4032,7 +4067,7 @@ async function runGeneration(
 
     // ─── 2. UT THICKNESS MEASUREMENT PARAMETERS ───
     {
-      if (y + 24 + tutmRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + tutmRowH > pageMaxY) { y = addNewPage(); }
       y += 6;
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(tutmAccent);
       doc.text(`{tutmBranch.sub("UT Thickness Measurement Parameters") + " UT Thickness Measurement Parameters"}`, MARGIN, y);
@@ -4082,7 +4117,7 @@ async function runGeneration(
         : [120, 55, 90, 85, Math.max(85, pUsable - 120 - 55 - 90 - 85)];
       const pHeaders = ["Probe", "Probe Angle", "Frequency", "Size", "S.No."];
 
-      if (y + 24 + pHeaderH + pRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + pHeaderH + pRowH > pageMaxY) { y = addNewPage(); }
       y += 4;
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(tutmAccent);
       doc.text(`{tutmBranch.sub("Probe Details — Longitudinal Wave (0°)") + " Probe Details — Longitudinal Wave (0°)"}`, MARGIN, y);
@@ -4108,7 +4143,7 @@ async function runGeneration(
         if (y + pRowH > pageMaxY) {
           addNewPage();
           drawTutmProbeHeader(MARGIN);
-          y = MARGIN + pHeaderH;
+          y = contentTopY + pHeaderH;
         }
         doc.rect(MARGIN, y, pUsable, pRowH).stroke(TABLE_OUTER_BORDER);
         const cells = [
@@ -4146,7 +4181,7 @@ async function runGeneration(
         if (Array.isArray(parsed)) tutmRows = parsed;
       } catch {}
 
-      if (y + 24 + 30 > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + 30 > pageMaxY) { y = addNewPage(); }
       y += 4;
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor(tutmAccent);
       doc.text(`{tutmBranch.sub("UT Thickness Measurement Readings") + " UT Thickness Measurement Readings"}`, MARGIN, y);
@@ -4212,7 +4247,7 @@ async function runGeneration(
         doc.fillColor("#000");
       };
 
-      if (y + 24 + tHeaderH + tMinRowH > pageMaxY) { addNewPage(); y = MARGIN; }
+      if (y + 24 + tHeaderH + tMinRowH > pageMaxY) { y = addNewPage(); }
       y += 6;
       doc.font(FONT_BOLD).fontSize(9.5).fillColor(tutmAccent);
       doc.text("Course / Plate Measurements (Clock Positions)", MARGIN, y);
@@ -4235,7 +4270,7 @@ async function runGeneration(
         if (y + rowH > pageMaxY) {
           addNewPage();
           drawTutmRowsHeader(MARGIN);
-          y = MARGIN + tHeaderH;
+          y = contentTopY + tHeaderH;
         }
         doc.rect(MARGIN, y, tutmUsableW, rowH).stroke(TABLE_OUTER_BORDER);
         const infoCells: Array<[string, number, "left" | "center", boolean]> = [
@@ -4345,8 +4380,7 @@ async function runGeneration(
       if (start === 0) {
         // First gallery page: keep heading + full grid together.
         if (y + headingH_photos + GRID_ROWS * rowH_photos + (GRID_ROWS - 1) * gapY > pageMaxY) {
-          addNewPage();
-          y = MARGIN;
+          y = addNewPage();
         }
         y += preHeadingGap;
         if (currentTestBranch) {
@@ -4359,8 +4393,7 @@ async function runGeneration(
         y += headingH_photos;
       } else {
         // Continuation page: same 2×3 grid, nothing but photos.
-        addNewPage();
-        y = MARGIN;
+        y = addNewPage();
       }
 
       const group = allPhotos.slice(start, start + PHOTOS_PER_PAGE);
@@ -4456,11 +4489,11 @@ async function runGeneration(
         for (let p = 1; p < pageBuffers.length; p++) {
           addNewPage();
           doc.font(FONT_BOLD).fontSize(11).fillColor("#000");
-          doc.text(cert.title || "Certificate", MARGIN, MARGIN, { width: usableW, align: "center" });
+          doc.text(cert.title || "Certificate", MARGIN, contentTopY, { width: usableW, align: "center" });
           doc.font(FONT_REGULAR).fontSize(8).fillColor("#444");
-          doc.text(`File: ${cert.fileName}  |  Page ${p + 1} of ${pageBuffers.length}`, MARGIN, MARGIN + 16, { width: usableW, align: "center" });
+          doc.text(`File: ${cert.fileName}  |  Page ${p + 1} of ${pageBuffers.length}`, MARGIN, contentTopY + 16, { width: usableW, align: "center" });
           doc.fillColor("#000");
-          const fullY = MARGIN + CERT_CAPTION_H;
+          const fullY = contentTopY + CERT_CAPTION_H;
           const fullH = pageMaxY - fullY;
           doc.rect(MARGIN, fullY, usableW, fullH).stroke("#ddd");
           try {
@@ -4493,7 +4526,7 @@ async function runGeneration(
     ) => {
       for (let start = 0; start < certs.length; start += 2) {
         addNewPage();
-        const top = start === 0 ? firstPageTop : MARGIN;
+        const top = start === 0 ? firstPageTop : contentTopY;
         const availH = pageMaxY - top;
         const pair = certs.slice(start, start + 2);
         const twoUp = pair.length === 2;
@@ -4508,7 +4541,7 @@ async function runGeneration(
           // The first certificate's extra PDF pages consumed the rest of
           // this page — the second certificate starts on a fresh page.
           addNewPage();
-          await drawCertificateInSlot(pair[1], MARGIN, MARGIN, usableW, pageMaxY - MARGIN);
+          await drawCertificateInSlot(pair[1], MARGIN, contentTopY, usableW, pageMaxY - contentTopY);
         } else {
           // Second certificate (lower half)
           const slot2Y = top + slotH + CERT_GAP;
@@ -4527,16 +4560,16 @@ async function runGeneration(
       }
       const certBranch = certBranchRef.current;
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_MAIN).fillColor("#000");
-      doc.text(`${certBranch.main()}. Certification`, MARGIN, MARGIN, { width: usableW });
+      doc.text(`${certBranch.main()}. Certification`, MARGIN, contentTopY, { width: usableW });
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB);
-      doc.text(`${certBranch.sub("Instrument Calibration")} Instrument Calibration (${equipCerts.length})`, MARGIN, MARGIN + 26, { width: usableW });
+      doc.text(`${certBranch.sub("Instrument Calibration")} Instrument Calibration (${equipCerts.length})`, MARGIN, contentTopY + 26, { width: usableW });
 
       // The section page already has its heading drawn — start the first
       // pair below it. Instead of letting renderCertSection call
       // addNewPage() again (which would leave this heading page blank),
       // render the chunks manually here:
       {
-        const firstTop = MARGIN + 66; // below the two headings
+        const firstTop = contentTopY + 66; // below the two headings
         const availH = pageMaxY - firstTop;
         const firstPair = equipCerts.slice(0, 2);
         const twoUp = firstPair.length === 2;
@@ -4545,7 +4578,7 @@ async function runGeneration(
         if (twoUp) {
           if (extraPages > 0) {
             addNewPage();
-            await drawCertificateInSlot(firstPair[1], MARGIN, MARGIN, usableW, pageMaxY - MARGIN);
+            await drawCertificateInSlot(firstPair[1], MARGIN, contentTopY, usableW, pageMaxY - contentTopY);
           } else {
             const slot2Y = firstTop + slotH + CERT_GAP;
             await drawCertificateInSlot(firstPair[1], MARGIN, slot2Y, usableW, slotH);
@@ -4553,7 +4586,7 @@ async function runGeneration(
         }
         // Remaining certificates: 2 per page from index 2
         if (equipCerts.length > 2) {
-          await renderCertSection(equipCerts.slice(2), MARGIN);
+          await renderCertSection(equipCerts.slice(2), contentTopY);
         }
       }
     }
@@ -4572,10 +4605,10 @@ async function runGeneration(
         certBranchRef.current = makeTocBranch("Certification");
       }
       doc.font(FONT_BOLD).fontSize(FONT_SIZE_SUB).fillColor("#000");
-      doc.text(`${certBranchRef.current.sub("Inspector Certificates")} Inspector Certificates (${orderedPersonnelCerts.length})`, MARGIN, MARGIN, { width: usableW });
+      doc.text(`${certBranchRef.current.sub("Inspector Certificates")} Inspector Certificates (${orderedPersonnelCerts.length})`, MARGIN, contentTopY, { width: usableW });
 
       {
-        const firstTop = MARGIN + 50; // below the sub-heading
+        const firstTop = contentTopY + 50; // below the sub-heading
         const availH = pageMaxY - firstTop;
         const firstPair = orderedPersonnelCerts.slice(0, 2);
         const twoUp = firstPair.length === 2;
@@ -4584,14 +4617,14 @@ async function runGeneration(
         if (twoUp) {
           if (extraPages > 0) {
             addNewPage();
-            await drawCertificateInSlot(firstPair[1], MARGIN, MARGIN, usableW, pageMaxY - MARGIN);
+            await drawCertificateInSlot(firstPair[1], MARGIN, contentTopY, usableW, pageMaxY - contentTopY);
           } else {
             const slot2Y = firstTop + slotH + CERT_GAP;
             await drawCertificateInSlot(firstPair[1], MARGIN, slot2Y, usableW, slotH);
           }
         }
         if (orderedPersonnelCerts.length > 2) {
-          await renderCertSection(orderedPersonnelCerts.slice(2), MARGIN);
+          await renderCertSection(orderedPersonnelCerts.slice(2), contentTopY);
         }
       }
     }
@@ -4701,19 +4734,20 @@ function drawDrawingImagePage(
   totalPages: number,
   pageW: number,
   pageH: number,
+  contentTop: number,
 ) {
   // Reserve top band for header (title + drawing number) and bottom
   // band for caption.
   const headerH = 36;
   const captionH = 18;
   const availW = pageW - 2 * MARGIN;
-  const availH = pageH - MARGIN - headerH - captionH;
+  const availH = pageH - contentTop - MARGIN - captionH - headerH;
   const boxX = MARGIN;
-  const boxY = MARGIN + headerH;
+  const boxY = contentTop + headerH;
 
   // Drawing header
   doc.font(FONT_BOLD).fontSize(11).fillColor("#000");
-  doc.text(drawing.title || "Drawing", MARGIN, MARGIN, {
+  doc.text(drawing.title || "Drawing", MARGIN, contentTop, {
     width: availW, align: "center",
   });
   doc.font(FONT_REGULAR).fontSize(8).fillColor("#444");
@@ -4721,12 +4755,12 @@ function drawDrawingImagePage(
     `Drawing No: ${drawing.drawingNumber}    |    Revision: ${drawing.revisionNumber}    |    ` +
     `Type: ${drawing.drawingType}` +
     (totalPages > 1 ? `    |    Page ${pageNo} of ${totalPages}` : "");
-  doc.text(subLine, MARGIN, MARGIN + 16, { width: availW, align: "center" });
+  doc.text(subLine, MARGIN, contentTop + 16, { width: availW, align: "center" });
 
   if (drawing.clientName || drawing.plantName) {
     const locLine = [drawing.clientName, drawing.plantName].filter(Boolean).join(" — ");
     doc.fontSize(7).fillColor("#666");
-    doc.text(locLine, MARGIN, MARGIN + 30, { width: availW, align: "center" });
+    doc.text(locLine, MARGIN, contentTop + 30, { width: availW, align: "center" });
   }
   doc.fillColor("#000");
 
@@ -4767,21 +4801,22 @@ function drawDrawingPlaceholder(
   message: string,
   pageW: number,
   pageH: number,
+  contentTop: number,
 ) {
   const availW = pageW - 2 * MARGIN;
   const headerH = 36;
-  const boxY = MARGIN + headerH;
-  const boxH = pageH - MARGIN - headerH - 30;
+  const boxY = contentTop + headerH;
+  const boxH = pageH - contentTop - MARGIN - headerH - 30;
 
   // Header
   doc.font(FONT_BOLD).fontSize(11).fillColor("#000");
-  doc.text(drawing.title || "Drawing", MARGIN, MARGIN, {
+  doc.text(drawing.title || "Drawing", MARGIN, contentTop, {
     width: availW, align: "center",
   });
   doc.font(FONT_REGULAR).fontSize(8).fillColor("#444");
   doc.text(
     `Drawing No: ${drawing.drawingNumber}    |    Revision: ${drawing.revisionNumber}    |    Type: ${drawing.drawingType}`,
-    MARGIN, MARGIN + 16,
+    MARGIN, contentTop + 16,
     { width: availW, align: "center" },
   );
   doc.fillColor("#000");
