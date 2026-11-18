@@ -60,3 +60,7 @@ download/Arun-Tech-full.bundle
 download/Arun-Tech-full-repo.zip
 *.bundle
 *.bundle.temp
+.env
+.env.local
+.env.*
+!.env.example
