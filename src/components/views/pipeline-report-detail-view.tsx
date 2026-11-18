@@ -145,6 +145,7 @@ interface FullReport {
   wsScanningFlawSizingTechnique?: string | null;
   wsInstrumentRows?: string | null;
   wsProbeRows?: string | null;
+  wsProbeTypeHidden?: boolean | null;
   wsTestResultRows?: string | null;
   // ─── DYE PENETRANT PROCEDURE FIELDS (16 typeable fields) ───
   dptTestingStandard?: string | null;
@@ -3126,8 +3127,14 @@ export function PipelineReportDetailView() {
                 <table className="w-full border-collapse text-[11px]">
                   <thead>
                     <tr className="bg-cyan-700 text-white">
+                      {/* Probe Type column follows the report's saved
+                          visibility: shown by default, hidden when the user
+                          removed it with the x in the editor (values stay in
+                          the database either way). */}
                       {[
-                        "Sl. No", "Description", "Identification No.", "Weld Type", "Probe",
+                        "Sl. No", "Description", "Identification No.", "Weld Type",
+                        ...(report.wsProbeTypeHidden ? [] : ["Probe Type"]),
+                        "Probe",
                         "BP", "SD", "Depth", "Echo Height", "Length", "Observation", "Result",
                       ].map((h) => (
                         <th key={h} className="border border-cyan-800 px-2 py-2 text-center">{h}</th>
@@ -3141,6 +3148,9 @@ export function PipelineReportDetailView() {
                         <td className="border border-zinc-300 px-2 py-1">{row.description || "—"}</td>
                         <td className="border border-zinc-300 px-2 py-1 text-center">{row.identificationNo || "—"}</td>
                         <td className="border border-zinc-300 px-2 py-1 text-center">{row.weldType || "—"}</td>
+                        {!report.wsProbeTypeHidden && (
+                          <td className="border border-zinc-300 px-2 py-1 text-center">{row.probeType || "—"}</td>
+                        )}
                         <td className="border border-zinc-300 px-2 py-1 text-center">{row.probe || "—"}</td>
                         <td className="border border-zinc-300 px-2 py-1 text-center">{row.bp || "—"}</td>
                         <td className="border border-zinc-300 px-2 py-1 text-center">{row.sd || "—"}</td>

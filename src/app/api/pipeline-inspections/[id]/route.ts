@@ -286,6 +286,8 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       wsInstrumentRows: body.wsInstrumentRows !== undefined ? body.wsInstrumentRows : existing.wsInstrumentRows,
       wsProbeRows: body.wsProbeRows !== undefined ? body.wsProbeRows : existing.wsProbeRows,
       wsTestResultRows: body.wsTestResultRows !== undefined ? body.wsTestResultRows : existing.wsTestResultRows,
+      wsScanningCalibrationBlockSpec: body.wsScanningCalibrationBlockSpec !== undefined ? (body.wsScanningCalibrationBlockSpec?.trim() || null) : existing.wsScanningCalibrationBlockSpec,
+      wsProbeTypeHidden: body.wsProbeTypeHidden !== undefined ? body.wsProbeTypeHidden === true : existing.wsProbeTypeHidden,
       // ─── EQUIPMENT TYPE + VESSEL ORIENTATION ───
       // Only updated when the form explicitly sends them; existing values
       // are preserved otherwise. vesselOrientation is updatable ONLY for
@@ -344,6 +346,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       vwsProbeDetails: body.vwsProbeDetails !== undefined ? (typeof body.vwsProbeDetails === "string" ? body.vwsProbeDetails : null) : existing.vwsProbeDetails,
       vwsCalibrationBlock: body.vwsCalibrationBlock !== undefined ? (body.vwsCalibrationBlock?.trim() || null) : existing.vwsCalibrationBlock,
       vwsCalibrationBlockMoc: body.vwsCalibrationBlockMoc !== undefined ? (body.vwsCalibrationBlockMoc?.trim() || null) : existing.vwsCalibrationBlockMoc,
+      vwsCalibrationBlockSpec: body.vwsCalibrationBlockSpec !== undefined ? (body.vwsCalibrationBlockSpec?.trim() || null) : existing.vwsCalibrationBlockSpec,
       vwsReferenceReflector: body.vwsReferenceReflector !== undefined ? (body.vwsReferenceReflector?.trim() || null) : existing.vwsReferenceReflector,
       vwsReferenceLevel: body.vwsReferenceLevel !== undefined ? (body.vwsReferenceLevel?.trim() || null) : existing.vwsReferenceLevel,
       vwsFlawSizingTechnique: body.vwsFlawSizingTechnique !== undefined ? (body.vwsFlawSizingTechnique?.trim() || null) : existing.vwsFlawSizingTechnique,

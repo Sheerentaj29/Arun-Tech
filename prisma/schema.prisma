@@ -450,6 +450,9 @@ model PipelineInspection {
   wsInstrumentRows                  String?  // JSON: [{equipmentType, machineMake, model, mcSrNo, calibrationDueDate}]
   wsProbeRows                       String?  // JSON: fixed 4-probe grid [{probeType, probeAngle, frequency, size, probeNo, range, referenceDb, scanningDb}] — type/angle structural, values user-entered
   wsTestResultRows                  String?  // JSON: [{description, identificationNo, weldType, probe, bp, sd, depth, echoHeight, length, observation, result}]
+  wsScanningCalibrationBlockSpec    String?  // Weld Scan: admin-configured exact specification/step values of the selected calibration block
+  wsProbeTypeHidden                 Boolean? // Weld Scan (PIPELINE only): Probe Type column hidden in Test Results (display-only; data kept)
+  vwsCalibrationBlockSpec           String?  // Vessel Weld Scan: admin-configured exact specification/step values of the selected calibration block
 
   // ─── EQUIPMENT TYPE + VESSEL FIELDS ───
   // equipmentType records the selection made in the report-creation flow

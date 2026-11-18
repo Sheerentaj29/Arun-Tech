@@ -25,6 +25,7 @@ import {
   Magnet,
   Zap,
   Gauge,
+  Eye,
 } from "lucide-react";
 import {
   Card,
@@ -402,6 +403,8 @@ interface ReportHeader {
   utCustomColumns: string;
   // ─── WELD SCAN SPECIFIC FIELDS ───
   wsScanningCalibrationBlock: string;
+  wsScanningCalibrationBlockSpec: string;  // admin-configured exact spec / step values
+  wsProbeTypeHidden: boolean;              // Test Results Probe Type column hidden (display-only)
   wsScanningReferenceLevel: string;
   wsScanningExtentOfExamination: string;
   wsScanningSurfaceCondition: string;
@@ -464,6 +467,7 @@ interface ReportHeader {
   vwsProbeDetails: string;
   // Calibration Details
   vwsCalibrationBlock: string;
+  vwsCalibrationBlockSpec: string;  // admin-configured exact spec / step values
   vwsCalibrationBlockMoc: string;
   vwsReferenceReflector: string;
   vwsReferenceLevel: string;
@@ -833,6 +837,8 @@ const EMPTY_HEADER: ReportHeader = {
   utCustomColumns: "[]",
   // Weld Scan fields default empty
   wsScanningCalibrationBlock: "",
+  wsScanningCalibrationBlockSpec: "",
+  wsProbeTypeHidden: false,
   wsScanningReferenceLevel: "",
   wsScanningExtentOfExamination: "",
   wsScanningSurfaceCondition: "",
@@ -879,6 +885,7 @@ const EMPTY_HEADER: ReportHeader = {
   vwsCableType: "",
   vwsProbeDetails: JSON.stringify(VWS_PROBE_GRID_DEFAULTS),
   vwsCalibrationBlock: "",
+  vwsCalibrationBlockSpec: "",
   vwsCalibrationBlockMoc: "",
   vwsReferenceReflector: "",
   vwsReferenceLevel: "",
@@ -1165,6 +1172,31 @@ function parseVmptRows(json: string | null | undefined): VmptDetailRow[] {
 }
 
 // ─── VESSEL WELD SCAN ───
+// ─── Calibration Block (DAC Block) dropdown options ───
+// Shared by PIPELINE_WELD_SCAN (Scanning Details) and VESSEL_WELD_SCAN
+// (Calibration Details). Correct terminology: "Step Wedge" (NOT "Step
+// Wireless"); the 1–10 mm option is identified as a 10-step block; the
+// 2–25 mm range is the documented step-wedge range. Manufacturers differ,
+// so an administrator may record the block's exact specification via the
+// admin-only "exact specification" field — the selection itself stays one
+// of these five canonical options.
+const CALIBRATION_BLOCK_OPTIONS = [
+  "V1 Block (IIW Type 1)",
+  "V2 Block (IIW Type 2 / A4)",
+  "DAC Block – 19 mm",
+  "VW Step Block – 1 mm to 10 mm (10-step)",
+  "Step Wedge – 2 mm to 25 mm",
+] as const;
+
+// Legacy reports may hold a free-text value that is not one of the five
+// options — keep it selectable so saving doesn't silently change it.
+function calibrationBlockOptionsWithLegacy(current: string | null | undefined): string[] {
+  const opts = CALIBRATION_BLOCK_OPTIONS as unknown as string[];
+  const cur = (current ?? "").trim();
+  if (!cur || opts.includes(cur)) return [...opts];
+  return [...opts, cur];
+}
+
 // Types + helpers for the VESSEL_WELD_SCAN report (Vessel → Weld Scan).
 // Completely separate from the Piping Weld Scan — the piping report
 // keeps its own ws* fields and form layout untouched.
@@ -1482,6 +1514,10 @@ export function PipelineReportFormView() {
     pendingVesselOrientation,
   } = useAppStore();
   const isEdit = !!editingPipelineReportId;
+  // Admin-only controls (exact calibration-block specification). The
+  // block-scoped `isAdmin` in the edit-guard below shadows this inside its
+  // own block; both compute the same thing.
+  const isAdminUser = user?.dashboardRole === "ADMIN";
 
   const [header, setHeader] = useState<ReportHeader>(() => ({
     ...EMPTY_HEADER,
@@ -1730,6 +1766,8 @@ export function PipelineReportFormView() {
           utCustomColumns: r.utCustomColumns ?? "[]",
           // Weld Scan fields (Piping — PIPELINE_WELD_SCAN; untouched)
           wsScanningCalibrationBlock: r.wsScanningCalibrationBlock ?? "",
+          wsScanningCalibrationBlockSpec: r.wsScanningCalibrationBlockSpec ?? "",
+          wsProbeTypeHidden: r.wsProbeTypeHidden === true,
           wsScanningReferenceLevel: r.wsScanningReferenceLevel ?? "",
           wsScanningExtentOfExamination: r.wsScanningExtentOfExamination ?? "",
           wsScanningSurfaceCondition: r.wsScanningSurfaceCondition ?? "",
@@ -1750,6 +1788,7 @@ export function PipelineReportFormView() {
           vwsCableType: r.vwsCableType ?? "",
           vwsProbeDetails: r.vwsProbeDetails ?? JSON.stringify(VWS_PROBE_GRID_DEFAULTS),
           vwsCalibrationBlock: r.vwsCalibrationBlock ?? "",
+          vwsCalibrationBlockSpec: r.vwsCalibrationBlockSpec ?? "",
           vwsCalibrationBlockMoc: r.vwsCalibrationBlockMoc ?? "",
           vwsReferenceReflector: r.vwsReferenceReflector ?? "",
           vwsReferenceLevel: r.vwsReferenceLevel ?? "",
@@ -2258,7 +2297,7 @@ export function PipelineReportFormView() {
   }
 
   // ---------- SAVE ----------
-  async function saveHeader() {
+  async function saveHeader(saveOverrides?: Record<string, unknown>) {
     setError(null);
     if (!header.reportNumber.trim()) {
       setError("Report number is required");
@@ -2274,7 +2313,7 @@ export function PipelineReportFormView() {
       // pipelineAgeYears text input into a number (or null if empty /
       // non-numeric). The PUT/POST endpoints expect a number for this
       // field; the rest of the condition fields are strings.
-      const payload: Record<string, unknown> = { ...header };
+      const payload: Record<string, unknown> = { ...header, ...(saveOverrides ?? {}) };
       if (header.reportType === "PIPELINE_CONDITION") {
         const ageNum = parseFloat(header.pipelineAgeYears);
         payload.pipelineAgeYears = !Number.isNaN(ageNum) && ageNum >= 0 ? ageNum : null;
@@ -6277,8 +6316,43 @@ export function PipelineReportFormView() {
                     Calibration Details
                   </td>
                 </tr>
+                {/* Calibration Block — dropdown (5 canonical options shared
+                    with the piping weld scan); legacy free-text values stay
+                    selectable so an old record is never silently changed. */}
+                <tr className="border-b border-zinc-200">
+                  <td className="bg-cyan-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/3">
+                    Calibration Block
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <Select
+                      value={header.vwsCalibrationBlock}
+                      onValueChange={(v) => updateHeader("vwsCalibrationBlock", v)}
+                    >
+                      <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select" /></SelectTrigger>
+                      <SelectContent>
+                        {calibrationBlockOptionsWithLegacy(header.vwsCalibrationBlock).map((m) => (
+                          <SelectItem key={m} value={m}>{m}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </td>
+                </tr>
+                {isAdminUser && header.vwsCalibrationBlock && (
+                  <tr className="border-b border-zinc-200">
+                    <td className="bg-cyan-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/3 align-top">
+                      Exact specification (admin)
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header.vwsCalibrationBlockSpec}
+                        onChange={(e) => updateHeader("vwsCalibrationBlockSpec", e.target.value)}
+                        placeholder="Exact step values / specification of the selected block, e.g. Steps 2, 4, 6, 8, 10, 12, 16, 20, 25 mm"
+                      />
+                    </td>
+                  </tr>
+                )}
                 {([
-                  ["Calibration Block", "vwsCalibrationBlock", "e.g. V1 / V2 / ASME basic calibration block"],
                   ["Calibration Block Material / MOC", "vwsCalibrationBlockMoc", "Material of the calibration block"],
                   ["Reference Reflector", "vwsReferenceReflector", "e.g. Side drilled hole / flat bottom hole"],
                   ["Reference Level", "vwsReferenceLevel", "e.g. 100% DAC / 50% DAC"],
@@ -9344,7 +9418,7 @@ export function PipelineReportFormView() {
           <CardTitle className="text-base">Scanning Details</CardTitle>
           {/* Common Save button — persists ALL Scanning Details fields together
               (PUT /api/pipeline-inspections/[id]); no per-field saves needed. */}
-          <Button size="sm" variant="outline" onClick={saveHeader} disabled={saving}>
+          <Button size="sm" variant="outline" onClick={() => saveHeader()} disabled={saving}>
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
             Save
           </Button>
@@ -9357,7 +9431,11 @@ export function PipelineReportFormView() {
                   // Field arrangement per reference: row 1 Calibration Block |
                   // Reference Level, row 2 Extent of Examination | Flaw Sizing
                   // Technique, row 3 Surface Condition.
-                  ["Calibration Block (DAC Block)", "wsScanningCalibrationBlock", "text" as const, [] as string[], "Reference Level", "wsScanningReferenceLevel", "text" as const, [] as string[]],
+                  // Calibration Block is a dropdown (5 canonical options);
+                  // legacy free-text values stay selectable via
+                  // calibrationBlockOptionsWithLegacy so an old record is
+                  // never silently changed on save.
+                  ["Calibration Block (DAC Block)", "wsScanningCalibrationBlock", "select" as const, calibrationBlockOptionsWithLegacy(header.wsScanningCalibrationBlock) as string[], "Reference Level", "wsScanningReferenceLevel", "text" as const, [] as string[]],
                   ["Extent of Examination", "wsScanningExtentOfExamination", "text" as const, [] as string[], "Flaw Sizing Technique", "wsScanningFlawSizingTechnique", "select" as const, ["6 dB Drop", "12 dB Drop", "18 dB Drop"] as string[]],
                   ["Surface Condition", "wsScanningSurfaceCondition", "select" as const, ["Clean & Smooth Surface", "Rough Surface", "Painted Surface"] as string[], "", "", "text" as const, [] as string[]],
                 ]).map(([label1, field1, type1, opts1, label2, field2, type2, opts2], rowIdx) => (
@@ -9392,6 +9470,21 @@ export function PipelineReportFormView() {
                     </td>
                   </tr>
                 ))}
+                {isAdminUser && header.wsScanningCalibrationBlock && (
+                  <tr className="border-b border-zinc-200">
+                    <td className="bg-cyan-50 border-r border-zinc-200 px-3 py-2 font-medium text-zinc-700 w-1/5 align-top">
+                      Exact specification (admin)
+                    </td>
+                    <td colSpan={3} className="px-2 py-1.5">
+                      <Input
+                        className="h-8 text-sm"
+                        value={header.wsScanningCalibrationBlockSpec}
+                        onChange={(e) => updateHeader("wsScanningCalibrationBlockSpec", e.target.value)}
+                        placeholder="Exact step values / specification of the selected block, e.g. Steps 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 mm"
+                      />
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -9403,11 +9496,22 @@ export function PipelineReportFormView() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="text-base">Test Results</CardTitle>
-            <Button onClick={() => {
-              const rows = JSON.parse(header.wsTestResultRows || "[]");
-              rows.push({ description: "", identificationNo: "", weldType: "", probeType: "", probe: "", bp: "", sd: "", depth: "", echoHeight: "", length: "", observation: "", result: "" });
-              setHeader((h) => ({ ...h, wsTestResultRows: JSON.stringify(rows) }));
-            }} size="sm"><Plus className="mr-1 h-4 w-4" /> Add Row</Button>
+            <div className="flex items-center gap-2">
+              {header.wsProbeTypeHidden && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={saving}
+                  title="Bring back the Probe Type column (previously entered values are preserved)"
+                  onClick={() => { updateHeader("wsProbeTypeHidden", false); saveHeader({ wsProbeTypeHidden: false }); }}
+                ><Eye className="mr-1 h-4 w-4" /> Restore Probe Type</Button>
+              )}
+              <Button onClick={() => {
+                const rows = JSON.parse(header.wsTestResultRows || "[]");
+                rows.push({ description: "", identificationNo: "", weldType: "", probeType: "", probe: "", bp: "", sd: "", depth: "", echoHeight: "", length: "", observation: "", result: "" });
+                setHeader((h) => ({ ...h, wsTestResultRows: JSON.stringify(rows) }));
+              }} size="sm"><Plus className="mr-1 h-4 w-4" /> Add Row</Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -9419,7 +9523,24 @@ export function PipelineReportFormView() {
                   <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 120 }}>Description</th>
                   <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 80 }}>Identification No.</th>
                   <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 70 }}>Weld Type</th>
-                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 95 }}>Probe Type</th>
+                  {/* Probe Type heading — removed along with its column when
+                      the user clicks the x (display-only; the saved values
+                      come back when the column is restored) */}
+                  {!header.wsProbeTypeHidden && (
+                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 95 }}>
+                    <div className="flex items-center justify-center gap-1">
+                      <span>Probe Type</span>
+                      <button
+                        type="button"
+                        title="Remove the Probe Type column from the table, the PDF and the preview (values are kept and can be restored)"
+                        aria-label="Remove Probe Type column"
+                        disabled={saving}
+                        className="rounded p-0.5 text-white/80 hover:bg-white/20 hover:text-white"
+                        onClick={() => { updateHeader("wsProbeTypeHidden", true); saveHeader({ wsProbeTypeHidden: true }); }}
+                      >×<span className="sr-only">Remove Probe Type column</span></button>
+                    </div>
+                  </th>
+                  )}
                   <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 60 }}>Probe</th>
                   <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 60 }}>Beam Path (BP) (mm)</th>
                   <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 70 }}>Skip Distance (SD) (mm)</th>
@@ -9455,6 +9576,10 @@ export function PipelineReportFormView() {
                             </SelectContent>
                           </Select>
                         </td>
+                        {/* Probe Type cell — removed when the user hides the
+                            column; the value stays in wsTestResultRows and
+                            reappears on restore */}
+                        {!header.wsProbeTypeHidden && (
                         <td className="border border-zinc-300 p-1">
                           <Select value={row.probeType ?? ""} onValueChange={(v) => { const n = [...rows]; n[idx] = { ...row, probeType: v }; setHeader((h) => ({ ...h, wsTestResultRows: JSON.stringify(n) })); }}>
                             <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
@@ -9463,6 +9588,7 @@ export function PipelineReportFormView() {
                             </SelectContent>
                           </Select>
                         </td>
+                        )}
                         {(["probe", "bp", "sd", "depth", "echoHeight", "length", "observation", "result"] as const).map((field) => (
                           <td key={field} className="border border-zinc-300 p-1">
                             <Input className="h-8 text-xs" value={row[field] ?? ""}
