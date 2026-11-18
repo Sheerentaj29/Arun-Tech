@@ -25,6 +25,8 @@ export async function GET(req: NextRequest) {
       name: true,
       role: true,
       active: true,
+      accountStatus: true,
+      googleId: true,
       createdAt: true,
       _count: {
         select: {

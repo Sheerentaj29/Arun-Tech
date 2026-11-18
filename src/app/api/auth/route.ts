@@ -5,7 +5,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { db } from "@/lib/db";
-import { setSessionCookie, clearSessionCookie, getSession, getDashboardRole, type UserRole } from "@/lib/auth";
+import { setSessionCookie, clearSessionCookie, getSession, getPendingApprovalUser, getDashboardRole, type UserRole } from "@/lib/auth";
 import { recordAudit } from "@/lib/audit";
 import { verifyPassword, hashPassword, needsRehash } from "@/lib/password";
 
@@ -149,6 +149,15 @@ export async function GET(req: NextRequest) {
   // Pass `req` so getSession can fall back to the Authorization: Bearer
   // header when the cookie isn't being sent (cross-origin preview URL).
   const session = await getSession(req);
-  if (!session) return NextResponse.json({ user: null });
+  if (!session) {
+    // Distinguish "not signed in" from "signed in via Google but the
+    // account is still awaiting administrator approval" so the login
+    // screen can explain the difference instead of silently bouncing.
+    const pending = await getPendingApprovalUser(req);
+    if (pending) {
+      return NextResponse.json({ user: null, pending: true, pendingEmail: pending.email });
+    }
+    return NextResponse.json({ user: null });
+  }
   return NextResponse.json({ user: session });
 }

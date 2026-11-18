@@ -26,6 +26,14 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
   const validRoles = ["ADMIN", "EMPLOYEE", "INSPECTOR", "APPROVER"];
   const newRole = validRoles.includes(body.role) ? body.role : existing.role;
 
+  // Account status validation — this is how an admin approves a user who
+  // registered via Google sign-up (PENDING → ACTIVE). Only these two values
+  // are ever accepted; the flag is never inferred from anything else.
+  const validStatuses = ["ACTIVE", "PENDING"];
+  const newAccountStatus = validStatuses.includes(body.accountStatus)
+    ? body.accountStatus
+    : existing.accountStatus;
+
   // Email unique check
   const newEmail = body.email ? String(body.email).toLowerCase() : existing.email;
   if (newEmail !== existing.email) {
@@ -67,15 +75,16 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       name: body.name ?? existing.name,
       role: newRole,
       active: body.active !== undefined ? Boolean(body.active) : existing.active,
+      accountStatus: newAccountStatus,
       passwordHash,
     },
-    select: { id: true, email: true, name: true, role: true, active: true, updatedAt: true },
+    select: { id: true, email: true, name: true, role: true, active: true, accountStatus: true, updatedAt: true },
   });
 
   await recordAudit({
     userId: session.id, userName: session.name,
     action: "UPDATE", entity: "User", entityId: updated.id,
-    details: `Updated user ${updated.email} (role: ${updated.role}, active: ${updated.active})`,
+    details: `Updated user ${updated.email} (role: ${updated.role}, active: ${updated.active}, accountStatus: ${updated.accountStatus})`,
   });
 
   return NextResponse.json(updated);

@@ -10,6 +10,7 @@ import {
   Loader2,
   ShieldCheck,
   HardHat,
+  Hourglass,
 } from "lucide-react";
 import {
   Card,
@@ -67,6 +68,8 @@ interface UserItem {
   name: string;
   role: string;
   active: boolean;
+  accountStatus?: string;
+  googleId?: string | null;
   createdAt: string;
   _count: { pipelineInspections: number; approvedReports: number; auditLogs: number };
 }
@@ -178,6 +181,24 @@ export function EmployeesView() {
     }
   }
 
+  // Approve a Google-registered account (PENDING → ACTIVE). Until approved,
+  // the user cannot sign in at all — Google registration never grants access
+  // on its own and never grants a role above Employee.
+  async function approveAccount(u: UserItem) {
+    try {
+      await apiFetch(`/api/users/${u.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ accountStatus: "ACTIVE" }),
+      });
+      toast.success(`Approved ${u.email} — they can now sign in with Google`);
+      refresh();
+      load();
+    } catch (e) {
+      const err = e as { message?: string };
+      toast.error(err.message ?? "Approval failed");
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -258,13 +279,24 @@ export function EmployeesView() {
                       </TableCell>
                       <TableCell>
                         {u.active ? (
-                          <Badge variant="outline" className="border-emerald-500 text-emerald-700">
-                            <UserCheck className="mr-1 h-3 w-3" /> Active
-                          </Badge>
+                          u.accountStatus === "PENDING" ? (
+                            <Badge variant="outline" className="border-amber-500 text-amber-700">
+                              <Hourglass className="mr-1 h-3 w-3" /> Pending approval
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="border-emerald-500 text-emerald-700">
+                              <UserCheck className="mr-1 h-3 w-3" /> Active
+                            </Badge>
+                          )
                         ) : (
                           <Badge variant="outline" className="border-zinc-400 text-zinc-500">
                             <UserX className="mr-1 h-3 w-3" /> Inactive
                           </Badge>
+                        )}
+                        {u.googleId && (
+                          <span className="mt-1 block text-[10px] text-muted-foreground">
+                            via Google
+                          </span>
                         )}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
@@ -275,6 +307,17 @@ export function EmployeesView() {
                           <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => openEdit(u)}>
                             <Pencil className="h-3 w-3" />
                           </Button>
+                          {u.active && u.accountStatus === "PENDING" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs text-amber-700"
+                              title="Approve this Google-registered account"
+                              onClick={() => approveAccount(u)}
+                            >
+                              <UserCheck className="mr-1 h-3 w-3" /> Approve
+                            </Button>
+                          )}
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <Button

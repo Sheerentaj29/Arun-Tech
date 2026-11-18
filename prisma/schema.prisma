@@ -15,14 +15,23 @@ datasource db {
 // =====================================================
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String
-  passwordHash String
-  role         String   @default("EMPLOYEE") // ADMIN | EMPLOYEE | INSPECTOR | APPROVER (INSPECTOR/APPROVER treated as Employee for routing)
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String
+  passwordHash  String
+  role          String   @default("EMPLOYEE") // ADMIN | EMPLOYEE | INSPECTOR | APPROVER (INSPECTOR/APPROVER treated as Employee for routing)
+  active        Boolean  @default(true)
+  // Google OAuth (additive):
+  //   googleId      — Google's stable account id (OIDC `sub`). Null for
+  //                   password-only accounts. Unique ⇒ one Google identity
+  //                   can ever be linked to at most one local account.
+  //   accountStatus — ACTIVE | PENDING. Google-registered users start
+  //                   PENDING and gain access only after an admin approves.
+  //                   Existing users default to ACTIVE (no change).
+  googleId      String?  @unique
+  accountStatus String   @default("ACTIVE")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   equipment           Equipment[]           @relation("EquipmentCreatedBy")
   inspections         Inspection[]
