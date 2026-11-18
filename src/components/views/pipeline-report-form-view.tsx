@@ -9405,7 +9405,7 @@ export function PipelineReportFormView() {
             <CardTitle className="text-base">Test Results</CardTitle>
             <Button onClick={() => {
               const rows = JSON.parse(header.wsTestResultRows || "[]");
-              rows.push({ description: "", identificationNo: "", weldType: "", probe: "", bp: "", sd: "", depth: "", echoHeight: "", length: "", observation: "", result: "" });
+              rows.push({ description: "", identificationNo: "", weldType: "", probeType: "", probe: "", bp: "", sd: "", depth: "", echoHeight: "", length: "", observation: "", result: "" });
               setHeader((h) => ({ ...h, wsTestResultRows: JSON.stringify(rows) }));
             }} size="sm"><Plus className="mr-1 h-4 w-4" /> Add Row</Button>
           </div>
@@ -9419,6 +9419,7 @@ export function PipelineReportFormView() {
                   <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 120 }}>Description</th>
                   <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 80 }}>Identification No.</th>
                   <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 70 }}>Weld Type</th>
+                  <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 95 }}>Probe Type</th>
                   <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 60 }}>Probe</th>
                   <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 60 }}>Beam Path (BP) (mm)</th>
                   <th className="border border-cyan-800 px-2 py-2 text-center" style={{ minWidth: 70 }}>Skip Distance (SD) (mm)</th>
@@ -9434,7 +9435,7 @@ export function PipelineReportFormView() {
                 {(() => {
                   try {
                     const rows = JSON.parse(header.wsTestResultRows || "[]");
-                    if (rows.length === 0) return <tr><td colSpan={13} className="text-center py-4 text-muted-foreground border border-zinc-300">No test result rows yet.</td></tr>;
+                    if (rows.length === 0) return <tr><td colSpan={14} className="text-center py-4 text-muted-foreground border border-zinc-300">No test result rows yet.</td></tr>;
                     return rows.map((row: any, idx: number) => (
                       <tr key={idx} className="hover:bg-muted/30">
                         <td className="border border-zinc-300 p-1 text-center font-mono">{idx + 1}</td>
@@ -9451,6 +9452,14 @@ export function PipelineReportFormView() {
                             <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
                             <SelectContent>
                               {["Butt Weld", "Fillet Weld"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="border border-zinc-300 p-1">
+                          <Select value={row.probeType ?? ""} onValueChange={(v) => { const n = [...rows]; n[idx] = { ...row, probeType: v }; setHeader((h) => ({ ...h, wsTestResultRows: JSON.stringify(n) })); }}>
+                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
+                            <SelectContent>
+                              {["Shear Wave", "Longitudinal Wave"].map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
                             </SelectContent>
                           </Select>
                         </td>

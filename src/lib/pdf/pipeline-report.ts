@@ -627,14 +627,41 @@ async function runGeneration(
   const usableW = pageW - 2 * MARGIN;
   let cursorY = MARGIN;
 
-  // ── TITLE ──
-  const titleFontSize = orientation === "landscape" ? 14 : 12;
-  doc.font(FONT_BOLD).fontSize(titleFontSize).fillColor("#000");
-  const titleHeight = doc.heightOfString(titleText, { width: usableW, align: "center" });
-  doc.text(titleText, MARGIN, cursorY, { width: usableW, align: "center" });
-  cursorY += titleHeight + 8;  // explicit 8pt gap below title
+  // Logo box dimensions — shared by both header styles below so the
+  // centered title block can stay clear of the two logo boxes.
+  const logoH = 70;
+  const logoW = 130;
 
-  // ── SUBTITLE (Report No | Rev | Date Range | Status) ──
+  if (reportType === "PIPELINE_WELD_SCAN") {
+    // ── WELD SCAN HEADER: one horizontal row ──
+    //   [ArunTech logo (left)] [company name + report title (center)] [client logo (right)]
+    // The Report No / Rev / Date / Status metadata line is intentionally NOT
+    // drawn on the weld-scan PDF header — the fields remain in the database
+    // and in the internal report records (approval / revision workflow
+    // untouched). The centered text is confined to the gap between the two
+    // logo boxes so it can never underlap them; the shared LOGOS block below
+    // draws the two boxes on this same line (same cursorY, same heights),
+    // keeping all three elements vertically aligned in one row.
+    const companyName = "ARUN TECH INDUSTRIAL SERVICES PVT LTD";
+    const centerX = MARGIN + logoW + 14;
+    const centerW = usableW - 2 * (logoW + 14);
+    doc.font(FONT_BOLD).fontSize(10).fillColor("#000");
+    doc.text(companyName, centerX, cursorY + 13, { width: centerW, align: "center" });
+    doc.font(FONT_BOLD).fontSize(15).fillColor("#000");
+    doc.text(titleText, centerX, cursorY + 27, { width: centerW, align: "center" });
+    doc.fillColor("#000");
+    // cursorY intentionally unchanged — the LOGOS block below draws the two
+    // logo boxes on this same horizontal band.
+  } else {
+    // ── TITLE ── (all non-weld-scan reports: unchanged layout)
+    const titleFontSize = orientation === "landscape" ? 14 : 12;
+    doc.font(FONT_BOLD).fontSize(titleFontSize).fillColor("#000");
+    const titleHeight = doc.heightOfString(titleText, { width: usableW, align: "center" });
+    doc.text(titleText, MARGIN, cursorY, { width: usableW, align: "center" });
+    cursorY += titleHeight + 8;  // explicit 8pt gap below title
+  }
+
+  // ── SUBTITLE (Report No | Rev | Date Range | Status) ── (non-weld-scan only)
   const subtitleFontSize = orientation === "landscape" ? 9 : 8;
   const fromDateStr = (report as any).fromDate
     ? new Date((report as any).fromDate).toISOString().slice(0, 10)
@@ -647,10 +674,12 @@ async function runGeneration(
     `Report No: ${report.reportNumber}    |    Rev: ${report.revisionNumber}    |    ` +
     `Date: ${dateRange}    |    ` +
     `Status: ${report.status}`;
-  doc.font(FONT_REGULAR).fontSize(subtitleFontSize).fillColor("#333");
-  const subtitleHeight = doc.heightOfString(subtitleText, { width: usableW, align: "center" });
-  doc.text(subtitleText, MARGIN, cursorY, { width: usableW, align: "center" });
-  cursorY += subtitleHeight + 10;  // explicit 10pt gap below subtitle
+  if (reportType !== "PIPELINE_WELD_SCAN") {
+    doc.font(FONT_REGULAR).fontSize(subtitleFontSize).fillColor("#333");
+    const subtitleHeight = doc.heightOfString(subtitleText, { width: usableW, align: "center" });
+    doc.text(subtitleText, MARGIN, cursorY, { width: usableW, align: "center" });
+    cursorY += subtitleHeight + 10;  // explicit 10pt gap below subtitle
+  }
 
   // ── LOGOS (positioned strictly below subtitle) ──
   // Left: Aruntech service company logo — permanently fixed.
@@ -659,8 +688,6 @@ async function runGeneration(
   // the available container space (object-fit: contain behaviour).
   // The container uses 90% of available width and 85% of available height
   // for the image, with the image centered both horizontally and vertically.
-  const logoH = 70;
-  const logoW = 130;
   const serviceLogoPath = findServiceLogo();
   // Resolve the client logo via the SHARED, EXACT-match resolver.
   //   Priority:
@@ -2522,12 +2549,12 @@ async function runGeneration(
     // 4. Test Results — headings carry the full forms and measurement units
     drawWsMultiColTable(
       "Test Results",
-      ["Sl. No", "Description", "Identification No.", "Weld Type", "Probe", "Beam Path (BP) (mm)", "Skip Distance (SD) (mm)", "Depth (mm)", "Echo Height (%)", "Length (mm)", "Observation", "Result"],
-      ["description", "identificationNo", "weldType", "probe", "bp", "sd", "depth", "echoHeight", "length", "observation", "result"],
+      ["Sl. No", "Description", "Identification No.", "Weld Type", "Probe Type", "Probe", "Beam Path (BP) (mm)", "Skip Distance (SD) (mm)", "Depth (mm)", "Echo Height (%)", "Length (mm)", "Observation", "Result"],
+      ["description", "identificationNo", "weldType", "probeType", "probe", "bp", "sd", "depth", "echoHeight", "length", "observation", "result"],
       wsReport.wsTestResultRows ?? "[]",
       [],
       pwsBranch,
-      [0.5, 1.35, 1.2, 0.9, 0.9, 1.1, 1.2, 0.9, 1.05, 0.95, 1.35, 0.9],
+      [0.5, 1.05, 1.05, 0.85, 1.35, 0.75, 0.95, 1.0, 0.8, 0.95, 0.8, 1.1, 0.8],
     );
   } else if (reportType === "VESSEL_WELD_SCAN") {
     // ─── VESSEL WELD SCAN REPORT BODY ───
