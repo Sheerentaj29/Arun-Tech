@@ -308,6 +308,8 @@ export async function POST(req: NextRequest) {
       wsInstrumentRows: body.wsInstrumentRows ?? "[]",
       wsProbeRows: body.wsProbeRows ?? "[]",
       wsTestResultRows: body.wsTestResultRows ?? "[]",
+      wsScanningCalibrationBlockSpec: body.wsScanningCalibrationBlockSpec?.trim() || null,
+      wsProbeTypeHidden: body.wsProbeTypeHidden === true,
       // ─── VESSEL DPT CONSUMABLE DETAILS (Make / Product / Batch / Expiry) ───
       vdptSolventMake: body.vdptSolventMake?.trim() || null,
       vdptSolventProduct: body.vdptSolventProduct?.trim() || null,
@@ -347,6 +349,7 @@ export async function POST(req: NextRequest) {
       vwsProbeDetails: typeof body.vwsProbeDetails === "string" ? body.vwsProbeDetails : null,
       vwsCalibrationBlock: body.vwsCalibrationBlock?.trim() || null,
       vwsCalibrationBlockMoc: body.vwsCalibrationBlockMoc?.trim() || null,
+      vwsCalibrationBlockSpec: body.vwsCalibrationBlockSpec?.trim() || null,
       vwsReferenceReflector: body.vwsReferenceReflector?.trim() || null,
       vwsReferenceLevel: body.vwsReferenceLevel?.trim() || null,
       vwsFlawSizingTechnique: body.vwsFlawSizingTechnique?.trim() || null,

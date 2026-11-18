@@ -2510,12 +2510,17 @@ async function runGeneration(
       const rowH = 18;
       const labelW = usableW * 0.25;
       const valueW = (usableW - 2 * labelW) / 2;
+      // Admin-configured exact specification of the selected calibration
+      // block gets its own row directly after the block name so it is
+      // always fully readable in the PDF.
+      const wsCalibSpec = (wsReport.wsScanningCalibrationBlockSpec ?? "").trim();
       const scanPairs: Array<[string, string | null]> = [
         ["Calibration Block (DAC Block)", wsReport.wsScanningCalibrationBlock],
         ["Reference Level", wsReport.wsScanningReferenceLevel],
         ["Extent of Examination", wsReport.wsScanningExtentOfExamination],
         ["Flaw Sizing Technique", wsReport.wsScanningFlawSizingTechnique],
         ["Surface Condition", wsReport.wsScanningSurfaceCondition],
+        ...(wsCalibSpec ? [["Calibration Block Specification", wsCalibSpec] as [string, string | null]] : []),
         ["", null],
       ];
       // Only render if any value is non-empty
@@ -2538,8 +2543,22 @@ async function runGeneration(
         doc.text(left[0], MARGIN + 3, y + 5, { width: labelW - 6 });
         doc.rect(MARGIN + labelW, y, valueW, rowH).fill("#ffffff");
         doc.font(FONT_REGULAR).fontSize(7).fillColor("#000");
-        const lv = left[1] && String(left[1]).trim() ? String(left[1]).trim() : "";
-        doc.text(lv, MARGIN + labelW + 3, y + 5, { width: valueW - 6 });
+        let lv = left[1] && String(left[1]).trim() ? String(left[1]).trim() : "";
+        // Single-line cells: shrink the font until the value fits so option
+        // names like "VW Step Block – 1 mm to 10 mm (10-step)" stay fully
+        // visible (hard truncation would cut off "(10-step)").
+        doc.font(FONT_REGULAR).fontSize(7);
+        let lvSize = 7;
+        while (lv && lvSize > 5.2 && doc.widthOfString(lv) > valueW - 8) {
+          lvSize -= 0.4;
+          doc.fontSize(lvSize);
+        }
+        if (lv && doc.widthOfString(lv) > valueW - 8) {
+          const keep = Math.floor(((valueW - 8) / Math.max(1, doc.widthOfString(lv))) * lv.length);
+          lv = lv.slice(0, Math.max(1, keep - 1)) + "…";
+        }
+        doc.text(lv, MARGIN + labelW + 3, y + 5, { width: valueW - 6, lineBreak: false });
+        doc.fontSize(7);
         doc.rect(MARGIN + labelW + valueW, y, labelW, rowH).fill("#ecfeff");
         doc.font(FONT_BOLD).fontSize(7).fillColor("#000");
         doc.text(right[0], MARGIN + labelW + valueW + 3, y + 5, { width: labelW - 6 });
@@ -2581,15 +2600,31 @@ async function runGeneration(
     // 3. Scanning Details
     drawWsScanningDetails();
 
-    // 4. Test Results — headings carry the full forms and measurement units
+    // 4. Test Results — headings carry the full forms and measurement units.
+    // Probe Type column: shown by default; when the report's saved
+    // wsProbeTypeHidden flag is set the column is excluded from the PDF
+    // entirely (heading, values and its width share) and the remaining
+    // columns stretch to fill the printable width — the underlying
+    // wsTestResultRows data is untouched, so restoring the column in the
+    // editor brings the values back.
+    const wsProbeTypeHidden = wsReport.wsProbeTypeHidden === true;
+    const wsTrHeaders = ["Sl. No", "Description", "Identification No.", "Weld Type", "Probe Type", "Probe", "Beam Path (BP) (mm)", "Skip Distance (SD) (mm)", "Depth (mm)", "Echo Height (%)", "Length (mm)", "Observation", "Result"];
+    const wsTrFields = ["description", "identificationNo", "weldType", "probeType", "probe", "bp", "sd", "depth", "echoHeight", "length", "observation", "result"];
+    const wsTrRatios = [0.5, 1.05, 1.05, 0.85, 1.35, 0.75, 0.95, 1.0, 0.8, 0.95, 0.8, 1.1, 0.8];
+    if (wsProbeTypeHidden) {
+      // headers idx 4 = "Probe Type"; rowFields idx 3 = "probeType"
+      wsTrHeaders.splice(4, 1);
+      wsTrFields.splice(3, 1);
+      wsTrRatios.splice(4, 1);
+    }
     drawWsMultiColTable(
       "Test Results",
-      ["Sl. No", "Description", "Identification No.", "Weld Type", "Probe Type", "Probe", "Beam Path (BP) (mm)", "Skip Distance (SD) (mm)", "Depth (mm)", "Echo Height (%)", "Length (mm)", "Observation", "Result"],
-      ["description", "identificationNo", "weldType", "probeType", "probe", "bp", "sd", "depth", "echoHeight", "length", "observation", "result"],
+      wsTrHeaders,
+      wsTrFields,
       wsReport.wsTestResultRows ?? "[]",
       [],
       pwsBranch,
-      [0.5, 1.05, 1.05, 0.85, 1.35, 0.75, 0.95, 1.0, 0.8, 0.95, 0.8, 1.1, 0.8],
+      wsTrRatios,
     );
   } else if (reportType === "VESSEL_WELD_SCAN") {
     // ─── VESSEL WELD SCAN REPORT BODY ───
@@ -2645,11 +2680,19 @@ async function runGeneration(
       }
       if (!displayText) displayText = "";
       const maxW = vwsValueW - 8;
+      // Shrink-to-fit: keep the full calibration-block option visible.
+      doc.font(FONT_REGULAR).fontSize(8.5);
+      let dvSize = 8.5;
+      while (displayText && dvSize > 5.4 && doc.widthOfString(displayText) > maxW) {
+        dvSize -= 0.4;
+        doc.fontSize(dvSize);
+      }
       if (doc.widthOfString(displayText) > maxW) {
         const charsToKeep = Math.floor((maxW / Math.max(1, doc.widthOfString(displayText))) * displayText.length);
         displayText = displayText.slice(0, Math.max(1, charsToKeep - 1)) + "…";
       }
-      doc.text(displayText, MARGIN + vwsLabelW + 4, y + 5, { width: maxW });
+      doc.text(displayText, MARGIN + vwsLabelW + 4, y + 5, { width: maxW, lineBreak: false });
+      doc.fontSize(8.5);
       y += vwsRowH;
     };
 
@@ -2680,6 +2723,12 @@ async function runGeneration(
 
       drawVwsGroupHeader("Calibration Details");
       drawVwsParamRow("Calibration Block", vwsReport.vwsCalibrationBlock);
+      // Admin-configured exact specification of the selected calibration
+      // block (row only present when the admin filled it in).
+      const vwsCalibSpec = (vwsReport.vwsCalibrationBlockSpec ?? "").trim();
+      if (vwsCalibSpec) {
+        drawVwsParamRow("Calibration Block Specification", vwsCalibSpec);
+      }
       drawVwsParamRow("Calibration Block Material / MOC", vwsReport.vwsCalibrationBlockMoc);
       drawVwsParamRow("Reference Reflector", vwsReport.vwsReferenceReflector);
       drawVwsParamRow("Reference Level", vwsReport.vwsReferenceLevel);
